@@ -39,7 +39,7 @@ export interface Vehicle {
 }
 
 export async function searchVehicles(filters: SearchFilters = {}) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   try {
     // Chamar função search_vehicles do banco
@@ -78,7 +78,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 }
 
 export async function getVehicleStats() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   try {
     // Contar total de veículos
