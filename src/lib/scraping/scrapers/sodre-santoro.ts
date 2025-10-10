@@ -2,16 +2,18 @@ import { BaseScraper, VehicleData } from '../base-scraper';
 
 /**
  * Scraper para o leiloeiro Sodré Santoro
- * Site: https://www.sodresantoro.com.br
+ * Site: https://www.sodresantoro.com.br/veiculos/lotes
  * 
  * ✅ Scraper PRONTO e FUNCIONAL
- * - Suporta paginação (todas as 16+ páginas)
+ * - URL específica: /veiculos/lotes (apenas veículos)
+ * - Suporta paginação (todas as ~16 páginas)
  * - Extrai: título, preço, localização, quilometragem, imagens
  * - Seletores baseados na estrutura real do site (Tailwind CSS)
+ * - Detecção inteligente de última página (URL, veículos vazios, botões)
  */
 export class SodreSantoroScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.sodresantoro.com.br';
-  private readonly vehiclesUrl = `${this.baseUrl}/veiculos`;
+  private readonly vehiclesUrl = `${this.baseUrl}/veiculos/lotes`;
 
   constructor() {
     super('Sodré Santoro');
@@ -22,7 +24,7 @@ export class SodreSantoroScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     let currentPage = 1;
-    const maxPages = 20; // Limite de segurança
+    const maxPages = 20; // Limite de segurança (site tem ~16 páginas de veículos)
 
     try {
       // 1. Navegar para a primeira página de veículos
@@ -87,6 +89,12 @@ export class SodreSantoroScraper extends BaseScraper {
 
         console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados`);
 
+        // Se não encontrou veículos, provavelmente é a última página
+        if (pageVehicles.length === 0) {
+          console.log(`[${this.auctioneerName}] Nenhum veículo encontrado, última página`);
+          break;
+        }
+
         // 4. Processar e adicionar veículos ao array final
         for (const rawVehicle of pageVehicles) {
           try {
@@ -147,18 +155,30 @@ export class SodreSantoroScraper extends BaseScraper {
 
         // Clicar no botão de próxima página
         try {
+          // Salvar URL atual para comparação
+          const currentUrl = this.page.url();
+          
           await this.page.evaluate(() => {
             const buttons = document.querySelectorAll('.state.absolute.inset-0.w-full.h-full.z-10.state-layer');
             const nextBtn = buttons[buttons.length - 1] as HTMLElement;
             if (nextBtn) nextBtn.click();
           });
 
-          // Aguardar navegação
-          await this.randomDelay(2000, 4000);
+          // Aguardar navegação com timeout menor
+          await this.randomDelay(2000, 3000);
           await this.page.waitForNavigation({ 
             waitUntil: 'networkidle2', 
             timeout: 10000 
-          }).catch(() => {});
+          }).catch(() => {
+            console.log(`[${this.auctioneerName}] Timeout na navegação, mas pode ter carregado`);
+          });
+
+          // Verificar se a URL realmente mudou
+          const newUrl = this.page.url();
+          if (currentUrl === newUrl) {
+            console.log(`[${this.auctioneerName}] URL não mudou, provavelmente última página`);
+            break;
+          }
         } catch (navError) {
           console.log(`[${this.auctioneerName}] Erro ao navegar para próxima página`);
           break;
