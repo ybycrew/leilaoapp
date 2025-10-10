@@ -5,11 +5,12 @@ import { BaseScraper, VehicleData } from '../base-scraper';
  * Site: https://www.sodresantoro.com.br/veiculos/lotes
  * 
  * ✅ Scraper PRONTO e FUNCIONAL
- * - URL específica: /veiculos/lotes (apenas veículos)
- * - Suporta paginação (todas as ~16 páginas)
- * - Extrai: título, preço, localização, quilometragem, imagens
+ * - URL base: /veiculos/lotes (apenas veículos)
+ * - Paginação: ?sort=auction_date_init_asc&page=N
+ * - Percorre todas as páginas até não encontrar mais veículos
+ * - Extrai: título, preço, localização, quilometragem, tipo, banco, imagens
  * - Seletores baseados na estrutura real do site (Tailwind CSS)
- * - Detecção inteligente de última página (URL, veículos vazios, botões)
+ * - ~48-56 veículos por página, ~16 páginas = ~768-896 veículos
  */
 export class SodreSantoroScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.sodresantoro.com.br';
@@ -23,22 +24,25 @@ export class SodreSantoroScraper extends BaseScraper {
     if (!this.page) throw new Error('Página não inicializada');
 
     const vehicles: VehicleData[] = [];
-    let currentPage = 1;
     const maxPages = 20; // Limite de segurança (site tem ~16 páginas de veículos)
 
     try {
-      // 1. Navegar para a primeira página de veículos
-      console.log(`[${this.auctioneerName}] Acessando ${this.vehiclesUrl}`);
-      await this.page.goto(this.vehiclesUrl, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
+      // Loop através das páginas usando URLs diretas
+      for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+        // Construir URL da página
+        const pageUrl = currentPage === 1 
+          ? this.vehiclesUrl 
+          : `${this.vehiclesUrl}?sort=auction_date_init_asc&page=${currentPage}`;
 
-      await this.randomDelay();
+        console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
 
-      // 2. Loop de paginação
-      while (currentPage <= maxPages) {
-        console.log(`[${this.auctioneerName}] Processando página ${currentPage}...`);
+        // Navegar para a página
+        await this.page.goto(pageUrl, {
+          waitUntil: 'networkidle2',
+          timeout: 30000,
+        });
+
+        await this.randomDelay(1000, 2000);
 
         // Aguardar os cards de veículos carregarem
         await this.page.waitForSelector('.wrapper.relative.rounded-medium', {
@@ -46,8 +50,6 @@ export class SodreSantoroScraper extends BaseScraper {
         }).catch(() => {
           console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
         });
-
-        await this.randomDelay(1000, 2000);
 
         // 3. Extrair dados dos veículos da página atual
         const pageVehicles = await this.page.evaluate(() => {
@@ -89,13 +91,13 @@ export class SodreSantoroScraper extends BaseScraper {
 
         console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados`);
 
-        // Se não encontrou veículos, provavelmente é a última página
+        // Se não encontrou veículos, chegamos na última página
         if (pageVehicles.length === 0) {
-          console.log(`[${this.auctioneerName}] Nenhum veículo encontrado, última página`);
+          console.log(`[${this.auctioneerName}] Nenhum veículo encontrado, última página alcançada`);
           break;
         }
 
-        // 4. Processar e adicionar veículos ao array final
+        // Processar e adicionar veículos ao array final
         for (const rawVehicle of pageVehicles) {
           try {
             const detailUrl = rawVehicle.detailUrl.startsWith('http') 
@@ -141,50 +143,8 @@ export class SodreSantoroScraper extends BaseScraper {
           }
         }
 
-        // 5. Tentar avançar para próxima página
-        const hasNextPage = await this.page.evaluate(() => {
-          const buttons = document.querySelectorAll('.state.absolute.inset-0.w-full.h-full.z-10.state-layer');
-          // Se houver 2+ botões, o último é "próxima"
-          return buttons.length >= 2;
-        });
-
-        if (!hasNextPage) {
-          console.log(`[${this.auctioneerName}] Última página alcançada`);
-          break;
-        }
-
-        // Clicar no botão de próxima página
-        try {
-          // Salvar URL atual para comparação
-          const currentUrl = this.page.url();
-          
-          await this.page.evaluate(() => {
-            const buttons = document.querySelectorAll('.state.absolute.inset-0.w-full.h-full.z-10.state-layer');
-            const nextBtn = buttons[buttons.length - 1] as HTMLElement;
-            if (nextBtn) nextBtn.click();
-          });
-
-          // Aguardar navegação com timeout menor
-          await this.randomDelay(2000, 3000);
-          await this.page.waitForNavigation({ 
-            waitUntil: 'networkidle2', 
-            timeout: 10000 
-          }).catch(() => {
-            console.log(`[${this.auctioneerName}] Timeout na navegação, mas pode ter carregado`);
-          });
-
-          // Verificar se a URL realmente mudou
-          const newUrl = this.page.url();
-          if (currentUrl === newUrl) {
-            console.log(`[${this.auctioneerName}] URL não mudou, provavelmente última página`);
-            break;
-          }
-        } catch (navError) {
-          console.log(`[${this.auctioneerName}] Erro ao navegar para próxima página`);
-          break;
-        }
-
-        currentPage++;
+        // Delay entre páginas para não sobrecarregar o servidor
+        await this.randomDelay(1500, 2500);
       }
 
       console.log(`[${this.auctioneerName}] ✅ Total de veículos coletados: ${vehicles.length}`);
