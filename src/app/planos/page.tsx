@@ -64,9 +64,9 @@ export default function PlanosPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-8 w-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">L</span>
+              <span className="text-white font-bold text-lg">Y</span>
             </div>
-            <span className="font-bold text-xl">LeilãoMax</span>
+            <span className="font-bold text-xl">Ybybid</span>
           </Link>
           <nav className="flex items-center gap-4">
             <Link href="/entrar">
@@ -244,7 +244,7 @@ export default function PlanosPage() {
       {/* Footer */}
       <footer className="border-t py-12 bg-gray-50">
         <div className="container mx-auto px-4 text-center text-muted-foreground">
-          <p>&copy; 2025 LeilãoMax. Todos os direitos reservados.</p>
+          <p>&copy; 2025 Ybybid. Todos os direitos reservados.</p>
         </div>
       </footer>
     </div>

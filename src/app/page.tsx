@@ -12,7 +12,7 @@ export default function Home() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Car className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">LeilãoMax</h1>
+            <h1 className="text-2xl font-bold">Ybybid</h1>
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/#como-funciona" className="text-sm hover:text-primary">Como Funciona</Link>
@@ -99,7 +99,7 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <Car className="h-6 w-6 text-primary" />
-                <span className="font-bold">LeilãoMax</span>
+                <span className="font-bold">Ybybid</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Encontre os melhores leilões de veículos do Brasil em um só lugar.
@@ -130,7 +130,7 @@ export default function Home() {
             </div>
           </div>
           <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-            <p>© 2025 LeilãoMax. Todos os direitos reservados.</p>
+            <p>© 2025 Ybybid. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>

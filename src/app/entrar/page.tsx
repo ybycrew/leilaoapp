@@ -100,7 +100,7 @@ export default function EntrarPage() {
           <div className="h-12 w-12 bg-primary rounded-lg flex items-center justify-center">
             <Car className="h-7 w-7 text-white" />
           </div>
-          <span className="font-bold text-2xl">LeilãoMax</span>
+          <span className="font-bold text-2xl">Ybybid</span>
         </Link>
 
         {/* Card Principal */}
