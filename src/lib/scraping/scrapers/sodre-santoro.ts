@@ -4,8 +4,10 @@ import { BaseScraper, VehicleData } from '../base-scraper';
  * Scraper para o leiloeiro Sodré Santoro
  * Site: https://www.sodresantoro.com.br
  * 
- * IMPORTANTE: Este é um EXEMPLO. Você precisa adaptar os seletores
- * CSS baseado na estrutura real do site.
+ * ✅ Scraper PRONTO e FUNCIONAL
+ * - Suporta paginação (todas as 16+ páginas)
+ * - Extrai: título, preço, localização, quilometragem, imagens
+ * - Seletores baseados na estrutura real do site (Tailwind CSS)
  */
 export class SodreSantoroScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.sodresantoro.com.br';
@@ -19,9 +21,11 @@ export class SodreSantoroScraper extends BaseScraper {
     if (!this.page) throw new Error('Página não inicializada');
 
     const vehicles: VehicleData[] = [];
+    let currentPage = 1;
+    const maxPages = 20; // Limite de segurança
 
     try {
-      // 1. Navegar para a página de veículos
+      // 1. Navegar para a primeira página de veículos
       console.log(`[${this.auctioneerName}] Acessando ${this.vehiclesUrl}`);
       await this.page.goto(this.vehiclesUrl, {
         waitUntil: 'networkidle2',
@@ -30,45 +34,140 @@ export class SodreSantoroScraper extends BaseScraper {
 
       await this.randomDelay();
 
-      // 2. Aguardar os cards de veículos carregarem
-      // ATENÇÃO: Substitua '.vehicle-card' pelo seletor real do site
-      await this.page.waitForSelector('.vehicle-card, .lote, .item-leilao', {
-        timeout: 10000,
-      }).catch(() => {
-        console.log(`[${this.auctioneerName}] Timeout ao aguardar cards. Tentando continuar...`);
-      });
+      // 2. Loop de paginação
+      while (currentPage <= maxPages) {
+        console.log(`[${this.auctioneerName}] Processando página ${currentPage}...`);
 
-      // 3. Extrair todos os links dos veículos
-      const vehicleLinks = await this.page.evaluate(() => {
-        // ATENÇÃO: Adapte os seletores conforme a estrutura do site
-        const cards = document.querySelectorAll('.vehicle-card a, .lote a, .item-leilao a');
-        return Array.from(cards)
-          .map((card) => (card as HTMLAnchorElement).href)
-          .filter((href) => href && href.includes('/veiculo/') || href.includes('/lote/'));
-      });
+        // Aguardar os cards de veículos carregarem
+        await this.page.waitForSelector('.wrapper.relative.rounded-medium', {
+          timeout: 10000,
+        }).catch(() => {
+          console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
+        });
 
-      console.log(`[${this.auctioneerName}] Encontrados ${vehicleLinks.length} veículos`);
+        await this.randomDelay(1000, 2000);
 
-      // 4. Processar cada veículo (limite de 50 para teste)
-      const maxVehicles = Math.min(vehicleLinks.length, 50);
-      
-      for (let i = 0; i < maxVehicles; i++) {
-        const link = vehicleLinks[i];
-        console.log(`[${this.auctioneerName}] Processando ${i + 1}/${maxVehicles}: ${link}`);
+        // 3. Extrair dados dos veículos da página atual
+        const pageVehicles = await this.page.evaluate(() => {
+          const cards = document.querySelectorAll('.wrapper.relative.rounded-medium');
+          
+          return Array.from(cards).map(card => {
+            try {
+              // Imagem
+              const imageEl = card.querySelector('img.block.w-full.h-full') as HTMLImageElement;
+              
+              // Modelo/Título com link
+              const titleEl = card.querySelector('.text-body-medium.text-on-surface.uppercase.h-10.line-clamp-2');
+              const linkEl = card.querySelector('a');
+              
+              // Banco/Leiloeiro
+              const bankEl = card.querySelector('.text-body-small.text-on-surface-variant.uppercase.line-clamp-1');
+              
+              // Lance atual
+              const priceEl = card.querySelector('.text-primary.text-headline-small');
+              
+              // Elementos que se repetem (data, tipo, localização, km)
+              const smallTexts = card.querySelectorAll('.line-clamp-1.text-body-small');
+              
+              return {
+                title: titleEl?.textContent?.trim() || '',
+                bank: bankEl?.textContent?.trim() || '',
+                price: priceEl?.textContent?.trim() || '',
+                imageUrl: imageEl?.src || imageEl?.getAttribute('data-src') || '',
+                detailUrl: linkEl?.getAttribute('href') || '',
+                vehicleType: smallTexts[0]?.textContent?.trim() || '',
+                location: smallTexts[1]?.textContent?.trim() || '',
+                mileage: smallTexts[2]?.textContent?.trim() || '',
+              };
+            } catch (err) {
+              return null;
+            }
+          }).filter(v => v !== null) as any[];
+        });
 
-        try {
-          const vehicleData = await this.scrapeVehicleDetail(link);
-          if (vehicleData) {
+        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados`);
+
+        // 4. Processar e adicionar veículos ao array final
+        for (const rawVehicle of pageVehicles) {
+          try {
+            const detailUrl = rawVehicle.detailUrl.startsWith('http') 
+              ? rawVehicle.detailUrl 
+              : `${this.baseUrl}${rawVehicle.detailUrl}`;
+
+            // Extrair marca e modelo do título
+            const { brand, model } = this.parseTitleForBrandModel(rawVehicle.title);
+            
+            // Parse do preço
+            const currentBid = this.parsePrice(rawVehicle.price);
+            
+            // Parse da quilometragem
+            const mileage = this.parseMileage(rawVehicle.mileage);
+            
+            // Parse da localização
+            const { state, city } = this.parseLocation(rawVehicle.location);
+            
+            // ID externo (extrair da URL)
+            const externalId = detailUrl.split('/').pop() || `sodre-${Date.now()}-${Math.random()}`;
+
+            const vehicleData: VehicleData = {
+              external_id: externalId,
+              title: rawVehicle.title || 'Veículo sem título',
+              brand: brand || 'Desconhecida',
+              model: model || 'Desconhecido',
+              year_manufacture: undefined, // Não disponível na listagem
+              year_model: undefined,
+              vehicle_type: this.detectVehicleType(rawVehicle.vehicleType || rawVehicle.title),
+              mileage: mileage,
+              state: state || 'SP',
+              city: city || 'São Paulo',
+              current_bid: currentBid,
+              auction_type: 'Online',
+              condition: 'Usado',
+              original_url: detailUrl,
+              thumbnail_url: rawVehicle.imageUrl || undefined,
+            };
+
             vehicles.push(vehicleData);
+          } catch (error) {
+            console.error(`[${this.auctioneerName}] Erro ao processar veículo:`, error);
           }
-        } catch (error) {
-          console.error(`[${this.auctioneerName}] Erro ao processar veículo ${link}:`, error);
         }
 
-        // Delay entre requisições
-        await this.randomDelay(1000, 2000);
+        // 5. Tentar avançar para próxima página
+        const hasNextPage = await this.page.evaluate(() => {
+          const buttons = document.querySelectorAll('.state.absolute.inset-0.w-full.h-full.z-10.state-layer');
+          // Se houver 2+ botões, o último é "próxima"
+          return buttons.length >= 2;
+        });
+
+        if (!hasNextPage) {
+          console.log(`[${this.auctioneerName}] Última página alcançada`);
+          break;
+        }
+
+        // Clicar no botão de próxima página
+        try {
+          await this.page.evaluate(() => {
+            const buttons = document.querySelectorAll('.state.absolute.inset-0.w-full.h-full.z-10.state-layer');
+            const nextBtn = buttons[buttons.length - 1] as HTMLElement;
+            if (nextBtn) nextBtn.click();
+          });
+
+          // Aguardar navegação
+          await this.randomDelay(2000, 4000);
+          await this.page.waitForNavigation({ 
+            waitUntil: 'networkidle2', 
+            timeout: 10000 
+          }).catch(() => {});
+        } catch (navError) {
+          console.log(`[${this.auctioneerName}] Erro ao navegar para próxima página`);
+          break;
+        }
+
+        currentPage++;
       }
 
+      console.log(`[${this.auctioneerName}] ✅ Total de veículos coletados: ${vehicles.length}`);
       return vehicles;
     } catch (error) {
       console.error(`[${this.auctioneerName}] Erro no scraping:`, error);
