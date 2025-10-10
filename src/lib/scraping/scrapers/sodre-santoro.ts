@@ -24,7 +24,9 @@ export class SodreSantoroScraper extends BaseScraper {
     if (!this.page) throw new Error('Página não inicializada');
 
     const vehicles: VehicleData[] = [];
+    const seenIds = new Set<string>(); // Para detectar duplicatas
     const maxPages = 20; // Limite de segurança (site tem ~16 páginas de veículos)
+    let duplicatePageCount = 0;
 
     try {
       // Loop através das páginas usando URLs diretas
@@ -117,18 +119,30 @@ export class SodreSantoroScraper extends BaseScraper {
         // Processar e adicionar veículos ao array final
         let processedCount = 0;
         let skippedCount = 0;
+        let duplicatesInPage = 0;
+        
         for (const rawVehicle of pageVehicles) {
           try {
             // Validar dados mínimos necessários
             if (!rawVehicle.title || !rawVehicle.detailUrl) {
               skippedCount++;
-              console.log(`[${this.auctioneerName}] Veículo pulado: title=${!!rawVehicle.title}, url=${!!rawVehicle.detailUrl}`);
               continue;
             }
 
             const detailUrl = rawVehicle.detailUrl.startsWith('http') 
               ? rawVehicle.detailUrl 
               : `${this.baseUrl}${rawVehicle.detailUrl}`;
+
+            // Extrair ID externo (extrair da URL)
+            const externalId = detailUrl.split('/').filter(s => s).pop() || `sodre-${Date.now()}-${Math.random()}`;
+
+            // Verificar se já foi processado (duplicata)
+            if (seenIds.has(externalId)) {
+              duplicatesInPage++;
+              continue;
+            }
+            
+            seenIds.add(externalId);
 
             // Extrair marca e modelo do título
             const { brand, model } = this.parseTitleForBrandModel(rawVehicle.title);
@@ -141,9 +155,6 @@ export class SodreSantoroScraper extends BaseScraper {
             
             // Parse da localização
             const { state, city } = this.parseLocation(rawVehicle.location);
-            
-            // ID externo (extrair da URL)
-            const externalId = detailUrl.split('/').filter(s => s).pop() || `sodre-${Date.now()}-${Math.random()}`;
 
             const vehicleData: VehicleData = {
               external_id: externalId,
@@ -171,7 +182,21 @@ export class SodreSantoroScraper extends BaseScraper {
           }
         }
         
-        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados`);
+        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas`);
+        
+        // Se todos ou quase todos são duplicatas, página está se repetindo
+        if (duplicatesInPage >= pageVehicles.length * 0.9) {
+          duplicatePageCount++;
+          console.log(`[${this.auctioneerName}] Página com muitas duplicatas (${duplicatePageCount}ª consecutiva)`);
+          
+          // Se 2 páginas consecutivas são duplicadas, parar
+          if (duplicatePageCount >= 2) {
+            console.log(`[${this.auctioneerName}] Duas páginas consecutivas duplicadas, fim alcançado`);
+            break;
+          }
+        } else {
+          duplicatePageCount = 0; // Reset contador
+        }
 
         // Delay entre páginas para não sobrecarregar o servidor
         await this.randomDelay(1500, 2500);
