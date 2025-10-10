@@ -70,7 +70,7 @@ export class SodreSantoroScraper extends BaseScraper {
               // Lance atual
               const priceEl = card.querySelector('.text-primary.text-headline-small');
               
-              // Elementos que se repetem (data, tipo, localização, km)
+              // Elementos que se repetem: [banco(0), data(1), seguro(2), monta(3), localização(4), km(5)]
               const smallTexts = card.querySelectorAll('.line-clamp-1.text-body-small');
               
               return {
@@ -79,9 +79,10 @@ export class SodreSantoroScraper extends BaseScraper {
                 price: priceEl?.textContent?.trim() || '',
                 imageUrl: imageEl?.src || imageEl?.getAttribute('data-src') || '',
                 detailUrl: (card as HTMLAnchorElement).href || '',
-                vehicleType: smallTexts[0]?.textContent?.trim() || '',
-                location: smallTexts[1]?.textContent?.trim() || '',
-                mileage: smallTexts[2]?.textContent?.trim() || '',
+                auctionDate: smallTexts[1]?.textContent?.trim() || '',
+                vehicleType: smallTexts[3]?.textContent?.trim() || '', // tipo de monta
+                location: smallTexts[4]?.textContent?.trim() || '', // cidade / estado
+                mileage: smallTexts[5]?.textContent?.trim() || '', // quilometragem
               };
             } catch (err) {
               return null;
@@ -100,6 +101,11 @@ export class SodreSantoroScraper extends BaseScraper {
         // Processar e adicionar veículos ao array final
         for (const rawVehicle of pageVehicles) {
           try {
+            // Validar dados mínimos necessários
+            if (!rawVehicle.title || !rawVehicle.detailUrl) {
+              continue;
+            }
+
             const detailUrl = rawVehicle.detailUrl.startsWith('http') 
               ? rawVehicle.detailUrl 
               : `${this.baseUrl}${rawVehicle.detailUrl}`;
@@ -117,11 +123,11 @@ export class SodreSantoroScraper extends BaseScraper {
             const { state, city } = this.parseLocation(rawVehicle.location);
             
             // ID externo (extrair da URL)
-            const externalId = detailUrl.split('/').pop() || `sodre-${Date.now()}-${Math.random()}`;
+            const externalId = detailUrl.split('/').filter(s => s).pop() || `sodre-${Date.now()}-${Math.random()}`;
 
             const vehicleData: VehicleData = {
               external_id: externalId,
-              title: rawVehicle.title || 'Veículo sem título',
+              title: rawVehicle.title,
               brand: brand || 'Desconhecida',
               model: model || 'Desconhecido',
               year_manufacture: undefined, // Não disponível na listagem
