@@ -42,7 +42,8 @@ export class SodreSantoroScraper extends BaseScraper {
           timeout: 30000,
         });
 
-        await this.randomDelay(1000, 2000);
+        // Aguardar inicial
+        await this.randomDelay(2000, 3000);
 
         // Aguardar os cards de veículos carregarem (apenas links)
         await this.page.waitForSelector('a.wrapper.relative.rounded-medium', {
@@ -50,6 +51,21 @@ export class SodreSantoroScraper extends BaseScraper {
         }).catch(() => {
           console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
         });
+
+        // Fazer scroll até o final da página para forçar lazy loading
+        await this.page.evaluate(() => {
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+        
+        // Aguardar carregamento dos elementos lazy
+        await this.randomDelay(2000, 3000);
+        
+        // Scroll de volta ao topo
+        await this.page.evaluate(() => {
+          window.scrollTo(0, 0);
+        });
+        
+        await this.randomDelay(1000, 1500);
 
         // 3. Extrair dados dos veículos da página atual
         const pageVehicles = await this.page.evaluate(() => {
@@ -90,7 +106,7 @@ export class SodreSantoroScraper extends BaseScraper {
           }).filter(v => v !== null) as any[];
         });
 
-        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados`);
+        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos extraídos`);
 
         // Se não encontrou veículos, chegamos na última página
         if (pageVehicles.length === 0) {
@@ -99,10 +115,14 @@ export class SodreSantoroScraper extends BaseScraper {
         }
 
         // Processar e adicionar veículos ao array final
+        let processedCount = 0;
+        let skippedCount = 0;
         for (const rawVehicle of pageVehicles) {
           try {
             // Validar dados mínimos necessários
             if (!rawVehicle.title || !rawVehicle.detailUrl) {
+              skippedCount++;
+              console.log(`[${this.auctioneerName}] Veículo pulado: title=${!!rawVehicle.title}, url=${!!rawVehicle.detailUrl}`);
               continue;
             }
 
@@ -144,10 +164,14 @@ export class SodreSantoroScraper extends BaseScraper {
             };
 
             vehicles.push(vehicleData);
+            processedCount++;
           } catch (error) {
             console.error(`[${this.auctioneerName}] Erro ao processar veículo:`, error);
+            skippedCount++;
           }
         }
+        
+        console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados`);
 
         // Delay entre páginas para não sobrecarregar o servidor
         await this.randomDelay(1500, 2500);
