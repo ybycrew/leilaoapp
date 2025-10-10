@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     // 1. Verificar autorização (CRON_SECRET)
     const authHeader = request.headers.get('authorization');
+    const querySecret = request.nextUrl.searchParams.get('secret');
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret) {
@@ -25,7 +26,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (authHeader !== `Bearer ${cronSecret}`) {
+    // Aceitar secret no header (Bearer) ou query param (?secret=)
+    const isAuthorized = 
+      authHeader === `Bearer ${cronSecret}` || 
+      querySecret === cronSecret;
+
+    if (!isAuthorized) {
       console.error('Tentativa de acesso não autorizado ao cron job');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
