@@ -44,8 +44,8 @@ export class SodreSantoroScraper extends BaseScraper {
 
         await this.randomDelay(1000, 2000);
 
-        // Aguardar os cards de veículos carregarem
-        await this.page.waitForSelector('.wrapper.relative.rounded-medium', {
+        // Aguardar os cards de veículos carregarem (apenas links)
+        await this.page.waitForSelector('a.wrapper.relative.rounded-medium', {
           timeout: 10000,
         }).catch(() => {
           console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
@@ -53,16 +53,16 @@ export class SodreSantoroScraper extends BaseScraper {
 
         // 3. Extrair dados dos veículos da página atual
         const pageVehicles = await this.page.evaluate(() => {
-          const cards = document.querySelectorAll('.wrapper.relative.rounded-medium');
+          const cards = document.querySelectorAll('a.wrapper.relative.rounded-medium');
           
           return Array.from(cards).map(card => {
             try {
               // Imagem
               const imageEl = card.querySelector('img.block.w-full.h-full') as HTMLImageElement;
               
-              // Modelo/Título com link
-              const titleEl = card.querySelector('.text-body-medium.text-on-surface.uppercase.h-10.line-clamp-2');
-              const linkEl = card.querySelector('a');
+              // Modelo/Título
+              const titleEl = card.querySelector('.text-body-medium.text-on-surface.uppercase.h-10.line-clamp-2') || 
+                             card.querySelector('.text-body-medium');
               
               // Banco/Leiloeiro
               const bankEl = card.querySelector('.text-body-small.text-on-surface-variant.uppercase.line-clamp-1');
@@ -78,7 +78,7 @@ export class SodreSantoroScraper extends BaseScraper {
                 bank: bankEl?.textContent?.trim() || '',
                 price: priceEl?.textContent?.trim() || '',
                 imageUrl: imageEl?.src || imageEl?.getAttribute('data-src') || '',
-                detailUrl: linkEl?.getAttribute('href') || '',
+                detailUrl: (card as HTMLAnchorElement).href || '',
                 vehicleType: smallTexts[0]?.textContent?.trim() || '',
                 location: smallTexts[1]?.textContent?.trim() || '',
                 mileage: smallTexts[2]?.textContent?.trim() || '',
