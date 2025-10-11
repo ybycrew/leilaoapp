@@ -135,10 +135,12 @@ async function processVehicle(
   vehicleData: VehicleData,
   auctioneerId: string
 ): Promise<{ created: boolean; updated: boolean }> {
-  // 1. Buscar preço FIPE
+  // 1. Buscar preço FIPE (DESABILITADO TEMPORARIAMENTE - API com rate limit 429)
   let fipePrice: number | undefined;
   let fipeCode: string | undefined;
 
+  // TODO: Reabilitar depois com cache e delays maiores
+  /*
   if (vehicleData.brand && vehicleData.model && vehicleData.year_model) {
     const fipeData = await getFipePrice(
       vehicleData.brand,
@@ -151,6 +153,7 @@ async function processVehicle(
       fipeCode = fipeData.codigo;
     }
   }
+  */
 
   // 2. Calcular desconto FIPE
   let fipeDiscountPercentage: number | undefined;

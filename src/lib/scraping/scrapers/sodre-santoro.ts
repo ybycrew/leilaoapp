@@ -54,20 +54,36 @@ export class SodreSantoroScraper extends BaseScraper {
           console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
         });
 
-        // Fazer scroll até o final da página para forçar lazy loading
-        await this.page.evaluate(() => {
-          window.scrollTo(0, document.body.scrollHeight);
-        });
-        
-        // Aguardar carregamento dos elementos lazy
-        await this.randomDelay(2000, 3000);
-        
-        // Scroll de volta ao topo
-        await this.page.evaluate(() => {
-          window.scrollTo(0, 0);
-        });
-        
-        await this.randomDelay(1000, 1500);
+          // Fazer scroll até o final da página para forçar lazy loading
+          await this.page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+          });
+          
+          // Aguardar carregamento dos elementos lazy
+          await this.randomDelay(2000, 3000);
+          
+          // Scroll de volta ao topo (passando por todos os elementos)
+          await this.page.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight / 2);
+          });
+          await this.randomDelay(500, 1000);
+          
+          await this.page.evaluate(() => {
+            window.scrollTo(0, 0);
+          });
+          
+          await this.randomDelay(1000, 1500);
+          
+          // Forçar carregamento de todas as imagens
+          await this.page.evaluate(() => {
+            const images = document.querySelectorAll('img[data-src]');
+            images.forEach(img => {
+              const dataSrc = img.getAttribute('data-src');
+              if (dataSrc && !img.getAttribute('src')) {
+                img.setAttribute('src', dataSrc);
+              }
+            });
+          });
 
         // 3. Extrair dados dos veículos da página atual
         const pageVehicles = await this.page.evaluate(() => {
@@ -75,8 +91,15 @@ export class SodreSantoroScraper extends BaseScraper {
           
           return Array.from(cards).map(card => {
             try {
-              // Imagem
-              const imageEl = card.querySelector('img.block.w-full.h-full') as HTMLImageElement;
+              // Imagem (pegar a primeira imagem do carousel que tem src preenchido)
+              const images = card.querySelectorAll('img');
+              let imageUrl = '';
+              for (const img of images) {
+                if (img.src && img.src.startsWith('http')) {
+                  imageUrl = img.src;
+                  break; // Pegar apenas a primeira imagem válida
+                }
+              }
               
               // Modelo/Título
               const titleEl = card.querySelector('.text-body-medium.text-on-surface.uppercase.h-10.line-clamp-2') || 
@@ -95,7 +118,7 @@ export class SodreSantoroScraper extends BaseScraper {
                 title: titleEl?.textContent?.trim() || '',
                 bank: bankEl?.textContent?.trim() || '',
                 price: priceEl?.textContent?.trim() || '',
-                imageUrl: imageEl?.src || imageEl?.getAttribute('data-src') || '',
+                imageUrl: imageUrl || '',
                 detailUrl: (card as HTMLAnchorElement).href || '',
                 auctionDate: smallTexts[1]?.textContent?.trim() || '',
                 vehicleType: smallTexts[3]?.textContent?.trim() || '', // tipo de monta
@@ -134,7 +157,7 @@ export class SodreSantoroScraper extends BaseScraper {
               : `${this.baseUrl}${rawVehicle.detailUrl}`;
 
             // Extrair ID externo (extrair da URL)
-            const externalId = detailUrl.split('/').filter(s => s).pop() || `sodre-${Date.now()}-${Math.random()}`;
+            const externalId = detailUrl.split('/').filter((s: string) => s).pop() || `sodre-${Date.now()}-${Math.random()}`;
 
             // Verificar se já foi processado (duplicata)
             if (seenIds.has(externalId)) {
@@ -155,19 +178,31 @@ export class SodreSantoroScraper extends BaseScraper {
             
             // Parse da localização
             const { state, city } = this.parseLocation(rawVehicle.location);
+            
+            // Parse da data do leilão (formato: "11/10/25 09:30")
+            const auctionDate = this.parseAuctionDateFromText(rawVehicle.auctionDate);
+            
+            // Extrair ano do título (ex: "chevrolet cruze ltz nb at 18/18")
+            const yearMatch = rawVehicle.title.match(/(\d{2})\/(\d{2})/);
+            let yearModel: number | undefined;
+            if (yearMatch) {
+              const year = parseInt('20' + yearMatch[2]); // "18/18" -> 2018
+              yearModel = year;
+            }
 
             const vehicleData: VehicleData = {
               external_id: externalId,
               title: rawVehicle.title,
               brand: brand || 'Desconhecida',
               model: model || 'Desconhecido',
-              year_manufacture: undefined, // Não disponível na listagem
-              year_model: undefined,
+              year_manufacture: yearModel,
+              year_model: yearModel,
               vehicle_type: this.detectVehicleType(rawVehicle.vehicleType || rawVehicle.title),
               mileage: mileage,
               state: state || 'SP',
               city: city || 'São Paulo',
               current_bid: currentBid,
+              auction_date: auctionDate,
               auction_type: 'Online',
               condition: 'Usado',
               original_url: detailUrl,
@@ -434,6 +469,28 @@ export class SodreSantoroScraper extends BaseScraper {
       // Tentar parse direto
       const date = new Date(dateString);
       return isNaN(date.getTime()) ? undefined : date;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Parse de data no formato "11/10/25 09:30" (DD/MM/YY HH:MM)
+   */
+  private parseAuctionDateFromText(dateString: string): Date | undefined {
+    if (!dateString) return undefined;
+
+    try {
+      // Formato: "11/10/25 09:30" -> dia/mês/ano hora:minuto
+      const match = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})/);
+      if (match) {
+        const [, day, month, year, hour, minute] = match;
+        const fullYear = parseInt('20' + year); // "25" -> 2025
+        return new Date(fullYear, parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
+      }
+
+      // Tentar outros formatos
+      return this.parseAuctionDate(dateString);
     } catch {
       return undefined;
     }

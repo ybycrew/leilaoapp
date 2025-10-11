@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Search, Car, TrendingDown, Shield, Zap } from "lucide-react";
+import { Car, TrendingDown, Shield, Zap } from "lucide-react";
 import Link from "next/link";
+import { SearchAutocomplete } from "@/components/SearchAutocomplete";
 
 export default function Home() {
   return (
@@ -35,17 +35,8 @@ export default function Home() {
             <p className="text-xl text-muted-foreground mb-8">
               Todos os leilões em um só lugar. Compare preços com a tabela FIPE e identifique as melhores oportunidades automaticamente.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
-                <Input 
-                  placeholder="Ex: Fiat Uno, Corolla, Honda Civic..." 
-                  className="pl-10 h-12"
-                />
-              </div>
-              <Button size="lg" className="h-12">
-                Buscar Veículos
-              </Button>
+            <div className="flex justify-center">
+              <SearchAutocomplete />
             </div>
             <p className="text-sm text-muted-foreground mt-4">
               🎁 Primeiras 5 buscas grátis. Sem cartão de crédito.
