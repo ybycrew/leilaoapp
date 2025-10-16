@@ -13,9 +13,25 @@ jobs:
     timeout-minutes: 30
     
     steps:
+      - name: Validar configuração
+        run: |
+          if [ -z "${{ secrets.VERCEL_URL }}" ]; then
+            echo "❌ VERCEL_URL não configurado!"
+            echo "Configure o secret VERCEL_URL com: https://leilaoapp-8is2.vercel.app"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "❌ CRON_SECRET não configurado!"
+            exit 1
+          fi
+          
+          echo "✅ URL: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
+          echo "✅ Secrets configurados corretamente"
+
       - name: Executar scraping de veículos
         run: |
-          response=$(curl -s -w "\n%{http_code}" -X POST \
+          response=$(curl -L -s -w "\n%{http_code}" -X POST \
             ${{ secrets.VERCEL_URL }}/api/cron/scrape \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json")
@@ -27,11 +43,15 @@ jobs:
           echo "Resposta: $body"
           
           if [ "$http_code" -ne 200 ]; then
-            echo "Erro ao executar scraping!"
+            echo "❌ Erro ao executar scraping!"
+            echo "Status HTTP: $http_code"
+            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
+            echo "Resposta completa:"
+            echo "$body"
             exit 1
           fi
           
-          echo "Scraping executado com sucesso!"
+          echo "✅ Scraping executado com sucesso!"
 
       - name: Notificar falha
         if: failure()

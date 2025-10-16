@@ -38,7 +38,7 @@ Para que o GitHub Actions possa chamar sua API na Vercel, você precisa configur
 2. Clique em **New repository secret**
 3. Preencha:
    - **Name:** `VERCEL_URL`
-   - **Secret:** A URL do seu deploy na Vercel (ex: `https://seu-projeto.vercel.app`)
+   - **Secret:** `https://leilaoapp-8is2.vercel.app`
 4. Clique em **Add secret**
 
 **⚠️ IMPORTANTE:** Não inclua a barra final `/` na URL!
@@ -94,14 +94,12 @@ Aguarde alguns segundos e veja o resultado dos logs!
 ### **2. Via Terminal (local)**
 
 ```bash
-curl -X POST https://seu-projeto.vercel.app/api/cron/scrape \
+curl -X POST https://leilaoapp-8is2.vercel.app/api/cron/scrape \
   -H "Authorization: Bearer SEU_CRON_SECRET" \
   -H "Content-Type: application/json"
 ```
 
-Substitua:
-- `seu-projeto.vercel.app` pela sua URL da Vercel
-- `SEU_CRON_SECRET` pelo valor do seu `.env`
+Substitua `SEU_CRON_SECRET` pelo valor do seu `.env`
 
 ---
 
