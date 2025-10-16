@@ -2,15 +2,19 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Car, Mail, Lock, User, Loader2 } from 'lucide-react';
+import { signInWithGoogle, signInWithEmail, signUpWithEmail } from './actions';
 
 export default function EntrarPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [registerData, setRegisterData] = useState({
     name: '',
@@ -22,24 +26,22 @@ export default function EntrarPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     try {
-      // TODO: Implementar autenticação com Supabase
-      console.log('Login:', loginData);
+      const result = await signInWithEmail(loginData.email, loginData.password);
       
-      // Simulação temporária
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      // Após implementar Supabase:
-      // const { data, error } = await supabase.auth.signInWithPassword({
-      //   email: loginData.email,
-      //   password: loginData.password,
-      // });
-      
-      alert('Login implementado! Por favor, configure o Supabase Auth.');
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      // Redirecionar para dashboard após sucesso
+      router.push('/dashboard');
+      router.refresh();
     } catch (error) {
       console.error('Erro no login:', error);
-      alert('Erro ao fazer login. Tente novamente.');
+      setError('Erro ao fazer login. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -47,49 +49,58 @@ export default function EntrarPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
     if (registerData.password !== registerData.confirmPassword) {
-      alert('As senhas não coincidem!');
+      setError('As senhas não coincidem!');
       return;
     }
 
     if (registerData.password.length < 6) {
-      alert('A senha deve ter pelo menos 6 caracteres!');
+      setError('A senha deve ter pelo menos 6 caracteres!');
       return;
     }
 
     setLoading(true);
 
     try {
-      // TODO: Implementar cadastro com Supabase
-      console.log('Cadastro:', registerData);
+      const result = await signUpWithEmail(
+        registerData.email,
+        registerData.password,
+        registerData.name
+      );
       
-      // Simulação temporária
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      // Mostrar mensagem de sucesso
+      alert('Cadastro realizado com sucesso! Verifique seu email para confirmar sua conta.');
       
-      // Após implementar Supabase:
-      // const { data, error } = await supabase.auth.signUp({
-      //   email: registerData.email,
-      //   password: registerData.password,
-      //   options: {
-      //     data: {
-      //       full_name: registerData.name,
-      //     },
-      //   },
-      // });
-      
-      alert('Cadastro implementado! Por favor, configure o Supabase Auth.');
+      // Redirecionar para dashboard
+      router.push('/dashboard');
+      router.refresh();
     } catch (error) {
       console.error('Erro no cadastro:', error);
-      alert('Erro ao fazer cadastro. Tente novamente.');
+      setError('Erro ao fazer cadastro. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    // TODO: Implementar login com Google via Supabase
-    alert('Login com Google será implementado com Supabase Auth!');
+    setLoading(true);
+    setError(null);
+    
+    try {
+      await signInWithGoogle();
+      // O redirecionamento é feito automaticamente pela função
+    } catch (error) {
+      console.error('Erro no login com Google:', error);
+      setError('Erro ao fazer login com Google. Tente novamente.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -113,6 +124,13 @@ export default function EntrarPage() {
           </CardHeader>
 
           <CardContent>
+            {/* Exibir erros */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-8">
                 <TabsTrigger value="login">Entrar</TabsTrigger>
@@ -338,11 +356,13 @@ export default function EntrarPage() {
 
         {/* Aviso */}
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800 text-center">
-            💡 <strong>Nota de Desenvolvimento:</strong> Configure o Supabase Auth para
-            habilitar login real. Veja{' '}
-            <code className="bg-blue-100 px-1 rounded">database/README.md</code> para
-            instruções.
+          <p className="text-sm text-blue-800">
+            💡 <strong>Autenticação Configurada!</strong>
+          </p>
+          <p className="text-xs text-blue-700 mt-2">
+            ✅ Email/Senha ativo<br />
+            ✅ Google OAuth ativo<br />
+            📝 URL de callback: <code className="bg-blue-100 px-1 rounded text-[10px]">/auth/callback</code>
           </p>
         </div>
       </div>

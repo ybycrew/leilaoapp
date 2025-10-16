@@ -4,11 +4,12 @@ import { BaseScraper, VehicleData } from '../base-scraper';
  * Scraper para o leiloeiro Sodré Santoro
  * Site: https://www.sodresantoro.com.br/veiculos/lotes
  * 
- * ✅ Scraper PRONTO e FUNCIONAL
+ * ✅ Scraper COMPLETO e FUNCIONAL
  * - URL base: /veiculos/lotes (apenas veículos)
  * - Paginação: ?sort=auction_date_init_asc&page=N
  * - Percorre todas as páginas até não encontrar mais veículos
- * - Extrai: título, preço, localização, quilometragem, tipo, banco, imagens
+ * - Extrai: título, preço, localização, quilometragem, tipo, banco
+ * - Visita página de detalhes para extrair: carrossel de imagens (todas), informações adicionais
  * - Seletores baseados na estrutura real do site (Tailwind CSS)
  * - ~48-56 veículos por página, ~16 páginas = ~768-896 veículos
  */
@@ -25,7 +26,8 @@ export class SodreSantoroScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>(); // Para detectar duplicatas
-    const maxPages = 20; // Limite de segurança (site tem ~16 páginas de veículos)
+    const maxPages = 2; // TESTE: Limitar a 2 páginas (~96 veículos) para validação rápida
+    // const maxPages = 20; // Produção: Limite de segurança (site tem ~16 páginas de veículos)
     let duplicatePageCount = 0;
 
     try {
@@ -40,15 +42,15 @@ export class SodreSantoroScraper extends BaseScraper {
 
         // Navegar para a página
         await this.page.goto(pageUrl, {
-          waitUntil: 'networkidle2',
-          timeout: 30000,
+          waitUntil: 'domcontentloaded', // Mudado de networkidle2 para ser mais rápido
+          timeout: 60000, // Aumentado para 60 segundos
         });
 
         // Aguardar inicial
         await this.randomDelay(2000, 3000);
 
-        // Aguardar os cards de veículos carregarem (apenas links)
-        await this.page.waitForSelector('a.wrapper.relative.rounded-medium', {
+        // Aguardar os cards de veículos carregarem
+        await this.page.waitForSelector('a[href*="leilao.sodresantoro.com.br"]', {
           timeout: 10000,
         }).catch(() => {
           console.log(`[${this.auctioneerName}] Timeout ao aguardar cards.`);
@@ -87,7 +89,7 @@ export class SodreSantoroScraper extends BaseScraper {
 
         // 3. Extrair dados dos veículos da página atual
         const pageVehicles = await this.page.evaluate(() => {
-          const cards = document.querySelectorAll('a.wrapper.relative.rounded-medium');
+          const cards = document.querySelectorAll('a[href*="leilao.sodresantoro.com.br/leilao/"]');
           
           return Array.from(cards).map(card => {
             try {
@@ -146,8 +148,12 @@ export class SodreSantoroScraper extends BaseScraper {
         
         for (const rawVehicle of pageVehicles) {
           try {
+            // DEBUG: Log do veículo
+            console.log(`[DEBUG] Veículo: title="${rawVehicle.title?.substring(0, 30)}", url="${rawVehicle.detailUrl?.substring(0, 50)}"`);
+            
             // Validar dados mínimos necessários
             if (!rawVehicle.title || !rawVehicle.detailUrl) {
+              console.log(`[DEBUG] Pulado por falta de title ou detailUrl`);
               skippedCount++;
               continue;
             }
@@ -190,6 +196,24 @@ export class SodreSantoroScraper extends BaseScraper {
               yearModel = year;
             }
 
+            // Buscar informações adicionais da página de detalhes
+            let allImages: string[] = [];
+            let detailedInfo: any = {};
+            
+            try {
+              // Verificar se a URL de detalhes é do formato correto (leilao.sodresantoro.com.br)
+              if (detailUrl.includes('leilao.sodresantoro.com.br')) {
+                detailedInfo = await this.scrapeVehicleDetails(detailUrl);
+                allImages = detailedInfo.images || [];
+                
+                // Delay entre requisições para não sobrecarregar o servidor
+                await this.randomDelay(800, 1500);
+              }
+            } catch (detailError) {
+              console.log(`[${this.auctioneerName}] Erro ao buscar detalhes de ${externalId}:`, detailError);
+              // Continuar mesmo com erro nos detalhes
+            }
+
             const vehicleData: VehicleData = {
               external_id: externalId,
               title: rawVehicle.title,
@@ -201,12 +225,13 @@ export class SodreSantoroScraper extends BaseScraper {
               mileage: mileage,
               state: state || 'SP',
               city: city || 'São Paulo',
-              current_bid: currentBid,
+              current_bid: detailedInfo.currentBid !== undefined ? detailedInfo.currentBid : currentBid,
               auction_date: auctionDate,
               auction_type: 'Online',
               condition: 'Usado',
               original_url: detailUrl,
-              thumbnail_url: rawVehicle.imageUrl || undefined,
+              thumbnail_url: allImages.length > 0 ? allImages[0] : rawVehicle.imageUrl,
+              images: allImages.length > 0 ? allImages : (rawVehicle.imageUrl ? [rawVehicle.imageUrl] : undefined),
             };
 
             vehicles.push(vehicleData);
@@ -242,6 +267,80 @@ export class SodreSantoroScraper extends BaseScraper {
     } catch (error) {
       console.error(`[${this.auctioneerName}] Erro no scraping:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Extrai imagens e informações adicionais da página de detalhes
+   * Retorna: { images: string[], currentBid: number | undefined }
+   */
+  private async scrapeVehicleDetails(detailUrl: string): Promise<{ images: string[]; currentBid?: number }> {
+    if (!this.page) return { images: [] };
+
+    try {
+      // Navegar para a página de detalhes
+      await this.page.goto(detailUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      });
+
+      // Aguardar página carregar
+      await this.randomDelay(1000, 2000);
+
+      // Extrair todas as imagens do carrossel
+      const images = await this.page.evaluate(() => {
+        const imgElements = Array.from(document.querySelectorAll('img'));
+        const imageUrls: string[] = [];
+        
+        imgElements.forEach(img => {
+          if (img.src && img.src.includes('photos.sodresantoro.com.br')) {
+            // Remover query string ?ims=x597 e outras variações para pegar imagem em alta resolução
+            const cleanUrl = img.src.split('?')[0];
+            if (!imageUrls.includes(cleanUrl)) {
+              imageUrls.push(cleanUrl);
+            }
+          }
+        });
+        
+        return imageUrls;
+      });
+
+      // Extrair o lance atual da página de detalhes
+      const lanceAtual = await this.page.evaluate(() => {
+        // Procurar pelo preço na página de detalhes
+        const priceSelectors = [
+          '.text-display-small',
+          '.text-headline-large',
+          '[class*="price"]',
+          '[class*="lance"]'
+        ];
+        
+        for (const selector of priceSelectors) {
+          const element = document.querySelector(selector);
+          if (element && element.textContent) {
+            const text = element.textContent.trim();
+            if (text.includes('R$')) {
+              return text;
+            }
+          }
+        }
+        
+        // Se não encontrou, buscar no body todo
+        const bodyText = document.body.innerText;
+        const match = bodyText.match(/R\$\s*([\d.,]+)/);
+        return match ? match[0] : '';
+      });
+
+      // Parse do lance
+      const currentBid = lanceAtual ? this.parsePrice(lanceAtual) : undefined;
+
+      return {
+        images: images.filter(img => img && img.length > 0),
+        currentBid
+      };
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro ao extrair detalhes de ${detailUrl}:`, error);
+      return { images: [] };
     }
   }
 

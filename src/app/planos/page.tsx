@@ -2,9 +2,28 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check } from 'lucide-react';
+import { SubscribeButton } from './SubscribeButton';
 
-export default function PlanosPage() {
-  const planos = [
+interface Plano {
+  nome: string;
+  preco: number;
+  intervalo: string;
+  descricao: string;
+  features: string[];
+  cta: string;
+  destaque: boolean;
+  economia?: string;
+  priceId?: string;
+  isFree?: boolean;
+}
+
+export default async function PlanosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ canceled?: string }>;
+}) {
+  const params = await searchParams;
+  const planos: Plano[] = [
     {
       nome: 'Gratuito',
       preco: 0,
@@ -19,6 +38,7 @@ export default function PlanosPage() {
       ],
       cta: 'Começar Grátis',
       destaque: false,
+      isFree: true,
     },
     {
       nome: 'Mensal',
@@ -35,6 +55,7 @@ export default function PlanosPage() {
       ],
       cta: 'Assinar Agora',
       destaque: true,
+      priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY,
     },
     {
       nome: 'Anual',
@@ -54,6 +75,8 @@ export default function PlanosPage() {
       cta: 'Assinar Anual',
       destaque: false,
       economia: 'Economize R$ 438/ano',
+      // TODO: Adicionar NEXT_PUBLIC_STRIPE_PRICE_ANNUAL quando criar o produto anual
+      priceId: undefined,
     },
   ];
 
@@ -79,6 +102,12 @@ export default function PlanosPage() {
       {/* Hero Section */}
       <section className="py-20">
         <div className="container mx-auto px-4 text-center max-w-3xl">
+          {params.canceled && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+              <p className="font-medium">Pagamento cancelado</p>
+              <p className="text-sm mt-1">Você pode tentar novamente quando quiser. Sem problemas!</p>
+            </div>
+          )}
           <h1 className="text-4xl md:text-5xl font-bold mb-6">
             Escolha o Plano Ideal para Você
           </h1>
@@ -144,15 +173,12 @@ export default function PlanosPage() {
                 </CardContent>
 
                 <CardFooter>
-                  <Link href="/entrar" className="w-full">
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      variant={plano.destaque ? 'default' : 'outline'}
-                    >
-                      {plano.cta}
-                    </Button>
-                  </Link>
+                  <SubscribeButton
+                    priceId={plano.priceId}
+                    cta={plano.cta}
+                    variant={plano.destaque ? 'default' : 'outline'}
+                    isFree={plano.isFree}
+                  />
                 </CardFooter>
               </Card>
             ))}

@@ -17,9 +17,9 @@ export default function Home() {
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/#como-funciona" className="text-sm hover:text-primary">Como Funciona</Link>
             <Link href="/planos" className="text-sm hover:text-primary">Planos</Link>
-            <Link href="/login" className="text-sm hover:text-primary">Entrar</Link>
+            <Link href="/entrar" className="text-sm hover:text-primary">Entrar</Link>
             <Button asChild>
-              <Link href="/registro">Começar Grátis</Link>
+              <Link href="/registrar">Começar Grátis</Link>
             </Button>
           </nav>
         </div>

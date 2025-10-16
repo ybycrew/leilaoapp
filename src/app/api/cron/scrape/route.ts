@@ -4,13 +4,13 @@ import { runAllScrapers } from '@/lib/scraping';
 /**
  * Rota de Cron Job para executar scraping automatizado
  * 
- * Configure no Vercel em vercel.json:
- * { "crons": [{ "path": "/api/cron/scrape", "schedule": "0 ASTERISK/6 ASTERISK ASTERISK ASTERISK" }] }
+ * Executado via GitHub Actions a cada 6 horas.
+ * Ver: .github/workflows/scraping-cron.yml
  * 
- * Ou teste manualmente:
- * curl -H "Authorization: Bearer SEU_CRON_SECRET" http://localhost:3001/api/cron/scrape
+ * Teste manualmente:
+ * curl -X POST -H "Authorization: Bearer SEU_CRON_SECRET" https://seu-dominio.vercel.app/api/cron/scrape
  */
-export async function GET(request: NextRequest) {
+async function handleCronRequest(request: NextRequest) {
   const startTime = Date.now();
 
   try {
@@ -91,3 +91,7 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// Exportar para GET e POST
+export const GET = handleCronRequest;
+export const POST = handleCronRequest;

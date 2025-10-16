@@ -1,0 +1,40 @@
+name: Scraping Automático
+
+on:
+  schedule:
+    # Executa a cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
+    # UTC -3 = Horário de Brasília: 21:00, 03:00, 09:00, 15:00
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Permite execução manual via interface do GitHub
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Executar scraping de veículos
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            ${{ secrets.VERCEL_URL }}/api/cron/scrape \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status HTTP: $http_code"
+          echo "Resposta: $body"
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "Erro ao executar scraping!"
+            exit 1
+          fi
+          
+          echo "Scraping executado com sucesso!"
+
+      - name: Notificar falha
+        if: failure()
+        run: |
+          echo "❌ Scraping falhou. Verifique os logs acima."
+
