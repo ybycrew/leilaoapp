@@ -49,6 +49,10 @@ jobs:
       
       - name: Validar configuração
         run: |
+          echo "=== Debug Secrets ==="
+          echo "VERCEL_URL length: ${#VERCEL_URL}"
+          echo "CRON_SECRET length: ${#CRON_SECRET}"
+          
           if [ -z "${{ secrets.VERCEL_URL }}" ]; then
             echo "❌ VERCEL_URL não configurado!"
             echo "Configure o secret VERCEL_URL com: https://www.ybybid.com.br"
