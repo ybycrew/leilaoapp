@@ -56,7 +56,7 @@ export abstract class BaseScraper {
       launchOptions = {
         args: chromium.args,
         executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
+        headless: true,
         ignoreHTTPSErrors: true,
       };
     } else {
