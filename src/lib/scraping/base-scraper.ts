@@ -44,9 +44,32 @@ export abstract class BaseScraper {
   protected async initBrowser(): Promise<void> {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
-    this.browser = await puppeteer.launch({
+    // Try to find Chrome executable
+    const possiblePaths = [
+      process.env.CHROME_PATH,
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+    ].filter(Boolean);
+    
+    let executablePath: string | undefined;
+    
+    // Try to find a working Chrome executable
+    for (const path of possiblePaths) {
+      try {
+        const { execSync } = require('child_process');
+        execSync(`"${path}" --version`, { stdio: 'ignore' });
+        executablePath = path;
+        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path}`);
+        break;
+      } catch (error) {
+        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path}`);
+      }
+    }
+    
+    const launchOptions: any = {
       headless: true,
-      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome-stable',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -55,8 +78,18 @@ export abstract class BaseScraper {
         '--disable-gpu',
         '--disable-web-security',
         '--disable-features=VizDisplayCompositor',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
       ],
-    });
+    };
+    
+    // Only set executablePath if we found a valid Chrome installation
+    if (executablePath) {
+      launchOptions.executablePath = executablePath;
+    }
+    
+    this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
 
