@@ -1,4 +1,5 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 export interface VehicleData {
   external_id: string;
@@ -44,76 +45,35 @@ export abstract class BaseScraper {
   protected async initBrowser(): Promise<void> {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
-    // Log environment info
-    console.log(`[${this.auctioneerName}] Node version: ${process.version}`);
-    console.log(`[${this.auctioneerName}] Platform: ${process.platform}`);
-    console.log(`[${this.auctioneerName}] Chrome path env: ${process.env.CHROME_PATH}`);
+    const isVercel = process.env.VERCEL === '1';
+    console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : 'Desenvolvimento local'}`);
     
-    // Try different Chrome paths
-    const chromePaths = [
-      process.env.CHROME_PATH,
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      // Puppeteer's default Chrome path
-      require('puppeteer').executablePath(),
-    ].filter(Boolean);
+    let launchOptions: any;
     
-    let executablePath: string | undefined;
-    
-    // Find working Chrome
-    for (const path of chromePaths) {
-      try {
-        const { execSync } = require('child_process');
-        const version = execSync(`"${path}" --version`, { stdio: 'pipe', timeout: 5000 }).toString().trim();
-        executablePath = path;
-        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path} (${version})`);
-        break;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path} - ${errorMessage}`);
-      }
-    }
-    
-    const launchOptions: any = {
-      headless: 'new', // Use new headless mode
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-extensions',
-        '--disable-plugins',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--disable-background-networking',
-        '--disable-ipc-flooding-protection',
-        '--disable-hang-monitor',
-        '--disable-prompt-on-repost',
-        '--disable-client-side-phishing-detection',
-        '--disable-component-update',
-        '--disable-domain-reliability',
-        '--disable-features=TranslateUI',
-        '--disable-features=BlinkGenPropertyTrees',
-        '--single-process', // Force single process mode
-      ],
-    };
-    
-    // Set executable path
-    if (executablePath) {
-      launchOptions.executablePath = executablePath;
-      console.log(`[${this.auctioneerName}] Usando Chrome em: ${executablePath}`);
+    if (isVercel) {
+      // Configuração otimizada para Vercel (serverless)
+      console.log(`[${this.auctioneerName}] Usando configuração otimizada para Vercel...`);
+      launchOptions = {
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true,
+      };
     } else {
-      console.log(`[${this.auctioneerName}] Usando configuração padrão do Puppeteer`);
+      // Configuração para desenvolvimento local
+      console.log(`[${this.auctioneerName}] Usando configuração para desenvolvimento local...`);
+      launchOptions = {
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--single-process',
+        ],
+      };
     }
     
     try {

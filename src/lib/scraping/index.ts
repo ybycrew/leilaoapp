@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { SodreSantoroScraper } from './scrapers/sodre-santoro';
-import { SodreSantoroSimpleScraper } from './scrapers/sodre-santoro-simple';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { calculateDealScore } from './utils';
@@ -32,10 +31,9 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
   const results: ScrapingResult[] = [];
 
   // Lista de scrapers disponíveis
-  // Usar scraper simples no Vercel (sem Puppeteer) ou scraper completo localmente
-  const isVercel = process.env.VERCEL === '1';
+  // Agora usando Puppeteer otimizado para Vercel
   const scrapers = [
-    isVercel ? new SodreSantoroSimpleScraper() : new SodreSantoroScraper(),
+    new SodreSantoroScraper(),
     // Adicione mais scrapers aqui:
     // new SuperbidScraper(),
     // new LeiloesVIPScraper(),
