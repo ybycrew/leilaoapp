@@ -44,13 +44,21 @@ export abstract class BaseScraper {
   protected async initBrowser(): Promise<void> {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
+    // Log environment info
+    console.log(`[${this.auctioneerName}] Node version: ${process.version}`);
+    console.log(`[${this.auctioneerName}] Platform: ${process.platform}`);
+    console.log(`[${this.auctioneerName}] Chrome path env: ${process.env.CHROME_PATH}`);
+    
     // Try different Chrome paths
     const chromePaths = [
+      process.env.CHROME_PATH,
       '/usr/bin/google-chrome-stable',
       '/usr/bin/google-chrome',
       '/usr/bin/chromium-browser',
       '/usr/bin/chromium',
-    ];
+      // Puppeteer's default Chrome path
+      require('puppeteer').executablePath(),
+    ].filter(Boolean);
     
     let executablePath: string | undefined;
     
@@ -58,17 +66,17 @@ export abstract class BaseScraper {
     for (const path of chromePaths) {
       try {
         const { execSync } = require('child_process');
-        execSync(`"${path}" --version`, { stdio: 'ignore', timeout: 5000 });
+        const version = execSync(`"${path}" --version`, { stdio: 'pipe', timeout: 5000 }).toString().trim();
         executablePath = path;
-        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path}`);
+        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path} (${version})`);
         break;
       } catch (error) {
-        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path}`);
+        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path} - ${error.message}`);
       }
     }
     
     const launchOptions: any = {
-      headless: true,
+      headless: 'new', // Use new headless mode
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -82,23 +90,38 @@ export abstract class BaseScraper {
         '--disable-renderer-backgrounding',
         '--disable-extensions',
         '--disable-plugins',
-        '--disable-images',
         '--disable-default-apps',
         '--disable-sync',
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-background-networking',
+        '--disable-ipc-flooding-protection',
+        '--disable-hang-monitor',
+        '--disable-prompt-on-repost',
+        '--disable-client-side-phishing-detection',
+        '--disable-component-update',
+        '--disable-domain-reliability',
+        '--disable-features=TranslateUI',
+        '--disable-features=BlinkGenPropertyTrees',
+        '--single-process', // Force single process mode
       ],
     };
     
-    // Only set executablePath if we found a working Chrome
+    // Set executable path
     if (executablePath) {
       launchOptions.executablePath = executablePath;
+      console.log(`[${this.auctioneerName}] Usando Chrome em: ${executablePath}`);
     } else {
-      console.log(`[${this.auctioneerName}] Nenhum Chrome encontrado, usando configuração padrão do Puppeteer`);
+      console.log(`[${this.auctioneerName}] Usando configuração padrão do Puppeteer`);
     }
     
-    this.browser = await puppeteer.launch(launchOptions);
+    try {
+      this.browser = await puppeteer.launch(launchOptions);
+      console.log(`[${this.auctioneerName}] Navegador inicializado com sucesso`);
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro ao inicializar navegador:`, error);
+      throw error;
+    }
 
     this.page = await this.browser.newPage();
 
