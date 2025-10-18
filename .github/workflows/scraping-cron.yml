@@ -13,11 +13,26 @@ jobs:
     timeout-minutes: 30
     
     steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Chrome dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+      
       - name: Validar configuração
         run: |
           if [ -z "${{ secrets.VERCEL_URL }}" ]; then
             echo "❌ VERCEL_URL não configurado!"
-            echo "Configure o secret VERCEL_URL com: https://leilaoapp-8is2.vercel.app"
+            echo "Configure o secret VERCEL_URL com: https://www.ybybid.com.br"
             exit 1
           fi
           
@@ -30,6 +45,8 @@ jobs:
           echo "✅ Secrets configurados corretamente"
 
       - name: Executar scraping de veículos
+        env:
+          CHROME_PATH: /usr/bin/google-chrome-stable
         run: |
           response=$(curl -L -s -w "\n%{http_code}" -X POST \
             ${{ secrets.VERCEL_URL }}/api/cron/scrape \

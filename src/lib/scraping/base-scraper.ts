@@ -45,13 +45,16 @@ export abstract class BaseScraper {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
     this.browser = await puppeteer.launch({
-      headless: true, // Use 'new' em vez de true se tiver problemas
+      headless: true,
+      executablePath: process.env.CHROME_PATH || '/usr/bin/google-chrome-stable',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
       ],
     });
 
