@@ -71,7 +71,8 @@ export abstract class BaseScraper {
         console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path} (${version})`);
         break;
       } catch (error) {
-        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path} - ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path} - ${errorMessage}`);
       }
     }
     
