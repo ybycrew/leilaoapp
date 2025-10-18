@@ -44,7 +44,30 @@ export abstract class BaseScraper {
   protected async initBrowser(): Promise<void> {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
-    this.browser = await puppeteer.launch({
+    // Try different Chrome paths
+    const chromePaths = [
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+    ];
+    
+    let executablePath: string | undefined;
+    
+    // Find working Chrome
+    for (const path of chromePaths) {
+      try {
+        const { execSync } = require('child_process');
+        execSync(`"${path}" --version`, { stdio: 'ignore', timeout: 5000 });
+        executablePath = path;
+        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${path}`);
+        break;
+      } catch (error) {
+        console.log(`[${this.auctioneerName}] Chrome não encontrado em: ${path}`);
+      }
+    }
+    
+    const launchOptions: any = {
       headless: true,
       args: [
         '--no-sandbox',
@@ -57,8 +80,25 @@ export abstract class BaseScraper {
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
+        '--disable-extensions',
+        '--disable-plugins',
+        '--disable-images',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--disable-background-networking',
       ],
-    });
+    };
+    
+    // Only set executablePath if we found a working Chrome
+    if (executablePath) {
+      launchOptions.executablePath = executablePath;
+    } else {
+      console.log(`[${this.auctioneerName}] Nenhum Chrome encontrado, usando configuração padrão do Puppeteer`);
+    }
+    
+    this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
 

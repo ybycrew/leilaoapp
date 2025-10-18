@@ -24,13 +24,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
-      - name: Install Chrome via Puppeteer
+      - name: Install Chrome and dependencies
         run: |
-          # Install Chrome using Puppeteer's built-in installer
+          # Install system dependencies
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg ca-certificates
+          
+          # Install Chrome via Puppeteer
           npx puppeteer browsers install chrome
           
-          # Verify installation
-          echo "Chrome installation completed"
+          # Also install system Chrome as backup
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          
+          # Verify installations
+          echo "=== Puppeteer Chrome ==="
+          ls -la ~/.cache/puppeteer/chrome/ || echo "Puppeteer Chrome not found"
+          echo "=== System Chrome ==="
+          which google-chrome-stable || echo "System Chrome not found"
+          echo "=== Chrome version ==="
+          google-chrome-stable --version || echo "Cannot get Chrome version"
       
       - name: Validar configuração
         run: |
