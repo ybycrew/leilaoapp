@@ -67,33 +67,40 @@ jobs:
           echo "✅ URL: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
           echo "✅ Secrets configurados corretamente"
 
+      - name: Testar endpoint básico
+        run: |
+          echo "=== Testando endpoint básico ==="
+          
+          response=$(curl -L --connect-timeout 30 --max-time 60 -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.VERCEL_URL }}/api/cron/test" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          echo "Response completo: $response"
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status HTTP: $http_code"
+          echo "Resposta: $body"
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Endpoint de teste falhou!"
+            echo "Status HTTP: $http_code"
+            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/test"
+            echo "Resposta completa:"
+            echo "$body"
+            exit 1
+          fi
+          
+          echo "✅ Endpoint de teste funcionando!"
+
       - name: Executar scraping de veículos
         env:
           CHROME_PATH: /usr/bin/google-chrome-stable
         run: |
-          echo "=== Testando conectividade ==="
-          
-          # Test DNS resolution
-          echo "Testando DNS..."
-          nslookup $(echo "${{ secrets.VERCEL_URL }}" | sed 's|https://||' | sed 's|http://||' | cut -d'/' -f1) || echo "DNS falhou"
-          
-          # Test basic connectivity
-          echo "Testando conectividade básica..."
-          curl -I --connect-timeout 10 "${{ secrets.VERCEL_URL }}" || echo "Conectividade básica falhou"
-          
           echo "=== Executando scraping ==="
           
-          # Try with verbose output first
-          echo "Tentativa 1: Com verbose..."
-          curl -v -L --connect-timeout 30 --max-time 300 -X POST \
-            "${{ secrets.VERCEL_URL }}/api/cron/scrape" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -w "\nHTTP_CODE:%{http_code}\nTOTAL_TIME:%{time_total}\n" || echo "Curl falhou"
-          
-          echo "=== Tentativa 2: Sem verbose ==="
-          
-          # Try without verbose
           response=$(curl -L --connect-timeout 30 --max-time 300 -s -w "\n%{http_code}" -X POST \
             "${{ secrets.VERCEL_URL }}/api/cron/scrape" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
