@@ -78,21 +78,32 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
   };
 
   try {
+    console.log(`[${auctioneerName}] Iniciando scraping...`);
+    
     // 1. Buscar ID do leiloeiro no banco
-    const { data: auctioneer } = await supabase
+    console.log(`[${auctioneerName}] Buscando leiloeiro no banco...`);
+    const { data: auctioneer, error: auctioneerError } = await supabase
       .from('auctioneers')
       .select('id')
       .eq('name', auctioneerName)
       .single();
+
+    if (auctioneerError) {
+      console.error(`[${auctioneerName}] Erro ao buscar leiloeiro:`, auctioneerError);
+      throw new Error(`Erro ao buscar leiloeiro: ${auctioneerError.message}`);
+    }
 
     if (!auctioneer) {
       throw new Error(`Leiloeiro "${auctioneerName}" não encontrado no banco`);
     }
 
     const auctioneerId = auctioneer.id;
+    console.log(`[${auctioneerName}] Leiloeiro encontrado com ID: ${auctioneerId}`);
 
     // 2. Executar scraping
+    console.log(`[${auctioneerName}] Executando scraper...`);
     const vehicles = await scraper.run();
+    console.log(`[${auctioneerName}] Scraping concluído. ${vehicles.length} veículos encontrados.`);
     result.vehiclesScraped = vehicles.length;
 
     // 3. Processar cada veículo
@@ -116,7 +127,8 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
 
     result.success = true;
   } catch (error: any) {
-    console.error(`Erro no scraping de ${auctioneerName}:`, error);
+    console.error(`[${auctioneerName}] Erro no scraping:`, error);
+    console.error(`[${auctioneerName}] Stack trace:`, error.stack);
     result.errors.push(error.message);
   }
 

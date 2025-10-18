@@ -95,6 +95,34 @@ jobs:
           
           echo "✅ Endpoint de teste funcionando!"
 
+      - name: Verificar leiloeiros no banco
+        run: |
+          echo "=== Verificando leiloeiros no banco ==="
+          
+          response=$(curl -L --connect-timeout 30 --max-time 60 -s -w "\n%{http_code}" -X POST \
+            "${{ secrets.VERCEL_URL }}/api/cron/check-auctioneers" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" 2>&1)
+          
+          echo "Response completo: $response"
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status HTTP: $http_code"
+          echo "Resposta: $body"
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Erro ao verificar leiloeiros!"
+            echo "Status HTTP: $http_code"
+            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/check-auctioneers"
+            echo "Resposta completa:"
+            echo "$body"
+            exit 1
+          fi
+          
+          echo "✅ Leiloeiros verificados!"
+
       - name: Executar scraping de veículos
         env:
           CHROME_PATH: /usr/bin/google-chrome-stable
