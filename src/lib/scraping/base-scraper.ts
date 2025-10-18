@@ -55,7 +55,6 @@ export abstract class BaseScraper {
       console.log(`[${this.auctioneerName}] Usando configuração otimizada para Vercel...`);
       launchOptions = {
         args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: chromium.headless,
         ignoreHTTPSErrors: true,
