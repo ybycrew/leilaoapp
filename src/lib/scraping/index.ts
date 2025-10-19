@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { SodreSantoroScraper } from './scrapers/sodre-santoro';
+import { SodreSantoroOptimizedScraper } from './scrapers/sodre-santoro-optimized';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { calculateDealScore } from './utils';
@@ -30,15 +30,15 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
 
   const results: ScrapingResult[] = [];
 
-  // Lista de scrapers disponíveis
-  // Agora usando Puppeteer otimizado para Vercel
-  const scrapers = [
-    new SodreSantoroScraper(),
-    // Adicione mais scrapers aqui:
-    // new SuperbidScraper(),
-    // new LeiloesVIPScraper(),
-    // etc.
-  ];
+        // Lista de scrapers disponíveis
+        // Usando scraper otimizado para o site real do Sodré Santoro
+        const scrapers = [
+          new SodreSantoroOptimizedScraper(),
+          // Adicione mais scrapers aqui:
+          // new SuperbidScraper(),
+          // new LeiloesVIPScraper(),
+          // etc.
+        ];
 
   for (const scraper of scrapers) {
     const result = await runScraper(scraper);
