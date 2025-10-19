@@ -26,8 +26,8 @@ export class SodreSantoroScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>(); // Para detectar duplicatas
-    const maxPages = 2; // TESTE: Limitar a 2 páginas (~96 veículos) para validação rápida
-    // const maxPages = 20; // Produção: Limite de segurança (site tem ~16 páginas de veículos)
+    // const maxPages = 2; // TESTE: Limitar a 2 páginas (~96 veículos) para validação rápida
+    const maxPages = 20; // Produção: Limite de segurança (site tem ~16 páginas de veículos)
     let duplicatePageCount = 0;
 
     try {
