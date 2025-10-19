@@ -47,12 +47,26 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       p_search_text: filters.q || null,
       p_states: filters.state ? [filters.state] : null,
       p_cities: filters.city ? [filters.city] : null,
-      p_vehicle_types: filters.vehicleType || null,
+      p_brands: null,
+      p_models: null,
       p_min_year: filters.minYear || null,
       p_max_year: filters.maxYear || null,
       p_min_price: filters.minPrice || null,
       p_max_price: filters.maxPrice || null,
-      p_order_by: filters.orderBy || 'deal_score',
+      p_vehicle_types: filters.vehicleType || null,
+      p_fuel_types: null,
+      p_transmissions: null,
+      p_min_mileage: null,
+      p_max_mileage: null,
+      p_auction_types: null,
+      p_has_financing: null,
+      p_conditions: null,
+      p_sort_by: filters.orderBy === 'deal_score' ? 'deal_score' : 
+                 filters.orderBy === 'price_asc' ? 'price_asc' :
+                 filters.orderBy === 'price_desc' ? 'price_desc' :
+                 filters.orderBy === 'date_asc' ? 'date_asc' :
+                 filters.orderBy === 'date_desc' ? 'date_desc' : 'auction_date',
+      p_sort_order: filters.orderBy === 'price_desc' || filters.orderBy === 'date_desc' ? 'desc' : 'asc',
       p_limit: filters.limit || 50,
       p_offset: filters.offset || 0,
     });
