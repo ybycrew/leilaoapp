@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       p_max_year: filters.maxYear || null,
       p_min_price: filters.minPrice || null,
       p_max_price: filters.maxPrice || null,
-      p_vehicle_types: filters.vehicleType || null,
+      p_vehicle_types: null,
       p_fuel_types: null,
       p_transmissions: null,
       p_min_mileage: null,
