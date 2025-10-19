@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { SodreSantoroOptimizedScraper } from './scrapers/sodre-santoro-optimized';
+import { SodreSantoroRealScraper } from './scrapers/sodre-santoro-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { calculateDealScore } from './utils';
@@ -31,9 +31,9 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
   const results: ScrapingResult[] = [];
 
         // Lista de scrapers disponíveis
-        // Usando scraper otimizado para o site real do Sodré Santoro
+        // Usando scraper real para o site Sodré Santoro com filtro de datas futuras
         const scrapers = [
-          new SodreSantoroOptimizedScraper(),
+          new SodreSantoroRealScraper(),
           // Adicione mais scrapers aqui:
           // new SuperbidScraper(),
           // new LeiloesVIPScraper(),
