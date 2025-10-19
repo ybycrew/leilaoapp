@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       maxPrice: undefined,
       minYear: undefined,
       maxYear: undefined,
-      orderBy: 'deal_score' as const,
+      orderBy: 'deal_score' as 'deal_score' | 'price_asc' | 'price_desc' | 'date_asc' | 'date_desc',
       limit: 50,
       offset: 0,
     };
