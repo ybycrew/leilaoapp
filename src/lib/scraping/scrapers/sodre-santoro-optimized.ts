@@ -445,7 +445,7 @@ export class SodreSantoroOptimizedScraper extends BaseScraper {
   /**
    * Normaliza nome da marca
    */
-  private normalizeBrand(brand: string): string {
+  protected normalizeBrand(brand: string): string {
     const brandMap: { [key: string]: string } = {
       'VW': 'Volkswagen',
       'BMW': 'BMW',
