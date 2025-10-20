@@ -43,15 +43,19 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
         try {
           await this.page.goto(pageUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000,
+            waitUntil: ['networkidle0','domcontentloaded'],
+            timeout: 90000,
           });
+
+          // Garantir hydration/render
+          await this.page.waitForTimeout(2000);
 
           await this.randomDelay(2000, 3000);
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
-          await this.page.waitForSelector('a[href*="/leilao/"], .vehicle-card, [data-testid*="vehicle"]', {
-            timeout: 15000,
+          const selectorUnion = 'a[href*="/leilao/"], .vehicle-card, [data-testid*="vehicle"], .lote-card, a[href*="lote"]';
+          await this.page.waitForSelector(selectorUnion, {
+            timeout: 30000,
           }).catch(() => {
             console.log(`[${this.auctioneerName}] Timeout ao aguardar cards na página ${currentPage}`);
           });
@@ -59,6 +63,12 @@ export class SodreSantoroRealScraper extends BaseScraper {
           await this.scrollToLoadContent();
 
           const pageVehicles = await this.extractVehiclesFromPage(currentPage);
+
+          // Se nada foi encontrado, capture HTML parcial para debug
+          if (pageVehicles.length === 0) {
+            const snapshot = await this.page.evaluate(() => document.body.innerText.slice(0, 500));
+            console.log(`[${this.auctioneerName}] Snapshot de página vazia (500 chars):`, snapshot);
+          }
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos extraídos`);
 
@@ -230,7 +240,9 @@ export class SodreSantoroRealScraper extends BaseScraper {
           '.lote-card',
           '[data-testid*="vehicle"]',
           '.card',
-          'a[href*="leilao"]'
+          'a[href*="leilao"]',
+          'a[href*="/veiculo/"]',
+          'a[href*="/lote/"]'
         ];
 
         let cards: Element[] = [];
@@ -246,7 +258,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
         if (cards.length === 0) {
           console.log('Nenhum card encontrado, tentando seletores alternativos...');
-          const fallbackSelectors = ['a[href*="leilao"]', 'a[href*="lote"]', '.item'];
+          const fallbackSelectors = ['a[href*="leilao"]', 'a[href*="lote"]', '.item', 'article', 'li'];
           for (const selector of fallbackSelectors) {
             const elements = document.querySelectorAll(selector);
             if (elements.length > 0) {

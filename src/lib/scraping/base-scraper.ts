@@ -90,6 +90,18 @@ export abstract class BaseScraper {
     await this.page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
+    await this.page.setExtraHTTPHeaders({
+      'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    });
+
+    // Encaminhar logs do contexto da página para os logs do servidor (útil para debug de seletores)
+    this.page.on('console', (msg) => {
+      try {
+        const type = msg.type();
+        const text = msg.text();
+        console.log(`[${this.auctioneerName}] [page.${type}] ${text}`);
+      } catch {}
+    });
 
     console.log(`[${this.auctioneerName}] Navegador inicializado`);
   }
