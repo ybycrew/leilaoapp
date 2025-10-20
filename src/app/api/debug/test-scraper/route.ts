@@ -25,9 +25,6 @@ export async function GET(request: NextRequest) {
     console.log(`Scraping concluído em ${duration}s`);
     console.log(`Veículos coletados: ${vehicles.length}`);
     
-    // Fechar o scraper
-    await scraper.close();
-    
     return NextResponse.json({
       success: true,
       scraperName: 'Sodré Santoro Real',
