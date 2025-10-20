@@ -8,16 +8,12 @@ export async function GET(request: NextRequest) {
     const scraper = new SodreSantoroRealScraper();
     console.log(`Scraper criado: Sodré Santoro Real`);
     
-    // Inicializar o scraper
-    await scraper.init();
-    console.log('Scraper inicializado com sucesso');
-    
     // Executar scraping com timeout
     const startTime = Date.now();
     console.log('Iniciando scraping...');
     
     const vehicles = await Promise.race([
-      scraper.scrapeVehicles(),
+      scraper.run(),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout após 5 minutos')), 5 * 60 * 1000)
       )
