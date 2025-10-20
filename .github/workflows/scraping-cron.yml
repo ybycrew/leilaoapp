@@ -4,6 +4,7 @@ on:
   schedule:
     # Executa a cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
     # UTC -3 = Horário de Brasília: 21:00, 03:00, 09:00, 15:00
+    # Cada execução processa 1 lote (5 páginas) - 4 lotes por dia = 20 páginas total
     - cron: '0 */6 * * *'
   workflow_dispatch: # Permite execução manual via interface do GitHub
 
