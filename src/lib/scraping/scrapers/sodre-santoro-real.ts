@@ -51,7 +51,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
           await this.randomDelay(2000, 3000);
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
-          const selectorUnion = 'a[href*="/leilao/"], .vehicle-card, [data-testid*="vehicle"], .lote-card, a[href*="lote"]';
+          // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
+          const selectorUnion = 'a[href*="/lote/"], .lote-card, .vehicle-card, [data-testid*="vehicle"], a[href*="/leilao/"]';
           await this.page.waitForSelector(selectorUnion, {
             timeout: 30000,
           }).catch(() => {
@@ -168,8 +169,14 @@ export class SodreSantoroRealScraper extends BaseScraper {
    */
   private extractRealExternalId(detailUrl: string): string {
     try {
-      // URLs do Sodré Santoro geralmente têm formato: /leilao/ID ou /leilao/ID/
-      const match = detailUrl.match(/\/leilao\/([^\/\?]+)/);
+      // Primeiro tentar ID de LOTE: /lote/{ID}
+      let match = detailUrl.match(/\/lote\/([^\/\?]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+
+      // Depois tentar ID de leilão: /leilao/{ID}
+      match = detailUrl.match(/\/leilao\/([^\/\?]+)/);
       if (match && match[1]) {
         return match[1]; // Retorna o ID real extraído da URL
       }
@@ -232,15 +239,14 @@ export class SodreSantoroRealScraper extends BaseScraper {
     try {
       return await this.page.evaluate(() => {
         // Seletores específicos baseados na estrutura real do site Sodré Santoro
+        // Priorizar seletores que apontam para o detalhe do LOTE (1 veículo por link)
         const selectors = [
-          'a[href*="/leilao/"]',
-          '.vehicle-card',
-          '.lote-card',
-          '[data-testid*="vehicle"]',
-          '.card',
-          'a[href*="leilao"]',
+          'a[href*="/lote/"]',
+          '.lote-card a[href]',
+          '.vehicle-card a[href]',
+          '[data-testid*="vehicle"] a[href]',
           'a[href*="/veiculo/"]',
-          'a[href*="/lote/"]'
+          'a[href*="/leilao/"]'
         ];
 
         let cards: Element[] = [];
@@ -267,11 +273,25 @@ export class SodreSantoroRealScraper extends BaseScraper {
           }
         }
 
+        const seenHrefs = new Set<string>();
         return cards.map(card => {
           try {
             // Extrair URL do detalhe
-            const detailUrl = (card as HTMLAnchorElement).href || 
-                             card.querySelector('a')?.getAttribute('href') || '';
+            let href = (card as HTMLAnchorElement).href || card.querySelector('a')?.getAttribute('href') || '';
+            if (!href) return null;
+
+            // Normalizar href relativo
+            if (!href.startsWith('http')) {
+              const a = document.createElement('a');
+              a.href = href;
+              href = a.pathname + a.search;
+            }
+
+            // Dedupe por href na própria página
+            if (seenHrefs.has(href)) return null;
+            seenHrefs.add(href);
+
+            const detailUrl = href;
 
             // Extrair título - seletores específicos do Sodré Santoro
             const titleSelectors = [
