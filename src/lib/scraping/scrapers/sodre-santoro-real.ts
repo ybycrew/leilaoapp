@@ -14,7 +14,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
   private readonly vehiclesUrl = `${this.baseUrl}/veiculos/lotes?sort=auction_date_init_asc`;
 
   constructor() {
-    super('Sodré Santoro Real');
+    // Nome alinhado com o registro no banco
+    super('Sodré Santoro');
   }
 
   async scrapeVehicles(): Promise<VehicleData[]> {

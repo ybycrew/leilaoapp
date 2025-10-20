@@ -83,15 +83,26 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     
     // 1. Buscar ID do leiloeiro no banco
     console.log(`[${auctioneerName}] Buscando leiloeiro no banco...`);
-    const { data: auctioneer, error: auctioneerError } = await supabase
+    // Tentar por nome; se der erro de múltiplos/nenhum, tentar por slug
+    const { data: auctioneerByName, error: auctioneerError } = await supabase
       .from('auctioneers')
-      .select('id')
+      .select('id, slug, name')
       .eq('name', auctioneerName)
-      .single();
+      .maybeSingle();
+
+    let auctioneer = auctioneerByName;
+    if (!auctioneer) {
+      const normalizedSlug = auctioneerName.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, '-');
+      const { data: auctioneerBySlug } = await supabase
+        .from('auctioneers')
+        .select('id, slug, name')
+        .eq('slug', normalizedSlug)
+        .maybeSingle();
+      auctioneer = auctioneerBySlug as any;
+    }
 
     if (auctioneerError) {
       console.error(`[${auctioneerName}] Erro ao buscar leiloeiro:`, auctioneerError);
-      throw new Error(`Erro ao buscar leiloeiro: ${auctioneerError.message}`);
     }
 
     if (!auctioneer) {
