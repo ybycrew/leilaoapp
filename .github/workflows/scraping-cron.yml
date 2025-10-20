@@ -129,7 +129,7 @@ jobs:
         run: |
           echo "=== Executando scraping ==="
           
-          response=$(curl -L --connect-timeout 30 --max-time 300 -s -w "\n%{http_code}" -X POST \
+          response=$(curl -L --connect-timeout 60 --max-time 1200 --retry 2 --retry-delay 5 --retry-connrefused -s -w "\n%{http_code}" -X POST \
             "${{ secrets.VERCEL_URL }}/api/cron/scrape" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" 2>&1)
