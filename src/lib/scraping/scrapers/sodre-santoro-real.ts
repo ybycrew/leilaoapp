@@ -48,8 +48,6 @@ export class SodreSantoroRealScraper extends BaseScraper {
           });
 
           // Garantir hydration/render
-          await this.page.waitForTimeout(2000);
-
           await this.randomDelay(2000, 3000);
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
