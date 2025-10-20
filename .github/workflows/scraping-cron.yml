@@ -69,10 +69,10 @@ jobs:
 
       - name: Testar conectividade básica
         run: |
-          echo "=== Testando ping básico ==="
+          echo "=== Testando health check ==="
           
           response=$(curl -L --connect-timeout 30 --max-time 30 -s -w "\n%{http_code}" -X GET \
-            "${{ secrets.VERCEL_URL }}/api/cron/ping" 2>&1)
+            "${{ secrets.VERCEL_URL }}/api/health" 2>&1)
           
           echo "Response completo: $response"
           
@@ -83,15 +83,15 @@ jobs:
           echo "Resposta: $body"
           
           if [ "$http_code" -ne 200 ]; then
-            echo "❌ Ping básico falhou!"
+            echo "❌ Health check falhou!"
             echo "Status HTTP: $http_code"
-            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/ping"
+            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/health"
             echo "Resposta completa:"
             echo "$body"
             exit 1
           fi
           
-          echo "✅ Ping básico funcionando!"
+          echo "✅ Health check funcionando!"
 
       - name: Testar endpoint com autenticação
         run: |
