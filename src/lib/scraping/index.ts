@@ -83,22 +83,44 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     
     // 1. Buscar ID do leiloeiro no banco
     console.log(`[${auctioneerName}] Buscando leiloeiro no banco...`);
-    // Tentar por nome; se der erro de múltiplos/nenhum, tentar por slug
+    // Resolver leiloeiro de forma resiliente (por nome e por possíveis slugs conhecidos)
     const { data: auctioneerByName, error: auctioneerError } = await supabase
       .from('auctioneers')
       .select('id, slug, name')
       .eq('name', auctioneerName)
       .maybeSingle();
 
-    let auctioneer = auctioneerByName;
+    let auctioneer = auctioneerByName as any;
+
     if (!auctioneer) {
-      const normalizedSlug = auctioneerName.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, '-');
-      const { data: auctioneerBySlug } = await supabase
-        .from('auctioneers')
-        .select('id, slug, name')
-        .eq('slug', normalizedSlug)
-        .maybeSingle();
-      auctioneer = auctioneerBySlug as any;
+      // Candidatos de slug em ordem de preferência
+      const candidateSlugs: string[] = [];
+      const normalizedFromName = auctioneerName
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
+      candidateSlugs.push(normalizedFromName);
+
+      // Slugs conhecidos quando o nome contém "Sodré"
+      if (/sodr[eé]/i.test(auctioneerName)) {
+        candidateSlugs.push('sodre-santoro');
+        candidateSlugs.push('sodre-santoro-real');
+      }
+
+      for (const slug of candidateSlugs) {
+        const { data: bySlug } = await supabase
+          .from('auctioneers')
+          .select('id, slug, name')
+          .eq('slug', slug)
+          .maybeSingle();
+        if (bySlug) {
+          auctioneer = bySlug as any;
+          break;
+        }
+      }
     }
 
     if (auctioneerError) {
@@ -106,7 +128,7 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     }
 
     if (!auctioneer) {
-      throw new Error(`Leiloeiro "${auctioneerName}" não encontrado no banco`);
+      throw new Error(`Leiloeiro "${auctioneerName}" não encontrado no banco (tentei por nome e slugs relacionados)`);
     }
 
     const auctioneerId = auctioneer.id;
