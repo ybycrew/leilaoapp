@@ -43,18 +43,18 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
         try {
           await this.page.goto(pageUrl, {
-            waitUntil: ['networkidle0','domcontentloaded'],
-            timeout: 90000,
+            waitUntil: 'domcontentloaded', // Mais rápido que networkidle0
+            timeout: 30000, // Reduzido de 90s para 30s
           });
 
-          // Garantir hydration/render
-          await this.randomDelay(2000, 3000);
+          // Aguardar apenas o essencial
+          await this.randomDelay(500, 1000); // Reduzido de 2-3s para 0.5-1s
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
           // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
           const selectorUnion = 'a[href*="/lote/"], .lote-card, .vehicle-card, [data-testid*="vehicle"], a[href*="/leilao/"]';
           await this.page.waitForSelector(selectorUnion, {
-            timeout: 30000,
+            timeout: 10000, // Reduzido de 30s para 10s
           }).catch(() => {
             console.log(`[${this.auctioneerName}] Timeout ao aguardar cards na página ${currentPage}`);
           });
@@ -134,6 +134,12 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
 
+          // Saída antecipada: se não há leilões futuros nesta página, provavelmente não há mais
+          if (futureAuctionsCount === 0 && currentPage > 5) {
+            console.log(`[${this.auctioneerName}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando scraping`);
+            break;
+          }
+
           // Verificar se página está se repetindo
           if (duplicatesInPage >= pageVehicles.length * 0.9) {
             duplicatePageCount++;
@@ -147,8 +153,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
             duplicatePageCount = 0;
           }
 
-          // Delay entre páginas
-          await this.randomDelay(1500, 2500);
+          // Delay entre páginas (reduzido para otimizar performance)
+          await this.randomDelay(500, 1000);
 
         } catch (pageError) {
           console.error(`[${this.auctioneerName}] Erro na página ${currentPage}:`, pageError);
@@ -208,13 +214,13 @@ export class SodreSantoroRealScraper extends BaseScraper {
         window.scrollTo(0, document.body.scrollHeight);
       });
       
-      await this.randomDelay(2000, 3000);
+      await this.randomDelay(500, 1000); // Reduzido de 2-3s para 0.5-1s
       
       await this.page.evaluate(() => {
         window.scrollTo(0, 0);
       });
       
-      await this.randomDelay(1000, 1500);
+      await this.randomDelay(300, 500); // Reduzido de 1-1.5s para 0.3-0.5s
       
       await this.page.evaluate(() => {
         const images = document.querySelectorAll('img[data-src], img[loading="lazy"]');
