@@ -67,9 +67,35 @@ jobs:
           echo "✅ URL: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
           echo "✅ Secrets configurados corretamente"
 
-      - name: Testar endpoint básico
+      - name: Testar conectividade básica
         run: |
-          echo "=== Testando endpoint básico ==="
+          echo "=== Testando ping básico ==="
+          
+          response=$(curl -L --connect-timeout 30 --max-time 30 -s -w "\n%{http_code}" -X GET \
+            "${{ secrets.VERCEL_URL }}/api/cron/ping" 2>&1)
+          
+          echo "Response completo: $response"
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Status HTTP: $http_code"
+          echo "Resposta: $body"
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Ping básico falhou!"
+            echo "Status HTTP: $http_code"
+            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/ping"
+            echo "Resposta completa:"
+            echo "$body"
+            exit 1
+          fi
+          
+          echo "✅ Ping básico funcionando!"
+
+      - name: Testar endpoint com autenticação
+        run: |
+          echo "=== Testando endpoint com autenticação ==="
           
           response=$(curl -L --connect-timeout 30 --max-time 60 -s -w "\n%{http_code}" -X POST \
             "${{ secrets.VERCEL_URL }}/api/cron/test" \
