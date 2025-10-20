@@ -68,7 +68,7 @@ async function handleCronRequest(request: NextRequest) {
         scraped: r.vehiclesScraped,
         created: r.vehiclesCreated,
         updated: r.vehiclesUpdated,
-        errors: r.errors.length,
+        errors: r.errors,
         executionTimeMs: r.executionTimeMs,
       })),
     };

@@ -103,7 +103,8 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
 
     // 2. Executar scraping
     console.log(`[${auctioneerName}] Executando scraper...`);
-    const vehicles = await scraper.scrapeVehicles();
+    // Executa o fluxo completo do scraper (inicializa navegador, coleta e fecha)
+    const vehicles = await scraper.run();
     console.log(`[${auctioneerName}] Scraping concluído. ${vehicles.length} veículos encontrados.`);
     result.vehiclesScraped = vehicles.length;
 
