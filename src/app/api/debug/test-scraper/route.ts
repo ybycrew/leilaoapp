@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     console.log('=== TESTE DIRETO DO SCRAPER ===');
     
     const scraper = new SodreSantoroRealScraper();
-    console.log(`Scraper criado: ${scraper.auctioneerName}`);
+    console.log(`Scraper criado: Sodré Santoro Real`);
     
     // Inicializar o scraper
     await scraper.init();
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      scraperName: scraper.auctioneerName,
+      scraperName: 'Sodré Santoro Real',
       vehiclesCollected: vehicles.length,
       durationSeconds: duration,
       sampleVehicles: vehicles.slice(0, 3).map(v => ({

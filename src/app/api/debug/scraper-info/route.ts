@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      scraperName: scraper.auctioneerName,
+      scraperName: 'Sodré Santoro Real',
       timestamp: new Date().toISOString(),
       version: '1.0.0',
       features: [
