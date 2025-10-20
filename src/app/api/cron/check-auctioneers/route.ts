@@ -4,10 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 /**
  * Endpoint para verificar se os leiloeiros existem no banco
  */
-export async function POST(request: NextRequest) {
+async function handler(request: NextRequest) {
   try {
     // Verificar autorização
     const authHeader = request.headers.get('authorization');
+    const querySecret = request.nextUrl.searchParams.get('secret');
     const cronSecret = process.env.CRON_SECRET;
 
     if (!cronSecret) {
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isAuthorized = authHeader === `Bearer ${cronSecret}`;
+    const isAuthorized = authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret;
     
     if (!isAuthorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -34,7 +35,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    let supabase;
+    try {
+      supabase = createClient(supabaseUrl, supabaseServiceKey);
+    } catch (clientErr: any) {
+      console.error('Erro ao inicializar cliente Supabase:', clientErr);
+      return NextResponse.json(
+        { error: 'Falha ao inicializar Supabase', details: clientErr?.message || String(clientErr) },
+        { status: 500 }
+      );
+    }
 
     // Buscar todos os leiloeiros
     const { data: auctioneers, error } = await supabase
@@ -57,6 +67,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
+    console.error('Erro inesperado em check-auctioneers:', error);
     return NextResponse.json(
       {
         error: 'Erro interno',
@@ -67,3 +78,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = handler;
+export const GET = handler;
