@@ -23,7 +23,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
-    const maxPages = 50;
+    const maxPages = 10; // Reduzido drasticamente de 50 para 10
     let duplicatePageCount = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Zerar horário para comparar apenas datas
@@ -48,7 +48,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
           });
 
           // Aguardar apenas o essencial
-          await this.randomDelay(500, 1000); // Reduzido de 2-3s para 0.5-1s
+          await this.randomDelay(200, 500); // Reduzido ainda mais para 0.2-0.5s
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
           // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
@@ -134,9 +134,15 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
 
-          // Saída antecipada: se não há leilões futuros nesta página, provavelmente não há mais
-          if (futureAuctionsCount === 0 && currentPage > 5) {
+          // Saída antecipada mais agressiva: se não há leilões futuros, para imediatamente
+          if (futureAuctionsCount === 0 && currentPage > 3) {
             console.log(`[${this.auctioneerName}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando scraping`);
+            break;
+          }
+
+          // Saída por tempo: se já coletamos muitos veículos, para
+          if (vehicles.length >= 200) {
+            console.log(`[${this.auctioneerName}] Limite de 200 veículos atingido, finalizando scraping`);
             break;
           }
 
@@ -153,8 +159,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
             duplicatePageCount = 0;
           }
 
-          // Delay entre páginas (reduzido para otimizar performance)
-          await this.randomDelay(500, 1000);
+          // Delay entre páginas (mínimo para otimizar performance)
+          await this.randomDelay(200, 400);
 
         } catch (pageError) {
           console.error(`[${this.auctioneerName}] Erro na página ${currentPage}:`, pageError);

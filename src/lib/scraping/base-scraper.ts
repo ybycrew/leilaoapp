@@ -54,10 +54,29 @@ export abstract class BaseScraper {
       // Configuração otimizada para Vercel (serverless)
       console.log(`[${this.auctioneerName}] Usando configuração otimizada para Vercel...`);
       launchOptions = {
-        args: chromium.args,
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-images', // Não carregar imagens para economizar tempo
+          '--disable-javascript', // Desabilitar JS desnecessário
+        ],
         executablePath: await chromium.executablePath(),
         headless: true,
         ignoreHTTPSErrors: true,
+        timeout: 30000, // Timeout reduzido
       };
     } else {
       // Configuração para desenvolvimento local
