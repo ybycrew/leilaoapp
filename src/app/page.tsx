@@ -3,10 +3,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Car, TrendingDown, Shield, Zap } from "lucide-react";
 import Link from "next/link";
 import { ProtectedSearchAutocomplete } from "@/components/ProtectedSearchAutocomplete";
+import { HomepageAuthHandler } from "@/components/HomepageAuthHandler";
 
 export default function Home() {
   return (
     <div className="min-h-screen">
+      <HomepageAuthHandler />
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
