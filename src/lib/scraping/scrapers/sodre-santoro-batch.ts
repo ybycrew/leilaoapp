@@ -352,9 +352,10 @@ export class SodreSantoroBatchScraper extends BaseScraper {
       await this.page.evaluate(() => {
         const images = document.querySelectorAll('img[data-src], img[loading="lazy"]');
         images.forEach(img => {
-          const dataSrc = img.getAttribute('data-src');
+          const htmlImg = img as HTMLImageElement;
+          const dataSrc = htmlImg.getAttribute('data-src');
           if (dataSrc) {
-            img.src = dataSrc;
+            htmlImg.src = dataSrc;
           }
         });
       });
