@@ -1,4 +1,5 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
+import { extractBrandAndModel } from '../brands';
 
 /**
  * Scraper em LOTES para o leiloeiro Sodré Santoro
@@ -264,8 +265,8 @@ export class SodreSantoroBatchScraper extends BaseScraper {
     auctionDate?: Date
   ): Promise<VehicleData | null> {
     try {
-      const brand = this.normalizeBrand(rawVehicle.brand);
-      const model = rawVehicle.model || 'Desconhecido';
+      // Usar a nova função híbrida para extrair marca e modelo
+      const { brand, model } = extractBrandAndModel(rawVehicle.title);
       const yearModel = this.extractYear(rawVehicle.title) || this.extractYear(rawVehicle.infoTexts.join(' '));
       const currentBid = this.extractCurrentBid(rawVehicle.infoTexts);
       const mileage = this.extractMileage(rawVehicle.infoTexts);
@@ -295,10 +296,6 @@ export class SodreSantoroBatchScraper extends BaseScraper {
   }
 
   // Métodos auxiliares
-  private normalizeBrand(brand: string): string {
-    if (!brand) return '';
-    return brand.trim().toLowerCase();
-  }
 
   private extractYear(text: string): number | null {
     const match = text.match(/(\d{4})/);

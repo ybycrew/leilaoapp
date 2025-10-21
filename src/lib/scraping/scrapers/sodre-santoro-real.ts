@@ -1,4 +1,5 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
+import { extractBrandAndModel } from '../brands';
 
 /**
  * Scraper REAL para o leiloeiro Sodré Santoro
@@ -375,8 +376,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
    */
   private async processVehicleData(rawVehicle: any, detailUrl: string, externalId: string, auctionDate?: Date): Promise<VehicleData | null> {
     try {
-      // Extrair marca e modelo
-      const { brand, model } = this.parseTitleForBrandModel(rawVehicle.title);
+      // Usar a nova função híbrida para extrair marca e modelo
+      const { brand, model } = extractBrandAndModel(rawVehicle.title);
       
       // Parse do preço
       const currentBid = this.parsePrice(rawVehicle.price);
