@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get('code');
   const origin = requestUrl.origin;
 
-  console.log('🔄 [CALLBACK REDIRECT] Redirecionando de /callback para /api/auth/callback:', {
+  console.log('🔄 [CALLBACK REDIRECT] Redirecionando de /api/callback para /api/auth/callback:', {
     url: request.url,
     code: code ? `${code.substring(0, 8)}...` : 'null',
     origin

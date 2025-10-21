@@ -36,9 +36,9 @@ function HomepageAuthHandlerInner() {
           console.error('❌ [HOMEPAGE AUTH] Erro ao processar via API:', error);
         }
 
-        // Fallback: redirecionar para /callback
-        console.log('🔄 [HOMEPAGE AUTH] Fallback: redirecionando para /callback');
-        const callbackUrl = new URL('/callback', window.location.origin);
+        // Fallback: redirecionar para /api/callback
+        console.log('🔄 [HOMEPAGE AUTH] Fallback: redirecionando para /api/callback');
+        const callbackUrl = new URL('/api/callback', window.location.origin);
         callbackUrl.searchParams.set('code', code);
         
         // Preservar outros parâmetros se houver
