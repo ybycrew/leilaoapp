@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Car, TrendingDown, Shield, Zap } from "lucide-react";
 import Link from "next/link";
-import { SearchAutocomplete } from "@/components/SearchAutocomplete";
+import { ProtectedSearchAutocomplete } from "@/components/ProtectedSearchAutocomplete";
 
 export default function Home() {
   return (
@@ -19,7 +19,7 @@ export default function Home() {
             <Link href="/planos" className="text-sm hover:text-primary">Planos</Link>
             <Link href="/entrar" className="text-sm hover:text-primary">Entrar</Link>
             <Button asChild>
-              <Link href="/registrar">Começar Grátis</Link>
+              <Link href="/planos">Começar Grátis</Link>
             </Button>
           </nav>
         </div>
@@ -36,10 +36,10 @@ export default function Home() {
               Todos os leilões em um só lugar. Compare preços com a tabela FIPE e identifique as melhores oportunidades automaticamente.
             </p>
             <div className="flex justify-center">
-              <SearchAutocomplete />
+              <ProtectedSearchAutocomplete />
             </div>
             <p className="text-sm text-muted-foreground mt-4">
-              🎁 Primeiras 5 buscas grátis. Sem cartão de crédito.
+              🎁 Primeiras 5 buscas grátis. <Link href="/entrar" className="text-primary hover:underline">Faça login</Link> para começar.
             </p>
           </div>
         </div>

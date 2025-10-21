@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Search, MapPin, Calendar, Fuel, Gauge, TrendingDown } from "lucide-react";
 import Image from 'next/image';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -22,6 +24,15 @@ interface SearchPageProps {
 }
 
 export default async function BuscarPage({ searchParams }: SearchPageProps) {
+  // Verificar se o usuário está logado
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  // Se não está logado, redirecionar para planos
+  if (!user) {
+    redirect('/planos');
+  }
+  
   // Await searchParams (Next.js 15)
   const params = await searchParams;
   
