@@ -13,7 +13,7 @@ export async function signInWithGoogle() {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.ybybid.com.br'}/auth/callback`,
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -62,7 +62,7 @@ export async function signUpWithEmail(email: string, password: string, fullName:
       data: {
         full_name: fullName,
       },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'https://www.ybybid.com.br'}/auth/callback`,
     },
   });
 
