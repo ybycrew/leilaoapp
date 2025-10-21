@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 
-export function AuthCallbackHandler() {
+function AuthCallbackHandlerInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -38,4 +38,12 @@ export function AuthCallbackHandler() {
 
   // Não renderiza nada, apenas processa o callback
   return null;
+}
+
+export function AuthCallbackHandler() {
+  return (
+    <Suspense fallback={null}>
+      <AuthCallbackHandlerInner />
+    </Suspense>
+  );
 }
