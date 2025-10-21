@@ -66,7 +66,9 @@ async function main() {
     
   } catch (error) {
     console.error('❌ Erro durante o scraping:', error);
-    console.error('Stack trace:', error.stack);
+    if (error instanceof Error) {
+      console.error('Stack trace:', error.stack);
+    }
     process.exit(1);
   }
 }
