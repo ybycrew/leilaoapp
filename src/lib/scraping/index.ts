@@ -43,7 +43,7 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
         // Lista de scrapers disponíveis
         // Usando scraper real para o site Sodré Santoro com filtro de datas futuras
         const scrapers = [
-          new SodreSantoroBatchScraper(),
+          new SodreSantoroRealScraper(),
           // Adicione mais scrapers aqui:
           // new SuperbidScraper(),
           // new LeiloesVIPScraper(),

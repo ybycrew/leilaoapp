@@ -23,7 +23,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
-    const maxPages = 10; // Reduzido drasticamente de 50 para 10
+    const maxPages = 100; // Aumentado para usar recursos do GitHub Actions
     let duplicatePageCount = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Zerar horário para comparar apenas datas
@@ -47,8 +47,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
             timeout: 30000, // Reduzido de 90s para 30s
           });
 
-          // Aguardar apenas o essencial
-          await this.randomDelay(200, 500); // Reduzido ainda mais para 0.2-0.5s
+          // Aguardar apenas o essencial (GitHub Actions tem recursos ilimitados)
+          await this.randomDelay(100, 300); // Mínimo para GitHub Actions
 
           // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
           // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
@@ -134,15 +134,9 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
 
-          // Saída antecipada mais agressiva: se não há leilões futuros, para imediatamente
-          if (futureAuctionsCount === 0 && currentPage > 3) {
+          // Saída antecipada: se não há leilões futuros, para após algumas páginas
+          if (futureAuctionsCount === 0 && currentPage > 10) {
             console.log(`[${this.auctioneerName}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando scraping`);
-            break;
-          }
-
-          // Saída por tempo: se já coletamos muitos veículos, para
-          if (vehicles.length >= 200) {
-            console.log(`[${this.auctioneerName}] Limite de 200 veículos atingido, finalizando scraping`);
             break;
           }
 
@@ -159,8 +153,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
             duplicatePageCount = 0;
           }
 
-          // Delay entre páginas (mínimo para otimizar performance)
-          await this.randomDelay(200, 400);
+          // Delay entre páginas (mínimo para GitHub Actions)
+          await this.randomDelay(100, 200);
 
         } catch (pageError) {
           console.error(`[${this.auctioneerName}] Erro na página ${currentPage}:`, pageError);
@@ -220,13 +214,13 @@ export class SodreSantoroRealScraper extends BaseScraper {
         window.scrollTo(0, document.body.scrollHeight);
       });
       
-      await this.randomDelay(500, 1000); // Reduzido de 2-3s para 0.5-1s
+      await this.randomDelay(200, 400); // Mínimo para GitHub Actions
       
       await this.page.evaluate(() => {
         window.scrollTo(0, 0);
       });
       
-      await this.randomDelay(300, 500); // Reduzido de 1-1.5s para 0.3-0.5s
+      await this.randomDelay(100, 200); // Mínimo para GitHub Actions
       
       await this.page.evaluate(() => {
         const images = document.querySelectorAll('img[data-src], img[loading="lazy"]');
