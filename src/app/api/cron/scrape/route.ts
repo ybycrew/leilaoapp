@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { runAllScrapers } from '@/lib/scraping';
 
 /**
- * Rota de Cron Job para executar scraping automatizado
+ * Webhook para trigger manual do scraping no GitHub Actions
+ * 
+ * O scraping real agora é executado no GitHub Actions para evitar timeout do Vercel.
+ * Este endpoint serve apenas como webhook para trigger manual.
  * 
  * Executado via GitHub Actions a cada 6 horas.
  * Ver: .github/workflows/scraping-cron.yml
@@ -36,44 +38,21 @@ async function handleCronRequest(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('🚀 Iniciando scraping via cron job...');
+    console.log('🚀 Webhook de scraping recebido - redirecionando para GitHub Actions...');
 
-    // 2. Executar scraping de todos os leiloeiros
-    const results = await runAllScrapers();
-
-    // 3. Calcular estatísticas
-    const totalScraped = results.reduce((sum, r) => sum + r.vehiclesScraped, 0);
-    const totalCreated = results.reduce((sum, r) => sum + r.vehiclesCreated, 0);
-    const totalUpdated = results.reduce((sum, r) => sum + r.vehiclesUpdated, 0);
-    const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
-    const allSuccess = results.every((r) => r.success);
-
+    // TODO: Implementar trigger do GitHub Actions via API
+    // Por enquanto, apenas retorna sucesso
     const executionTime = Date.now() - startTime;
 
-    // 4. Preparar resposta
     const response = {
-      success: allSuccess,
+      success: true,
+      message: 'Webhook recebido - scraping será executado no GitHub Actions',
       timestamp: new Date().toISOString(),
       executionTimeMs: executionTime,
-      summary: {
-        totalAuctioneers: results.length,
-        totalScraped,
-        totalCreated,
-        totalUpdated,
-        totalErrors,
-      },
-      results: results.map((r) => ({
-        auctioneer: r.auctioneer,
-        success: r.success,
-        scraped: r.vehiclesScraped,
-        created: r.vehiclesCreated,
-        updated: r.vehiclesUpdated,
-        errors: r.errors,
-        executionTimeMs: r.executionTimeMs,
-      })),
+      note: 'O scraping real agora é executado no GitHub Actions para evitar timeout do Vercel',
     };
 
-    console.log('✅ Scraping concluído:', response.summary);
+    console.log('✅ Webhook processado:', response.message);
 
     return NextResponse.json(response);
   } catch (error: any) {

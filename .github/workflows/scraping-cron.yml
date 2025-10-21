@@ -91,35 +91,22 @@ jobs:
             echo "✅ Status check funcionando!"
           fi
 
-      - name: Executar scraping de veículos
+      - name: Executar scraping diretamente no GitHub Actions
         env:
           CHROME_PATH: /usr/bin/google-chrome-stable
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          echo "=== Executando scraping ==="
+          echo "=== Executando scraping DIRETAMENTE no GitHub Actions ==="
+          echo "✅ Sem timeout do Vercel!"
+          echo "✅ Recursos ilimitados do GitHub!"
+          echo "✅ Acesso direto ao Supabase!"
           
-          response=$(curl -L --connect-timeout 60 --max-time 1200 --retry 2 --retry-delay 5 --retry-connrefused -s -w "\n%{http_code}" -X POST \
-            "${{ secrets.VERCEL_URL }}/api/cron/scrape" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" 2>&1)
+          # Executar o scraping diretamente
+          npm run scrape:github
           
-          echo "Response completo: $response"
-          
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
-          
-          echo "Status HTTP: $http_code"
-          echo "Resposta: $body"
-          
-          if [ "$http_code" -ne 200 ]; then
-            echo "❌ Erro ao executar scraping!"
-            echo "Status HTTP: $http_code"
-            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
-            echo "Resposta completa:"
-            echo "$body"
-            exit 1
-          fi
-          
-          echo "✅ Scraping executado com sucesso!"
+          echo "✅ Scraping executado com sucesso no GitHub Actions!"
 
       - name: Notificar falha
         if: failure()
