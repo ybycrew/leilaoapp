@@ -46,13 +46,16 @@ export abstract class BaseScraper {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
     const isVercel = process.env.VERCEL === '1';
-    console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : 'Desenvolvimento local'}`);
+    const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
+    const isCI = isVercel || isGitHubActions;
+    
+    console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : isGitHubActions ? 'GitHub Actions' : 'Desenvolvimento local'}`);
     
     let launchOptions: any;
     
-    if (isVercel) {
-      // Configuração otimizada para Vercel (serverless)
-      console.log(`[${this.auctioneerName}] Usando configuração otimizada para Vercel...`);
+    if (isCI) {
+      // Configuração otimizada para CI (Vercel/GitHub Actions)
+      console.log(`[${this.auctioneerName}] Usando configuração otimizada para CI...`);
       launchOptions = {
         args: [
           ...chromium.args,

@@ -32,9 +32,11 @@ jobs:
           sudo apt-get install -y wget gnupg ca-certificates
           
           # Install Chrome via Puppeteer
+          echo "=== Installing Chrome via Puppeteer ==="
           npx puppeteer browsers install chrome
           
           # Also install system Chrome as backup
+          echo "=== Installing system Chrome ==="
           wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
           echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
@@ -47,6 +49,11 @@ jobs:
           which google-chrome-stable || echo "System Chrome not found"
           echo "=== Chrome version ==="
           google-chrome-stable --version || echo "Cannot get Chrome version"
+          
+          # Set environment variables for Chrome
+          echo "CHROME_PATH=/usr/bin/google-chrome-stable" >> $GITHUB_ENV
+          echo "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true" >> $GITHUB_ENV
+          echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> $GITHUB_ENV
       
       - name: Validar configuração
         run: |
@@ -125,6 +132,7 @@ jobs:
       - name: Executar scraping diretamente no GitHub Actions
         env:
           CHROME_PATH: /usr/bin/google-chrome-stable
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome-stable
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
