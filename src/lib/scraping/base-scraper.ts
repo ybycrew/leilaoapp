@@ -47,40 +47,67 @@ export abstract class BaseScraper {
     
     const isVercel = process.env.VERCEL === '1';
     const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
-    const isCI = isVercel || isGitHubActions;
+    const isVPS = process.env.NODE_ENV === 'production' && !isVercel && !isGitHubActions;
+    const isCI = isVercel || isGitHubActions || isVPS;
     
-    console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : isGitHubActions ? 'GitHub Actions' : 'Desenvolvimento local'}`);
+    console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : isGitHubActions ? 'GitHub Actions' : isVPS ? 'VPS (produção)' : 'Desenvolvimento local'}`);
     
     let launchOptions: any;
     
     if (isCI) {
-      // Configuração otimizada para CI (Vercel/GitHub Actions)
-      console.log(`[${this.auctioneerName}] Usando configuração otimizada para CI...`);
-      launchOptions = {
-        args: [
-          ...chromium.args,
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-features=TranslateUI',
-          '--disable-ipc-flooding-protection',
-          '--disable-extensions',
-          '--disable-plugins',
-          '--disable-images', // Não carregar imagens para economizar tempo
-          '--disable-javascript', // Desabilitar JS desnecessário
-        ],
-        executablePath: await chromium.executablePath(),
-        headless: true,
-        ignoreHTTPSErrors: true,
-        timeout: 30000, // Timeout reduzido
-      };
+      if (isVPS) {
+        // Configuração para VPS (usar Chrome instalado)
+        console.log(`[${this.auctioneerName}] Usando configuração para VPS...`);
+        launchOptions = {
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--disable-gpu',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-extensions',
+            '--disable-plugins',
+          ],
+          executablePath: process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+          headless: 'new',
+          ignoreHTTPSErrors: true,
+          timeout: 30000,
+        };
+      } else {
+        // Configuração otimizada para CI (Vercel/GitHub Actions)
+        console.log(`[${this.auctioneerName}] Usando configuração otimizada para CI...`);
+        launchOptions = {
+          args: [
+            ...chromium.args,
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-images', // Não carregar imagens para economizar tempo
+            '--disable-javascript', // Desabilitar JS desnecessário
+          ],
+          executablePath: await chromium.executablePath(),
+          headless: true,
+          ignoreHTTPSErrors: true,
+          timeout: 30000, // Timeout reduzido
+        };
+      }
     } else {
       // Configuração para desenvolvimento local
       console.log(`[${this.auctioneerName}] Usando configuração para desenvolvimento local...`);
