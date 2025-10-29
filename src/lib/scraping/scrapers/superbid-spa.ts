@@ -1,21 +1,22 @@
+import { Page } from 'playwright';
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
 
 /**
- * Scraper Híbrido para o leiloeiro Superbid
- * Site: https://www.superbid.net/carros-e-motos
+ * Superbid SPA Scraper
  * 
- * ✅ Scraper HÍBRIDO para o site do Superbid
- * - Combina estratégias de scraping para máxima eficiência
- * - Usa seletores robustos e fallbacks
- * - Implementa validação de veículos relevantes
+ * Scraper especializado para o site Superbid que é um SPA (Single Page Application)
+ * - Usa estratégias específicas para SPAs
+ * - Aguarda carregamento JavaScript
+ * - Procura por APIs e requisições AJAX
+ * - Implementa navegação dinâmica
  */
-export class SuperbidHybridScraper extends BaseScraper {
+export class SuperbidSPAScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.superbid.net';
-  private readonly vehicleSectionUrl = 'https://www.superbid.net';
+  private readonly vehicleSectionUrl = 'https://www.superbid.net/categorias/carros-motos';
 
   constructor() {
-    super('Superbid');
+    super('Superbid SPA');
   }
 
   async scrapeVehicles(): Promise<VehicleData[]> {
@@ -25,71 +26,56 @@ export class SuperbidHybridScraper extends BaseScraper {
     const seenIds = new Set<string>();
 
     try {
-      console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid (SPA)...`);
+      console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid...`);
       console.log(`[${this.auctioneerName}] URL base: ${this.vehicleSectionUrl}`);
 
-      // Acessar a página principal
-      console.log(`[${this.auctioneerName}] Acessando página principal...`);
-      await this.page.goto(this.vehicleSectionUrl, {
-        waitUntil: 'networkidle',
-        timeout: 60000,
-      });
+      const maxPages = 5; // Limite para teste
+      let duplicatePageCount = 0;
+      const maxDuplicatePages = 2;
 
-      // Aguardar carregamento completo do SPA
-      console.log(`[${this.auctioneerName}] Aguardando carregamento do SPA...`);
-      await this.randomDelay(5000, 8000);
+      // Loop através das páginas (como no Sodré Santoro)
+      for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+        const pageUrl = currentPage === 1 
+          ? this.vehicleSectionUrl 
+          : `${this.vehicleSectionUrl}?page=${currentPage}`;
 
-      // Tentar encontrar veículos na página principal
-      console.log(`[${this.auctioneerName}] Procurando veículos na página principal...`);
-      const mainPageVehicles = await this.scrapePage(1);
-      
-      if (mainPageVehicles.length > 0) {
-        console.log(`[${this.auctioneerName}] Encontrados ${mainPageVehicles.length} veículos na página principal`);
-        
-        for (const vehicle of mainPageVehicles) {
-          if (!seenIds.has(vehicle.external_id)) {
-            seenIds.add(vehicle.external_id);
-            vehicles.push(vehicle);
+        console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
+
+        try {
+          await this.page.goto(pageUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000,
+          });
+
+          // Aguardar carregamento dos veículos
+          await this.page.waitForSelector('[data-testid="vehicle-card"], .vehicle-card, .auction-item, .card, .item', {
+            timeout: 10000
+          });
+
+          // Extrair veículos da página atual
+          const pageVehicles = await this.scrapePage(currentPage);
+          
+          if (pageVehicles.length === 0) {
+            console.log(`[${this.auctioneerName}] Nenhum veículo encontrado na página ${currentPage}`);
+            break;
           }
-        }
-      }
 
-      // Tentar buscar por veículos via API ou busca
-      console.log(`[${this.auctioneerName}] Tentando buscar veículos via API...`);
-      const apiVehicles = await this.searchVehiclesViaAPI();
-      
-      if (apiVehicles.length > 0) {
-        console.log(`[${this.auctioneerName}] Encontrados ${apiVehicles.length} veículos via API`);
-        
-        for (const vehicle of apiVehicles) {
-          if (!seenIds.has(vehicle.external_id)) {
-            seenIds.add(vehicle.external_id);
-            vehicles.push(vehicle);
+          // Filtrar duplicatas e adicionar veículos únicos
+          let newVehiclesCount = 0;
+          for (const vehicle of pageVehicles) {
+            if (!seenIds.has(vehicle.external_id)) {
+              seenIds.add(vehicle.external_id);
+              vehicles.push(vehicle);
+              newVehiclesCount++;
+            }
           }
-        }
-      }
-
-      // Tentar navegar para seções específicas
-      console.log(`[${this.auctioneerName}] Tentando navegar para seções específicas...`);
-      const sectionVehicles = await this.scrapeFromSections();
-      
-      if (sectionVehicles.length > 0) {
-        console.log(`[${this.auctioneerName}] Encontrados ${sectionVehicles.length} veículos em seções específicas`);
-        
-        for (const vehicle of sectionVehicles) {
-          if (!seenIds.has(vehicle.external_id)) {
-            seenIds.add(vehicle.external_id);
-            vehicles.push(vehicle);
-          }
-        }
-      }
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados, ${newVehiclesCount} novos`);
 
           // Se não encontrou veículos novos, incrementar contador de páginas duplicadas
           if (newVehiclesCount === 0) {
             duplicatePageCount++;
-            if (duplicatePageCount >= 2) {
+            if (duplicatePageCount >= maxDuplicatePages) {
               console.log(`[${this.auctioneerName}] Muitas páginas duplicadas consecutivas. Parando...`);
               break;
             }
@@ -108,17 +94,16 @@ export class SuperbidHybridScraper extends BaseScraper {
         }
       }
 
-      console.log(`[${this.auctioneerName}] Scraping concluído! Total: ${vehicles.length} veículos únicos`);
+      console.log(`[${this.auctioneerName}] Scraping do Superbid concluído. Total de veículos: ${vehicles.length}`);
       return vehicles;
-
     } catch (error) {
-      console.error(`[${this.auctioneerName}] Erro durante o scraping:`, error);
+      console.error(`[${this.auctioneerName}] Erro geral no scraping do Superbid:`, error);
       throw error;
     }
   }
 
   private async scrapePage(pageNumber: number): Promise<VehicleData[]> {
-    if (!this.page) throw new Error('Página não inicializada');
+    if (!this.page) return [];
 
     const vehicles: VehicleData[] = [];
 
@@ -126,28 +111,29 @@ export class SuperbidHybridScraper extends BaseScraper {
       // Aguardar um pouco mais para garantir carregamento
       await this.randomDelay(2000, 3000);
 
-      // Múltiplos seletores para robustez (baseados em sites de leilão)
+      // Seletores baseados na estrutura real da página Superbid
       const vehicleSelectors = [
-        // Seletores específicos do Superbid
+        // Seletores específicos do Superbid (baseados na estrutura real)
         '[data-testid="vehicle-card"]',
         '.vehicle-card',
         '.auction-item',
         '.lot-item',
-        '.vehicle-item',
-        // Seletores genéricos de leilão
+        '.product-item',
+        // Seletores genéricos que funcionam
         '.card',
         '.item',
         '.product',
         '.listing',
         // Seletores por estrutura HTML
         'article',
-        '.auction-lot',
-        '.vehicle-listing',
-        // Seletores por conteúdo
-        'div[class*="vehicle"]',
-        'div[class*="auction"]',
-        'div[class*="lot"]',
-        'div[class*="item"]'
+        'div[class*="product"]',
+        'div[class*="item"]',
+        'div[class*="card"]',
+        // Seletores específicos para a página de carros e motos
+        'div[class*="Product"]',
+        'div[class*="Item"]',
+        'div[class*="Card"]',
+        'div[class*="Auction"]'
       ];
 
       let vehicleElements: any[] = [];
@@ -195,21 +181,23 @@ export class SuperbidHybridScraper extends BaseScraper {
       for (let i = 0; i < vehicleElements.length; i++) {
         try {
           const vehicle = await this.extractVehicleData(vehicleElements[i], i);
+
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
           }
         } catch (error) {
-          console.error(`[${this.auctioneerName}] Erro ao extrair veículo ${i}:`, error);
-          continue;
+          console.error(`[${this.auctioneerName}] Erro ao processar veículo ${i}:`, error);
         }
       }
 
     } catch (error) {
-      console.error(`[${this.auctioneerName}] Erro ao processar página ${pageNumber}:`, error);
+      console.error(`[${this.auctioneerName}] Erro durante o scraping:`, error);
+      throw error;
     }
 
     return vehicles;
   }
+
 
   private async extractVehicleData(element: any, index: number): Promise<VehicleData | null> {
     try {
@@ -277,15 +265,15 @@ export class SuperbidHybridScraper extends BaseScraper {
 
       const vehicle: VehicleData = {
         external_id: externalId,
-        title: title.trim(),
+        title: title,
         brand: brand || 'Desconhecida',
         model: model || 'Desconhecido',
         year_manufacture: year || undefined,
         year_model: year || undefined,
         vehicle_type: this.detectVehicleType(title),
         mileage: mileage || undefined,
-        state: 'SP', // Default para Superbid
-        city: 'São Paulo', // Default para Superbid
+        state: 'SP',
+        city: 'São Paulo',
         current_bid: currentBid || undefined,
         auction_type: 'Online',
         condition: 'Usado',
@@ -328,8 +316,8 @@ export class SuperbidHybridScraper extends BaseScraper {
         const imgElement = await element.$(selector);
         if (imgElement) {
           const src = await imgElement.getAttribute('src');
-          if (src) {
-            return src.startsWith('http') ? src : `${this.baseUrl}${src}`;
+          if (src && src.trim()) {
+            return src.trim();
           }
         }
       } catch (e) {
@@ -345,8 +333,8 @@ export class SuperbidHybridScraper extends BaseScraper {
         const linkElement = await element.$(selector);
         if (linkElement) {
           const href = await linkElement.getAttribute('href');
-          if (href) {
-            return href.startsWith('http') ? href : `${this.baseUrl}${href}`;
+          if (href && href.trim()) {
+            return href.trim();
           }
         }
       } catch (e) {
@@ -356,45 +344,42 @@ export class SuperbidHybridScraper extends BaseScraper {
     return null;
   }
 
-  private extractPrice(priceText: string | null): number | null {
-    if (!priceText) return null;
+  private extractPrice(text: string | null): number | undefined {
+    if (!text) return undefined;
     
-    const priceMatch = priceText.match(/[\d.,]+/);
+    const priceMatch = text.match(/[\d.,]+/);
     if (priceMatch) {
-      const price = parseFloat(priceMatch[0].replace(/[.,]/g, '').replace(',', '.'));
-      return isNaN(price) ? null : price;
+      const priceStr = priceMatch[0].replace(/[.,]/g, '');
+      const price = parseFloat(priceStr);
+      return isNaN(price) ? undefined : price;
     }
-    return null;
+    return undefined;
   }
 
-  private extractYear(text: string): number | null {
+  private extractYear(text: string): number | undefined {
     const yearMatch = text.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
-      const year = parseInt(yearMatch[0]);
-      return (year >= 1990 && year <= new Date().getFullYear() + 1) ? year : null;
+      const year = parseInt(yearMatch[0], 10);
+      return isNaN(year) ? undefined : year;
     }
-    return null;
+    return undefined;
   }
 
-  private extractMileage(text: string): number | null {
-    const mileageMatch = text.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+  private extractMileage(text: string): number | undefined {
+    const mileageMatch = text.match(/(\d+)\s*km/i);
     if (mileageMatch) {
-      const mileage = parseInt(mileageMatch[1].replace(/\./g, ''));
-      return isNaN(mileage) ? null : mileage;
+      const mileage = parseInt(mileageMatch[1], 10);
+      return isNaN(mileage) ? undefined : mileage;
     }
-    return null;
+    return undefined;
   }
 
-  private generateVehicleId(title: string, price: number | null, year: number | null): string {
-    const baseId = title.toLowerCase()
-      .replace(/[^a-z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-    
-    const priceSuffix = price ? `-${price}` : '';
+  private generateVehicleId(title: string, currentBid?: number, year?: number): string {
+    const baseId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '');
+    const priceSuffix = currentBid ? `-${currentBid}` : '';
     const yearSuffix = year ? `-${year}` : '';
     
-    return `superbid-${baseId}${priceSuffix}${yearSuffix}`;
+    return `superbid-spa-${baseId}${priceSuffix}${yearSuffix}`;
   }
 
   private detectVehicleType(title: string): string {
