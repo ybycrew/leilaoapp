@@ -82,7 +82,7 @@ export class SuperbidHybridScraper extends BaseScraper {
 
           // Delay entre páginas
           if (currentPage < maxPages) {
-            await this.page.waitForTimeout(2000);
+            await this.randomDelay(1000, 2000);
           }
 
         } catch (pageError) {
