@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     
     const scraper = new SuperbidHybridScraper();
     
-    const vehicles = await scraper.scrapeVehicles();
+    const vehicles = await scraper.run();
     
     console.log(`✅ [TEST SUPERBID] Scraping concluído! ${vehicles.length} veículos encontrados`);
     
