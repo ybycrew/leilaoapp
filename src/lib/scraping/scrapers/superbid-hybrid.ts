@@ -60,8 +60,8 @@ export class SuperbidHybridScraper extends BaseScraper {
           // Filtrar duplicatas e adicionar veículos únicos
           let newVehiclesCount = 0;
           for (const vehicle of pageVehicles) {
-            if (!seenIds.has(vehicle.id)) {
-              seenIds.add(vehicle.id);
+            if (!seenIds.has(vehicle.external_id)) {
+              seenIds.add(vehicle.external_id);
               vehicles.push(vehicle);
               newVehiclesCount++;
             }
@@ -202,22 +202,25 @@ export class SuperbidHybridScraper extends BaseScraper {
       const { brand, model } = extractBrandAndModel(title);
 
       // Gerar ID único
-      const id = this.generateVehicleId(title, currentBid, year);
+      const externalId = this.generateVehicleId(title, currentBid, year);
 
       const vehicle: VehicleData = {
-        id,
+        external_id: externalId,
         title: title.trim(),
         brand: brand || 'Desconhecida',
         model: model || 'Desconhecido',
         year_manufacture: year,
         year_model: year,
+        vehicle_type: this.detectVehicleType(title),
         mileage: mileage,
+        state: 'SP', // Default para Superbid
+        city: 'São Paulo', // Default para Superbid
         current_bid: currentBid,
-        image_url: imageUrl,
-        auction_url: link,
-        auctioneer: this.auctioneerName,
-        scraped_at: new Date().toISOString(),
-        is_relevant: true
+        auction_type: 'Online',
+        condition: 'Usado',
+        original_url: link || '',
+        thumbnail_url: imageUrl,
+        images: imageUrl ? [imageUrl] : undefined
       };
 
       console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - R$ ${vehicle.current_bid || 'N/A'}`);
@@ -319,6 +322,22 @@ export class SuperbidHybridScraper extends BaseScraper {
     const yearSuffix = year ? `-${year}` : '';
     
     return `superbid-${baseId}${priceSuffix}${yearSuffix}`;
+  }
+
+  private detectVehicleType(title: string): string {
+    const titleLower = title.toLowerCase();
+    
+    if (titleLower.includes('moto') || titleLower.includes('motocicleta') || titleLower.includes('bike')) {
+      return 'Moto';
+    } else if (titleLower.includes('caminhão') || titleLower.includes('caminhao') || titleLower.includes('truck')) {
+      return 'Caminhão';
+    } else if (titleLower.includes('ônibus') || titleLower.includes('onibus') || titleLower.includes('bus')) {
+      return 'Ônibus';
+    } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgão')) {
+      return 'Van';
+    } else {
+      return 'Carro';
+    }
   }
 
   private isRelevantVehicle(vehicle: VehicleData): boolean {
