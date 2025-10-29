@@ -1,154 +1,31 @@
-name: Scraping Automático
+name: Scraping Automático (DESABILITADO - Usando VPS)
 
 on:
-  schedule:
-    # Executa a cada 12 horas (00:00, 12:00 UTC)
-    # UTC -3 = Horário de Brasília: 21:00, 09:00
-    # Cada execução coleta TODAS as páginas até encontrar duplicatas
-    - cron: '0 */12 * * *'
-  workflow_dispatch: # Permite execução manual via interface do GitHub
+  # DESABILITADO: Scraping agora é executado na VPS
+  # schedule:
+  #   - cron: '0 */12 * * *'
+  workflow_dispatch: # Permite execução manual via interface do GitHub (apenas para testes)
 
 jobs:
-  scrape:
+  # DESABILITADO: Scraping agora é executado na VPS
+  # VPS: Hostinger (31.97.174.90)
+  # Frequência: A cada 6 horas (00:00, 06:00, 12:00, 18:00)
+  scrape-disabled:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 1
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Install Chrome and dependencies
+      - name: ⚠️ WORKFLOW DESABILITADO
         run: |
-          # Install system dependencies
-          sudo apt-get update
-          sudo apt-get install -y wget gnupg ca-certificates
-          
-          # Install Chrome via Puppeteer
-          echo "=== Installing Chrome via Puppeteer ==="
-          npx puppeteer browsers install chrome
-          
-          # Also install system Chrome as backup
-          echo "=== Installing system Chrome ==="
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          
-          # Verify installations
-          echo "=== Puppeteer Chrome ==="
-          ls -la ~/.cache/puppeteer/chrome/ || echo "Puppeteer Chrome not found"
-          echo "=== System Chrome ==="
-          which google-chrome-stable || echo "System Chrome not found"
-          echo "=== Chrome version ==="
-          google-chrome-stable --version || echo "Cannot get Chrome version"
-          
-          # Set environment variables for Chrome
-          echo "CHROME_PATH=/usr/bin/google-chrome-stable" >> $GITHUB_ENV
-          echo "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true" >> $GITHUB_ENV
-          echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> $GITHUB_ENV
-      
-      - name: Validar configuração
-        run: |
-          echo "=== Debug Secrets ==="
-          echo "VERCEL_URL length: ${#VERCEL_URL}"
-          echo "CRON_SECRET length: ${#CRON_SECRET}"
-          
-          if [ -z "${{ secrets.VERCEL_URL }}" ]; then
-            echo "❌ VERCEL_URL não configurado!"
-            echo "Configure o secret VERCEL_URL com: https://www.ybybid.com.br"
-            exit 1
-          fi
-          
-          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
-            echo "❌ CRON_SECRET não configurado!"
-            exit 1
-          fi
-          
-          echo "✅ URL: ${{ secrets.VERCEL_URL }}/api/cron/scrape"
-          echo "✅ Secrets configurados corretamente"
-
-      - name: Testar conectividade básica
-        run: |
-          echo "=== Testando status da API ==="
-          
-          response=$(curl -L --connect-timeout 30 --max-time 30 -s -w "\n%{http_code}" -X GET \
-            "${{ secrets.VERCEL_URL }}/api/status" 2>&1)
-          
-          echo "Response completo: $response"
-          
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
-          
-          echo "Status HTTP: $http_code"
-          echo "Resposta: $body"
-          
-          if [ "$http_code" -ne 200 ]; then
-            echo "⚠️ Status check falhou, mas continuando com scraping..."
-            echo "Status HTTP: $http_code"
-            echo "URL chamada: ${{ secrets.VERCEL_URL }}/api/status"
-          else
-            echo "✅ Status check funcionando!"
-          fi
-
-      - name: Debug environment variables
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          echo "=== Debug Environment Variables ==="
-          echo "SUPABASE_URL length: ${#SUPABASE_URL}"
-          echo "SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
-          echo "SUPABASE_SERVICE_ROLE_KEY length: ${#SUPABASE_SERVICE_ROLE_KEY}"
-          echo "SUPABASE_URL starts with: ${SUPABASE_URL:0:20}..."
-          echo "SUPABASE_ANON_KEY starts with: ${SUPABASE_ANON_KEY:0:20}..."
-          echo "SUPABASE_SERVICE_ROLE_KEY starts with: ${SUPABASE_SERVICE_ROLE_KEY:0:20}..."
-          
-          if [ -z "$SUPABASE_URL" ]; then
-            echo "❌ SUPABASE_URL está vazio!"
-            exit 1
-          fi
-          
-          if [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "❌ SUPABASE_ANON_KEY está vazio!"
-            exit 1
-          fi
-          
-          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "❌ SUPABASE_SERVICE_ROLE_KEY está vazio!"
-            exit 1
-          fi
-          
-          echo "✅ Todas as variáveis de ambiente estão configuradas!"
-
-      - name: Executar scraping diretamente no GitHub Actions
-        env:
-          CHROME_PATH: /usr/bin/google-chrome-stable
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome-stable
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          echo "=== Executando scraping DIRETAMENTE no GitHub Actions ==="
-          echo "✅ Sem timeout do Vercel!"
-          echo "✅ Recursos ilimitados do GitHub!"
-          echo "✅ Acesso direto ao Supabase!"
-          
-          # Executar o scraping diretamente
-          npm run scrape:github
-          
-          echo "✅ Scraping executado com sucesso no GitHub Actions!"
-
-      - name: Notificar falha
-        if: failure()
-        run: |
-          echo "❌ Scraping falhou. Verifique os logs acima."
-
+          echo "🚫 Este workflow foi desabilitado!"
+          echo "📡 O scraping agora é executado na VPS a cada 6 horas"
+          echo "🖥️  VPS: Hostinger (31.97.174.90)"
+          echo "⏰ Frequência: A cada 6 horas (00:00, 06:00, 12:00, 18:00)"
+          echo "📊 Para executar manualmente, use: pm2 restart scraping-cron na VPS"
+          echo "✅ Status: VPS funcionando perfeitamente!"
+          echo ""
+          echo "🔧 Comandos úteis na VPS:"
+          echo "   - Ver status: pm2 status"
+          echo "   - Ver logs: pm2 logs scraping-cron"
+          echo "   - Reiniciar: pm2 restart scraping-cron"
+          echo "   - Executar manual: ./run-scraping.sh"
