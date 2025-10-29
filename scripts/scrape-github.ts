@@ -12,14 +12,15 @@ async function main() {
   console.log('====================================');
 
   try {
-    // Verificar variáveis de ambiente
-    const requiredEnvVars = [
-      'SUPABASE_URL',
-      'SUPABASE_ANON_KEY',
-      'SUPABASE_SERVICE_ROLE_KEY'
-    ];
+    // Verificar variáveis de ambiente (suporte para Vercel e GitHub Actions)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    const missingVars = [];
+    if (!supabaseUrl) missingVars.push('NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_URL');
+    if (!supabaseAnonKey) missingVars.push('NEXT_PUBLIC_SUPABASE_ANON_KEY ou SUPABASE_ANON_KEY');
+    if (!supabaseServiceKey) missingVars.push('SUPABASE_SERVICE_ROLE_KEY');
     
     if (missingVars.length > 0) {
       console.error('❌ Variáveis de ambiente obrigatórias não encontradas:');
@@ -28,9 +29,9 @@ async function main() {
     }
 
     console.log('✅ Variáveis de ambiente configuradas');
-    console.log(`   - SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅' : '❌'}`);
-    console.log(`   - SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅' : '❌'}`);
-    console.log(`   - SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅' : '❌'}`);
+    console.log(`   - SUPABASE_URL: ${supabaseUrl ? '✅' : '❌'}`);
+    console.log(`   - SUPABASE_ANON_KEY: ${supabaseAnonKey ? '✅' : '❌'}`);
+    console.log(`   - SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceKey ? '✅' : '❌'}`);
 
     // Executar o scraping
     console.log('====================================');
