@@ -5,11 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🧪 [TEST SUPERBID] Iniciando teste do scraper híbrido...');
     
-    const scraper = new SuperbidHybridScraper({
-      maxPages: 2,
-      delayBetweenPages: 2000,
-      timeout: 30000
-    });
+    const scraper = new SuperbidHybridScraper();
     
     const vehicles = await scraper.scrapeVehicles();
     
