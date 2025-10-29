@@ -7,6 +7,7 @@ import { getFipePrice } from '../fipe';
 import { calculateDealScore } from './utils';
 
 // Inicializar Supabase
+// Suporte para Vercel (NEXT_PUBLIC_*) e GitHub Actions (SUPABASE_*)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
