@@ -209,17 +209,17 @@ export class SuperbidHybridScraper extends BaseScraper {
         title: title.trim(),
         brand: brand || 'Desconhecida',
         model: model || 'Desconhecido',
-        year_manufacture: year,
-        year_model: year,
+        year_manufacture: year || undefined,
+        year_model: year || undefined,
         vehicle_type: this.detectVehicleType(title),
-        mileage: mileage,
+        mileage: mileage || undefined,
         state: 'SP', // Default para Superbid
         city: 'São Paulo', // Default para Superbid
-        current_bid: currentBid,
+        current_bid: currentBid || undefined,
         auction_type: 'Online',
         condition: 'Usado',
         original_url: link || '',
-        thumbnail_url: imageUrl,
+        thumbnail_url: imageUrl || undefined,
         images: imageUrl ? [imageUrl] : undefined
       };
 
