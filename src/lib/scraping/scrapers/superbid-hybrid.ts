@@ -106,34 +106,73 @@ export class SuperbidHybridScraper extends BaseScraper {
     const vehicles: VehicleData[] = [];
 
     try {
-      // Múltiplos seletores para robustez
+      // Aguardar um pouco mais para garantir carregamento
+      await this.randomDelay(2000, 3000);
+
+      // Múltiplos seletores para robustez (baseados em sites de leilão)
       const vehicleSelectors = [
+        // Seletores específicos do Superbid
         '[data-testid="vehicle-card"]',
         '.vehicle-card',
         '.auction-item',
         '.lot-item',
-        '.vehicle-item'
+        '.vehicle-item',
+        // Seletores genéricos de leilão
+        '.card',
+        '.item',
+        '.product',
+        '.listing',
+        // Seletores por estrutura HTML
+        'article',
+        '.auction-lot',
+        '.vehicle-listing',
+        // Seletores por conteúdo
+        'div[class*="vehicle"]',
+        'div[class*="auction"]',
+        'div[class*="lot"]',
+        'div[class*="item"]'
       ];
 
       let vehicleElements: any[] = [];
+      let usedSelector = '';
       
       // Tentar cada seletor até encontrar elementos
       for (const selector of vehicleSelectors) {
         try {
           vehicleElements = await this.page.$$(selector);
           if (vehicleElements.length > 0) {
-            console.log(`[${this.auctioneerName}] Encontrados ${vehicleElements.length} veículos com seletor: ${selector}`);
+            usedSelector = selector;
+            console.log(`[${this.auctioneerName}] Encontrados ${vehicleElements.length} elementos com seletor: ${selector}`);
             break;
           }
         } catch (e) {
+          console.log(`[${this.auctioneerName}] Seletor ${selector} falhou:`, e);
           continue;
         }
       }
 
       if (vehicleElements.length === 0) {
-        console.log(`[${this.auctioneerName}] Nenhum veículo encontrado na página ${pageNumber}`);
+        console.log(`[${this.auctioneerName}] Nenhum elemento encontrado na página ${pageNumber}`);
+        
+        // Debug: capturar HTML da página para análise
+        try {
+          const pageContent = await this.page.content();
+          console.log(`[${this.auctioneerName}] Tamanho do HTML: ${pageContent.length} caracteres`);
+          
+          // Procurar por texto que indique veículos
+          const hasVehicleText = pageContent.toLowerCase().includes('veículo') || 
+                                pageContent.toLowerCase().includes('carro') ||
+                                pageContent.toLowerCase().includes('moto') ||
+                                pageContent.toLowerCase().includes('leilão');
+          console.log(`[${this.auctioneerName}] Página contém texto de veículos: ${hasVehicleText}`);
+        } catch (debugError) {
+          console.log(`[${this.auctioneerName}] Erro no debug:`, debugError);
+        }
+        
         return vehicles;
       }
+
+      console.log(`[${this.auctioneerName}] Usando seletor: ${usedSelector} com ${vehicleElements.length} elementos`);
 
       // Processar cada veículo
       for (let i = 0; i < vehicleElements.length; i++) {
@@ -157,41 +196,56 @@ export class SuperbidHybridScraper extends BaseScraper {
 
   private async extractVehicleData(element: any, index: number): Promise<VehicleData | null> {
     try {
-      // Extrair título
+      // Extrair título com mais seletores
       const title = await this.extractText(element, [
-        'h3', 'h4', '.title', '.vehicle-title', '.lot-title',
-        '[data-testid="vehicle-title"]', '.auction-title'
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        '.title', '.vehicle-title', '.lot-title', '.auction-title',
+        '[data-testid="vehicle-title"]', '[data-testid="title"]',
+        '.name', '.product-name', '.item-name',
+        'a', 'span', 'div'
       ]);
 
-      if (!title) {
-        console.log(`[${this.auctioneerName}] Veículo ${index}: Título não encontrado`);
+      if (!title || title.length < 5) {
+        console.log(`[${this.auctioneerName}] Veículo ${index}: Título não encontrado ou muito curto (${title})`);
         return null;
       }
 
-      // Extrair preço
+      console.log(`[${this.auctioneerName}] Veículo ${index}: Processando "${title}"`);
+
+      // Extrair preço com mais seletores
       const priceText = await this.extractText(element, [
-        '.price', '.current-bid', '.bid-amount', '.value',
-        '[data-testid="price"]', '.auction-price'
+        '.price', '.current-bid', '.bid-amount', '.value', '.valor',
+        '[data-testid="price"]', '.auction-price', '.bid-price',
+        '.money', '.currency', '.cost', '.amount',
+        'span[class*="price"]', 'div[class*="price"]',
+        'span[class*="bid"]', 'div[class*="bid"]',
+        'span[class*="value"]', 'div[class*="value"]'
       ]);
 
       const currentBid = this.extractPrice(priceText);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: Preço extraído: ${priceText} -> ${currentBid}`);
 
-      // Extrair imagem
+      // Extrair imagem com mais seletores
       const imageUrl = await this.extractImageUrl(element, [
-        'img', '.vehicle-image img', '.lot-image img',
-        '[data-testid="vehicle-image"] img'
+        'img', '.vehicle-image img', '.lot-image img', '.auction-image img',
+        '[data-testid="vehicle-image"] img', '[data-testid="image"] img',
+        '.thumbnail img', '.photo img', '.picture img',
+        'img[src*="vehicle"]', 'img[src*="auction"]', 'img[src*="lot"]'
       ]);
 
-      // Extrair link
+      // Extrair link com mais seletores
       const link = await this.extractLink(element, [
-        'a', '.vehicle-link', '.lot-link',
-        '[data-testid="vehicle-link"]'
+        'a', '.vehicle-link', '.lot-link', '.auction-link',
+        '[data-testid="vehicle-link"]', '[data-testid="link"]',
+        'a[href*="vehicle"]', 'a[href*="auction"]', 'a[href*="lot"]'
       ]);
 
-      // Extrair informações adicionais
+      // Extrair informações adicionais com mais seletores
       const infoText = await this.extractText(element, [
-        '.info', '.details', '.vehicle-info', '.lot-info',
-        '[data-testid="vehicle-info"]'
+        '.info', '.details', '.vehicle-info', '.lot-info', '.auction-info',
+        '[data-testid="vehicle-info"]', '[data-testid="info"]',
+        '.description', '.summary', '.content',
+        'p', 'span', 'div[class*="info"]', 'div[class*="detail"]'
       ]);
 
       // Extrair ano e quilometragem
@@ -224,6 +278,8 @@ export class SuperbidHybridScraper extends BaseScraper {
       };
 
       console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - R$ ${vehicle.current_bid || 'N/A'}`);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: Link: ${vehicle.original_url || 'N/A'}`);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: Imagem: ${vehicle.thumbnail_url || 'N/A'}`);
       return vehicle;
 
     } catch (error) {
@@ -341,14 +397,28 @@ export class SuperbidHybridScraper extends BaseScraper {
   }
 
   private isRelevantVehicle(vehicle: VehicleData): boolean {
-    // Filtrar veículos relevantes
-    if (!vehicle.title || vehicle.title.length < 10) return false;
-    if (!vehicle.brand || vehicle.brand === 'Desconhecida') return false;
-    if (!vehicle.model || vehicle.model === 'Desconhecido') return false;
+    // Filtrar veículos relevantes (menos restritivo para debug)
+    if (!vehicle.title || vehicle.title.length < 5) {
+      console.log(`[${this.auctioneerName}] Veículo rejeitado: título muito curto (${vehicle.title})`);
+      return false;
+    }
     
-    // Filtrar por preço (opcional)
-    if (vehicle.current_bid && vehicle.current_bid < 1000) return false;
+    // Aceitar mesmo com marca/modelo desconhecidos para debug
+    if (!vehicle.brand || vehicle.brand === 'Desconhecida') {
+      console.log(`[${this.auctioneerName}] Veículo com marca desconhecida: ${vehicle.title}`);
+    }
     
+    if (!vehicle.model || vehicle.model === 'Desconhecido') {
+      console.log(`[${this.auctioneerName}] Veículo com modelo desconhecido: ${vehicle.title}`);
+    }
+    
+    // Filtrar por preço (opcional) - mais permissivo
+    if (vehicle.current_bid && vehicle.current_bid < 100) {
+      console.log(`[${this.auctioneerName}] Veículo rejeitado: preço muito baixo (${vehicle.current_bid})`);
+      return false;
+    }
+    
+    console.log(`[${this.auctioneerName}] Veículo aceito: ${vehicle.title}`);
     return true;
   }
 }
