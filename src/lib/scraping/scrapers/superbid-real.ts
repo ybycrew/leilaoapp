@@ -141,7 +141,7 @@ export class SuperbidRealScraper extends BaseScraper {
   private async extractVehicleData(titleElement: any, index: number, pageNumber: number): Promise<VehicleData | null> {
     try {
       // Extrair título
-      const title = await titleElement.textContent();
+      const title = await titleElement.evaluate((el: HTMLElement) => el.textContent ?? '');
       if (!title || title.trim().length < 5) {
         console.log(`[${this.auctioneerName}] Veículo ${index}: Título inválido (${title})`);
         return null;
