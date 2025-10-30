@@ -122,6 +122,7 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
         candidateSlugs.push('sodre-santoro-real');
       }
 
+      // Tentar por slug
       for (const slug of candidateSlugs) {
         const { data: bySlug } = await supabase
           .from('auctioneers')
@@ -132,6 +133,26 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
           auctioneer = bySlug as any;
           break;
         }
+      }
+
+      // Se ainda não existir, criar automaticamente
+      if (!auctioneer) {
+        const { data: created, error: createErr } = await supabase
+          .from('auctioneers')
+          .insert({
+            name: auctioneerName,
+            slug: normalizedFromName,
+            website_url: null,
+            last_scrape_at: null,
+            is_active: true,
+          })
+          .select('id, slug, name')
+          .single();
+
+        if (createErr) {
+          throw new Error(`Falha ao criar leiloeiro automaticamente: ${createErr.message}`);
+        }
+        auctioneer = created as any;
       }
     }
 
