@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SuperbidSPAScraper } from '@/lib/scraping/scrapers/superbid-spa';
+import { SuperbidRealScraper } from '@/lib/scraping/scrapers/superbid-real';
 
 export async function GET(request: NextRequest) {
   console.log('🧪 [TEST VPS] Iniciando teste do SuperbidHybridScraper na VPS...');
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   
   try {
     console.log('📦 [TEST VPS] Criando instância do scraper...');
-    const scraper = new SuperbidSPAScraper();
+    const scraper = new SuperbidRealScraper();
     
     console.log('✅ [TEST VPS] Scraper criado com sucesso');
     console.log('🕷️  [TEST VPS] Iniciando scraping...');
