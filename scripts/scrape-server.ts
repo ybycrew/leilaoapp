@@ -60,9 +60,22 @@ const server = http.createServer((req, res) => {
     }
     if (isRunning && currentProc) {
       appendLog(`[server] stop requested at ${new Date().toISOString()}`);
+      // Marca como não rodando para refletir no /status imediatamente
+      isRunning = false;
       try {
+        // Primeiro tenta SIGTERM
         currentProc.kill('SIGTERM');
       } catch {}
+      // Se não encerrar em 7s, força SIGKILL
+      const toKill = currentProc;
+      setTimeout(() => {
+        if (toKill && !toKill.killed) {
+          appendLog('[server] process did not exit after SIGTERM; sending SIGKILL');
+          try {
+            toKill.kill('SIGKILL');
+          } catch {}
+        }
+      }, 7000);
       res.writeHead(202, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ stopped: true }));
     } else {
