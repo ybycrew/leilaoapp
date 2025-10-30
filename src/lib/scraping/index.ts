@@ -6,6 +6,8 @@ import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { calculateDealScore } from './utils';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Inicializar Supabase
 // Suporte para Vercel (NEXT_PUBLIC_*) e GitHub Actions (SUPABASE_*)
@@ -364,5 +366,24 @@ async function saveScrapingLog(result: ScrapingResult): Promise<void> {
       errors: result.errors,
     },
   });
+}
+
+// Executa automaticamente quando chamado via CLI: `node --import tsx src/lib/scraping/index.ts`
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+const current = path.resolve(__filename);
+const isDirectRun = entry && current === entry;
+
+if (isDirectRun) {
+  runAllScrapers()
+    .then(() => {
+      console.log('Scraping finalizado.');
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('Erro ao executar scraping:', err);
+      process.exit(1);
+    });
 }
 
