@@ -1,4 +1,4 @@
-import { Page } from 'playwright';
+import { Page } from 'puppeteer';
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
 
@@ -114,27 +114,14 @@ export class SuperbidRealScraper extends BaseScraper {
       // Aguardar carregamento
       await this.randomDelay(2000, 3000);
 
-      // Encontrar todos os veículos na página
-      const vehicleElements = await this.page.$$('.cBkeyd, .iCGnEw').then(elements => {
-        // Agrupar elementos por veículo (imagem + título)
-        const groups = [];
-        for (let i = 0; i < elements.length; i += 2) {
-          if (elements[i] && elements[i + 1]) {
-            groups.push({
-              imageElement: elements[i],
-              titleElement: elements[i + 1]
-            });
-          }
-        }
-        return groups;
-      });
-
-      console.log(`[${this.auctioneerName}] Encontrados ${vehicleElements.length} veículos na página ${pageNumber}`);
+      // Encontrar todos os títulos de veículos na página
+      const titleElements = await this.page.$$('.iCGnEw');
+      console.log(`[${this.auctioneerName}] Encontrados ${titleElements.length} títulos na página ${pageNumber}`);
 
       // Processar cada veículo
-      for (let i = 0; i < vehicleElements.length; i++) {
+      for (let i = 0; i < titleElements.length; i++) {
         try {
-          const vehicle = await this.extractVehicleData(vehicleElements[i], i, pageNumber);
+          const vehicle = await this.extractVehicleData(titleElements[i], i, pageNumber);
 
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
@@ -151,10 +138,10 @@ export class SuperbidRealScraper extends BaseScraper {
     return vehicles;
   }
 
-  private async extractVehicleData(vehicleGroup: any, index: number, pageNumber: number): Promise<VehicleData | null> {
+  private async extractVehicleData(titleElement: any, index: number, pageNumber: number): Promise<VehicleData | null> {
     try {
       // Extrair título
-      const title = await vehicleGroup.titleElement.textContent();
+      const title = await titleElement.textContent();
       if (!title || title.trim().length < 5) {
         console.log(`[${this.auctioneerName}] Veículo ${index}: Título inválido (${title})`);
         return null;
@@ -162,9 +149,6 @@ export class SuperbidRealScraper extends BaseScraper {
 
       const cleanTitle = title.trim();
       console.log(`[${this.auctioneerName}] Veículo ${index}: Processando "${cleanTitle}"`);
-
-      // Extrair imagem
-      const imageUrl = await vehicleGroup.imageElement.querySelector('img')?.getAttribute('src') || '';
 
       // Extrair marca e modelo do título
       const { brand, model } = this.extractBrandModelFromTitle(cleanTitle);
@@ -175,45 +159,32 @@ export class SuperbidRealScraper extends BaseScraper {
       // Extrair cor do título
       const color = this.extractColorFromTitle(cleanTitle);
 
-      // Extrair localização e ano adicional
-      const locationElement = await this.page?.$('.bYTBLg');
-      const locationText = await locationElement?.textContent() || '';
-      const location = this.extractLocation(locationText);
-      const additionalYear = this.extractYearFromText(locationText);
-
-      // Extrair informações de preço e lances
-      const priceInfo = await this.extractPriceInfo();
-
-      // Extrair datas e horários
-      const auctionInfo = await this.extractAuctionInfo();
-
       // Gerar ID único
-      const externalId = this.generateVehicleId(cleanTitle, priceInfo.currentBid, year || additionalYear);
+      const externalId = this.generateVehicleId(cleanTitle, undefined, year);
 
       const vehicle: VehicleData = {
         external_id: externalId,
         title: cleanTitle,
         brand: brand || 'Desconhecida',
         model: model || 'Desconhecido',
-        year_manufacture: year || additionalYear || undefined,
-        year_model: year || additionalYear || undefined,
+        year_manufacture: year || undefined,
+        year_model: year || undefined,
         vehicle_type: this.detectVehicleType(cleanTitle),
         color: color || undefined,
         mileage: this.extractMileageFromTitle(cleanTitle),
-        state: location.state || 'SP',
-        city: location.city || 'São Paulo',
-        current_bid: priceInfo.currentBid,
-        minimum_bid: priceInfo.minimumBid,
-        auction_date: auctionInfo.auctionDate,
-        auction_type: priceInfo.paymentType === 'parcelado' ? 'Parcelado' : 'À vista',
+        state: 'SP',
+        city: 'São Paulo',
+        current_bid: undefined,
+        minimum_bid: undefined,
+        auction_date: undefined,
+        auction_type: 'Online',
         condition: 'Usado',
         original_url: `${this.baseUrl}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
-        thumbnail_url: imageUrl || undefined,
-        images: imageUrl ? [imageUrl] : undefined
+        thumbnail_url: undefined,
+        images: undefined
       };
 
-      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - R$ ${vehicle.current_bid || 'N/A'}`);
-      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''}`);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''}`);
       return vehicle;
 
     } catch (error) {
@@ -285,78 +256,6 @@ export class SuperbidRealScraper extends BaseScraper {
     return undefined;
   }
 
-  private extractLocation(locationText: string): { state: string; city: string } {
-    // Extrair estado e cidade do texto de localização
-    const stateMatch = locationText.match(/\b([A-Z]{2})\b/);
-    const cityMatch = locationText.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
-    
-    return {
-      state: stateMatch ? stateMatch[1] : 'SP',
-      city: cityMatch ? cityMatch[1] : 'São Paulo'
-    };
-  }
-
-  private extractYearFromText(text: string): number | undefined {
-    const yearMatch = text.match(/\b(19|20)\d{2}\b/);
-    if (yearMatch) {
-      const year = parseInt(yearMatch[0], 10);
-      return isNaN(year) ? undefined : year;
-    }
-    return undefined;
-  }
-
-  private async extractPriceInfo(): Promise<{ currentBid?: number; minimumBid?: number; paymentType?: string }> {
-    try {
-      // Extrair valor das praças
-      const priceElement = await this.page?.$('.idLmIo');
-      const priceText = await priceElement?.textContent() || '';
-
-      // Extrair lance atual
-      const currentBidElement = await this.page?.$('.GhSXc');
-      const currentBidText = await currentBidElement?.textContent() || '';
-
-      // Extrair tipo de pagamento
-      const paymentElement = await this.page?.$('.gTMRAt');
-      const paymentText = await paymentElement?.textContent() || '';
-
-      return {
-        currentBid: this.extractPrice(currentBidText || priceText),
-        minimumBid: this.extractPrice(priceText),
-        paymentType: paymentText.toLowerCase().includes('parcelado') ? 'parcelado' : 'vista'
-      };
-    } catch (error) {
-      console.log(`[${this.auctioneerName}] Erro ao extrair informações de preço:`, error);
-      return {};
-    }
-  }
-
-  private async extractAuctionInfo(): Promise<{ auctionDate?: Date }> {
-    try {
-      // Extrair datas e horários
-      const dateElement = await this.page?.$('.dDlHuy');
-      const dateText = await dateElement?.textContent() || '';
-
-      // Parsear data (implementar conforme formato específico)
-      const auctionDate = this.parseAuctionDate(dateText);
-
-      return { auctionDate };
-    } catch (error) {
-      console.log(`[${this.auctioneerName}] Erro ao extrair informações de leilão:`, error);
-      return {};
-    }
-  }
-
-  private extractPrice(text: string): number | undefined {
-    if (!text) return undefined;
-    
-    const priceMatch = text.match(/[\d.,]+/);
-    if (priceMatch) {
-      const priceStr = priceMatch[0].replace(/[.,]/g, '');
-      const price = parseFloat(priceStr);
-      return isNaN(price) ? undefined : price;
-    }
-    return undefined;
-  }
 
   private extractMileageFromTitle(title: string): number | undefined {
     const mileageMatch = title.match(/(\d+)\s*km/i);
@@ -367,11 +266,6 @@ export class SuperbidRealScraper extends BaseScraper {
     return undefined;
   }
 
-  private parseAuctionDate(dateText: string): Date | undefined {
-    // Implementar parsing de data conforme formato específico do Superbid
-    // Por enquanto, retornar undefined
-    return undefined;
-  }
 
   private generateVehicleId(title: string, currentBid?: number, year?: number): string {
     const baseId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '');
