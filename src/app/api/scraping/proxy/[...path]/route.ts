@@ -30,7 +30,9 @@ export async function POST(req: Request, context: any) {
     const pathParam = (params['path'] as string[] | undefined) || [];
     const suffix = pathParam.length > 0 ? `/${pathParam.join('/')}` : '';
     const target = `${baseUrl}${suffix}`;
-    const resp = await fetch(target, { method: 'POST', headers: { 'X-Auth-Token': token }, cache: 'no-store' });
+    const contentType = req.headers.get('content-type') || 'application/json';
+    const bodyText = await req.text();
+    const resp = await fetch(target, { method: 'POST', headers: { 'X-Auth-Token': token, 'Content-Type': contentType }, body: bodyText, cache: 'no-store' });
     const body = await resp.text();
     return new Response(body, { status: resp.status, headers: { 'Content-Type': resp.headers.get('Content-Type') || 'application/json' } });
   } catch (e: any) {
