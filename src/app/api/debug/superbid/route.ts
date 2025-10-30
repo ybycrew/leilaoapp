@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SuperbidHybridScraper } from '@/lib/scraping/scrapers/superbid-hybrid';
+import { SuperbidRealScraper } from '@/lib/scraping/scrapers/superbid-real';
 
 export async function GET(request: NextRequest) {
   const logs: string[] = [];
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     logs.push(`[DEBUG] Node.js version: ${process.version}`);
     logs.push(`[DEBUG] NODE_ENV: ${process.env.NODE_ENV}`);
     
-    const scraper = new SuperbidHybridScraper();
+    const scraper = new SuperbidRealScraper();
     logs.push(`[DEBUG] Scraper criado com sucesso`);
     
     const startTime = Date.now();

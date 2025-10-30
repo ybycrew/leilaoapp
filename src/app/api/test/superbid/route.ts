@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SuperbidHybridScraper } from '@/lib/scraping/scrapers/superbid-hybrid';
+import { SuperbidRealScraper } from '@/lib/scraping/scrapers/superbid-real';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🧪 [TEST SUPERBID] Iniciando teste do scraper híbrido...');
     
-    const scraper = new SuperbidHybridScraper();
+    const scraper = new SuperbidRealScraper();
     
     const vehicles = await scraper.run();
     
