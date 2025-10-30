@@ -135,7 +135,7 @@ const server = http.createServer((req, res) => {
       logsBuffer = [];
       appendLog(`[server] starting scrape at ${new Date().toISOString()}${auctioneers?.length ? ` for: ${auctioneers.join(',')}` : ''}`);
 
-      const env = { ...process.env } as Record<string, string>;
+      const env: NodeJS.ProcessEnv = { ...process.env };
       env.NODE_ENV = 'production';
       if (!env.SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_URL) {
         env.SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
