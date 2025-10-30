@@ -135,7 +135,7 @@ const server = http.createServer((req, res) => {
       logsBuffer = [];
       appendLog(`[server] starting scrape at ${new Date().toISOString()}${auctioneers?.length ? ` for: ${auctioneers.join(',')}` : ''}`);
 
-      const env: NodeJS.ProcessEnv = { ...process.env };
+      let env: any = { ...process.env };
       env.NODE_ENV = 'production';
       if (!env.SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_URL) {
         env.SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -148,7 +148,7 @@ const server = http.createServer((req, res) => {
       }
 
       currentProc = spawn('node', ['--import', 'tsx', 'src/lib/scraping/index.ts'], {
-        env,
+        env: env as NodeJS.ProcessEnv,
         stdio: 'pipe',
       });
 
