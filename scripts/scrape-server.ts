@@ -75,8 +75,12 @@ const server = http.createServer((req, res) => {
     const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
     if (!supabaseUrl || !supabaseKey) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ error: 'Supabase env vars missing' }));
+      // Fallback estático para não quebrar a UI caso envs não estejam setados
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify([
+        { slug: 'sodre-santoro', name: 'Sodré Santoro', is_active: true },
+        { slug: 'superbid', name: 'Superbid', is_active: true },
+      ]));
     }
     const endpoint = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/auctioneers?select=slug,name,is_active`;
     const u = new URL(endpoint);

@@ -44,15 +44,39 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
 
   const results: ScrapingResult[] = [];
 
-        // Lista de scrapers disponíveis
-        // Usando scraper real para o site Sodré Santoro com filtro de datas futuras
-        const scrapers = [
-          new SodreSantoroRealScraper(),
-          new SuperbidRealScraper(),
-          // Adicione mais scrapers aqui:
-          // new LeiloesVIPScraper(),
-          // etc.
-        ];
+  // Lista de scrapers disponíveis
+  const allScrapers = [
+    new SodreSantoroRealScraper(),
+    new SuperbidRealScraper(),
+  ];
+
+  // Filtrar por AUCTIONEERS se fornecido (slug(s) separados por vírgula)
+  let scrapers = allScrapers as any[];
+  const envList = (process.env.AUCTIONEERS || '').trim();
+  if (envList.length > 0) {
+    const wanted = envList
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-');
+    scrapers = allScrapers.filter((scraper: any) => {
+      const name = String(scraper.auctioneerName || scraper.name || '');
+      const slugFromName = normalize(name);
+      // aliases conhecidos
+      const aliases: string[] = [slugFromName];
+      if (/sodr[eé]/i.test(name)) aliases.push('sodre-santoro', 'sodre-santoro-real');
+      if (/superbid/i.test(name)) aliases.push('superbid');
+      return aliases.some((alias) => wanted.includes(alias));
+    });
+    console.log('Filtrando scrapers pelos AUCTIONEERS:', wanted, '=> selecionados:', scrapers.map((s: any) => s.auctioneerName));
+  }
 
   for (const scraper of scrapers) {
     const result = await runScraper(scraper);
