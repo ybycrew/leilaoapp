@@ -1,4 +1,3 @@
-import { Page } from 'puppeteer';
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
 
@@ -9,7 +8,7 @@ import { extractBrandAndModel } from '../brands';
  * - Usa URL correta com pageNumber e pageSize
  * - Seletores CSS específicos e testados
  * - Detecção inteligente de fim de páginas (repetição)
- * - Extração precisa de marca, modelo, cor, ano do título
+ * - Extração completa de dados (imagens, preços, datas, km)
  */
 export class SuperbidRealScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.superbid.net/categorias/carros-motos';
@@ -24,7 +23,7 @@ export class SuperbidRealScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
-    const seenTitles = new Set<string>(); // Para detectar repetição de títulos
+    const seenTitles = new Set<string>();
 
     try {
       console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid...`);
@@ -34,7 +33,7 @@ export class SuperbidRealScraper extends BaseScraper {
       let duplicatePageCount = 0;
       const maxDuplicatePages = 2;
 
-      while (currentPage <= 250) { // Limite máximo de segurança
+      while (currentPage <= 250) {
         const pageUrl = `${this.baseUrl}?pageNumber=${currentPage}&pageSize=${this.pageSize}`;
         console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
 
@@ -44,12 +43,10 @@ export class SuperbidRealScraper extends BaseScraper {
             timeout: 30000,
           });
 
-          // Aguardar carregamento dos veículos
           await this.page.waitForSelector('.cBkeyd img, .iCGnEw', {
             timeout: 10000
           });
 
-          // Extrair veículos da página atual
           const pageVehicles = await this.scrapePage(currentPage);
           
           if (pageVehicles.length === 0) {
@@ -57,23 +54,21 @@ export class SuperbidRealScraper extends BaseScraper {
             break;
           }
 
-          // Verificar se é uma página repetida (mesmos títulos)
           const currentTitles = pageVehicles.map(v => v.title).sort();
           const isDuplicatePage = this.isDuplicatePage(currentTitles, seenTitles);
           
           if (isDuplicatePage) {
             duplicatePageCount++;
-            console.log(`[${this.auctioneerName}] Página ${currentPage} é duplicada (mesma da página anterior)`);
+            console.log(`[${this.auctioneerName}] Página ${currentPage} é duplicada`);
             
             if (duplicatePageCount >= maxDuplicatePages) {
               console.log(`[${this.auctioneerName}] Muitas páginas duplicadas consecutivas. Parando scraping.`);
               break;
             }
           } else {
-            duplicatePageCount = 0; // Reset contador se não é duplicada
+            duplicatePageCount = 0;
           }
 
-          // Filtrar duplicatas e adicionar veículos únicos
           let newVehiclesCount = 0;
           for (const vehicle of pageVehicles) {
             if (!seenIds.has(vehicle.external_id)) {
@@ -86,7 +81,6 @@ export class SuperbidRealScraper extends BaseScraper {
 
           console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos encontrados, ${newVehiclesCount} novos`);
 
-          // Delay entre páginas
           await this.randomDelay(1000, 2000);
           currentPage++;
 
@@ -111,18 +105,113 @@ export class SuperbidRealScraper extends BaseScraper {
     const vehicles: VehicleData[] = [];
 
     try {
-      // Aguardar carregamento
       await this.randomDelay(2000, 3000);
 
-      // Encontrar todos os títulos de veículos na página
-      const titleElements = await this.page.$$('.iCGnEw');
-      console.log(`[${this.auctioneerName}] Encontrados ${titleElements.length} títulos na página ${pageNumber}`);
-
-      // Processar cada veículo
-      for (let i = 0; i < titleElements.length; i++) {
+      // Extrair todos os dados de uma vez usando evaluate
+      const extractedVehicles = await this.page.evaluate(() => {
+        const vehicles: any[] = [];
+        
+        const titleElements = Array.from(document.querySelectorAll('.iCGnEw'));
+        
+        titleElements.forEach((titleEl, index) => {
+          try {
+            // Encontrar o card container
+            let card = titleEl.closest('a') || titleEl.parentElement?.parentElement?.parentElement || titleEl.parentElement;
+            
+            if (!card) return;
+            
+            const title = titleEl.textContent?.trim() || '';
+            if (!title || title.length < 5) return;
+            
+            // Extrair link
+            const linkEl = card as HTMLElement;
+            const href = linkEl.getAttribute('href') || (card.querySelector('a')?.getAttribute('href'));
+            const detailUrl = href?.startsWith('http') ? href : `https://www.superbid.net${href || ''}`;
+            
+            // Extrair imagem
+            const img = card.querySelector('img');
+            const imageUrl = img?.src || img?.getAttribute('src') || img?.getAttribute('data-src') || '';
+            
+            // Extrair preço
+            let price = '';
+            const priceSelectors = [
+              '.cBkeyd span',
+              '.price',
+              '[class*="preco"]',
+              '[class*="valor"]',
+              '[class*="lance"]',
+              'span[class*="text"]'
+            ];
+            
+            for (const selector of priceSelectors) {
+              const priceEl = card.querySelector(selector);
+              if (priceEl?.textContent?.trim() && (priceEl.textContent.includes('R$') || priceEl.textContent.includes('Consultar'))) {
+                price = priceEl.textContent.trim();
+                break;
+              }
+            }
+            
+            // Extrair informações adicionais
+            const infoElements = card.querySelectorAll('.text-body-small, .text-caption, [class*="info"], [class*="caption"]');
+            const infoTexts: string[] = [];
+            infoElements.forEach(el => {
+              const text = el.textContent?.trim();
+              if (text && text.length > 0) infoTexts.push(text);
+            });
+            
+            // Extrair data do leilão
+            let auctionDate = '';
+            for (const text of infoTexts) {
+              const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+              if (dateMatch) {
+                auctionDate = text;
+                break;
+              }
+            }
+            
+            // Extrair quilometragem
+            let mileage: number | undefined = undefined;
+            for (const text of infoTexts) {
+              const mileageMatch = text.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+              if (mileageMatch) {
+                mileage = parseInt(mileageMatch[1].replace(/\./g, ''));
+                break;
+              }
+            }
+            
+            // Extrair tipo de leilão
+            let auctionType = 'Online';
+            for (const text of infoTexts) {
+              if (text.toLowerCase().includes('presencial') || text.toLowerCase().includes('offline')) {
+                auctionType = 'Presencial';
+                break;
+              }
+            }
+            
+            vehicles.push({
+              title,
+              detailUrl,
+              imageUrl,
+              price,
+              infoTexts,
+              auctionDate,
+              mileage,
+              auctionType
+            });
+          } catch (error) {
+            console.error('Erro ao extrair veículo:', error);
+          }
+        });
+        
+        return vehicles;
+      });
+      
+      console.log(`[${this.auctioneerName}] Encontrados ${extractedVehicles.length} veículos na página ${pageNumber}`);
+      
+      // Processar veículos extraídos
+      for (let i = 0; i < extractedVehicles.length; i++) {
         try {
-          const vehicle = await this.extractVehicleData(titleElements[i], i, pageNumber);
-
+          const vehicle = this.processExtractedVehicle(extractedVehicles[i], i, pageNumber);
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
           }
@@ -138,29 +227,31 @@ export class SuperbidRealScraper extends BaseScraper {
     return vehicles;
   }
 
-  private async extractVehicleData(titleElement: any, index: number, pageNumber: number): Promise<VehicleData | null> {
+  private processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number): VehicleData | null {
     try {
-      // Extrair título
-      const title = await titleElement.evaluate((el: HTMLElement) => el.textContent ?? '');
-      if (!title || title.trim().length < 5) {
-        console.log(`[${this.auctioneerName}] Veículo ${index}: Título inválido (${title})`);
+      const cleanTitle = rawVehicle.title.trim();
+      if (!cleanTitle || cleanTitle.length < 5) {
         return null;
       }
 
-      const cleanTitle = title.trim();
-      console.log(`[${this.auctioneerName}] Veículo ${index}: Processando "${cleanTitle}"`);
-
-      // Extrair marca e modelo do título
       const { brand, model } = this.extractBrandModelFromTitle(cleanTitle);
-
-      // Extrair ano do título
       const year = this.extractYearFromTitle(cleanTitle);
-
-      // Extrair cor do título
       const color = this.extractColorFromTitle(cleanTitle);
 
-      // Gerar ID único
-      const externalId = this.generateVehicleId(cleanTitle, undefined, year);
+      // Parse preço
+      const currentBid = rawVehicle.price ? this.parsePrice(rawVehicle.price) : undefined;
+
+      // Parse data
+      const auctionDate = rawVehicle.auctionDate ? this.parseAuctionDate(rawVehicle.auctionDate) : undefined;
+
+      // ID externo
+      const externalId = this.extractExternalIdFromUrl(rawVehicle.detailUrl, cleanTitle, year);
+
+      // Imagens
+      const images: string[] = [];
+      if (rawVehicle.imageUrl) {
+        images.push(rawVehicle.imageUrl);
+      }
 
       const vehicle: VehicleData = {
         external_id: externalId,
@@ -171,36 +262,61 @@ export class SuperbidRealScraper extends BaseScraper {
         year_model: year || undefined,
         vehicle_type: this.detectVehicleType(cleanTitle),
         color: color || undefined,
-        mileage: this.extractMileageFromTitle(cleanTitle),
+        mileage: rawVehicle.mileage || undefined,
         state: 'SP',
         city: 'São Paulo',
-        current_bid: undefined,
+        current_bid: currentBid,
         minimum_bid: undefined,
-        auction_date: undefined,
-        auction_type: 'Online',
+        auction_date: auctionDate,
+        auction_type: rawVehicle.auctionType || 'Online',
         condition: 'Usado',
-        original_url: `${this.baseUrl}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
-        thumbnail_url: undefined,
-        images: undefined
+        original_url: rawVehicle.detailUrl || `${this.baseUrl}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
+        thumbnail_url: rawVehicle.imageUrl || undefined,
+        images: images.length > 0 ? images : undefined
       };
 
-      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''}`);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''} - R$ ${vehicle.current_bid || 'N/A'}`);
       return vehicle;
 
     } catch (error) {
-      console.error(`[${this.auctioneerName}] Erro ao extrair dados do veículo ${index}:`, error);
+      console.error(`[${this.auctioneerName}] Erro ao processar veículo ${index}:`, error);
       return null;
     }
   }
 
+  private extractExternalIdFromUrl(url: string, title: string, year?: number): string {
+    try {
+      const match = url.match(/\/([a-f0-9-]{36}|\d+)$/);
+      if (match && match[1]) {
+        return `superbid-${match[1]}`;
+      }
+
+      const baseId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '');
+      const yearSuffix = year ? `-${year}` : '';
+      return `superbid-${baseId}${yearSuffix}`;
+    } catch {
+      return `superbid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+  }
+
+  private parseAuctionDate(dateString: string): Date | undefined {
+    try {
+      const match = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (match) {
+        const [, day, month, year] = match;
+        const fullYear = year.length === 2 ? parseInt('20' + year) : parseInt(year);
+        return new Date(fullYear, parseInt(month) - 1, parseInt(day));
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private extractBrandModelFromTitle(title: string): { brand: string; model: string } {
-    // Usar a função existente e melhorar com regex específico
     const { brand, model } = extractBrandAndModel(title);
-    
-    // Melhorar extração com regex específico para títulos do Superbid
     const titleLower = title.toLowerCase();
     
-    // Padrões comuns no Superbid
     const brandPatterns = [
       /(chevrolet|chev|gm)\s+(\w+)/i,
       /(ford)\s+(\w+)/i,
@@ -256,25 +372,6 @@ export class SuperbidRealScraper extends BaseScraper {
     return undefined;
   }
 
-
-  private extractMileageFromTitle(title: string): number | undefined {
-    const mileageMatch = title.match(/(\d+)\s*km/i);
-    if (mileageMatch) {
-      const mileage = parseInt(mileageMatch[1], 10);
-      return isNaN(mileage) ? undefined : mileage;
-    }
-    return undefined;
-  }
-
-
-  private generateVehicleId(title: string, currentBid?: number, year?: number): string {
-    const baseId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '');
-    const priceSuffix = currentBid ? `-${currentBid}` : '';
-    const yearSuffix = year ? `-${year}` : '';
-    
-    return `superbid-real-${baseId}${priceSuffix}${yearSuffix}`;
-  }
-
   private detectVehicleType(title: string): string {
     const titleLower = title.toLowerCase();
     
@@ -284,7 +381,7 @@ export class SuperbidRealScraper extends BaseScraper {
       return 'Caminhão';
     } else if (titleLower.includes('ônibus') || titleLower.includes('onibus') || titleLower.includes('bus')) {
       return 'Ônibus';
-    } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgão')) {
+    } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgao')) {
       return 'Van';
     } else {
       return 'Carro';
@@ -293,28 +390,15 @@ export class SuperbidRealScraper extends BaseScraper {
 
   private isRelevantVehicle(vehicle: VehicleData): boolean {
     if (!vehicle.title || vehicle.title.length < 5) {
-      console.log(`[${this.auctioneerName}] Veículo rejeitado: título muito curto (${vehicle.title})`);
       return false;
     }
     
-    if (!vehicle.brand || vehicle.brand === 'Desconhecida') {
-      console.log(`[${this.auctioneerName}] Veículo com marca desconhecida: ${vehicle.title}`);
-    }
-    
-    if (!vehicle.model || vehicle.model === 'Desconhecido') {
-      console.log(`[${this.auctioneerName}] Veículo com modelo desconhecido: ${vehicle.title}`);
-    }
-    
-    console.log(`[${this.auctioneerName}] Veículo aceito: ${vehicle.title}`);
     return true;
   }
 
   private isDuplicatePage(currentTitles: string[], seenTitles: Set<string>): boolean {
-    // Verificar se todos os títulos da página atual já foram vistos
     const duplicateCount = currentTitles.filter(title => seenTitles.has(title)).length;
     const duplicatePercentage = duplicateCount / currentTitles.length;
-    
-    // Se mais de 80% dos títulos são duplicados, é uma página repetida
     return duplicatePercentage > 0.8;
   }
 }
