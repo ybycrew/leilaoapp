@@ -43,7 +43,7 @@ export class SuperbidRealScraper extends BaseScraper {
             timeout: 30000,
           });
 
-          await this.page.waitForSelector('.cBkeyd img, .iCGnEw', {
+          await this.page.waitForSelector('a[href^="/oferta/"]', {
             timeout: 10000
           });
 
@@ -111,81 +111,62 @@ export class SuperbidRealScraper extends BaseScraper {
       const extractedVehicles = await this.page.evaluate(() => {
         const vehicles: any[] = [];
         
-        const titleElements = Array.from(document.querySelectorAll('.iCGnEw'));
+        // Usar o seletor correto para encontrar cards
+        const cards = Array.from(document.querySelectorAll('a[href^="/oferta/"]'));
         
-        titleElements.forEach((titleEl, index) => {
+        cards.forEach((card) => {
           try {
-            // Encontrar o card container
-            let card = titleEl.closest('a') || titleEl.parentElement?.parentElement?.parentElement || titleEl.parentElement;
+            // Extrair título do alt da imagem
+            const img = card.querySelector('img');
+            const title = img?.alt || '';
             
-            if (!card) return;
-            
-            const title = titleEl.textContent?.trim() || '';
             if (!title || title.length < 5) return;
             
             // Extrair link
-            const linkEl = card as HTMLElement;
-            const href = linkEl.getAttribute('href') || (card.querySelector('a')?.getAttribute('href'));
+            const href = card.getAttribute('href') || '';
             const detailUrl = href?.startsWith('http') ? href : `https://www.superbid.net${href || ''}`;
             
             // Extrair imagem
-            const img = card.querySelector('img');
-            const imageUrl = img?.src || img?.getAttribute('src') || img?.getAttribute('data-src') || '';
+            const imageUrl = img?.src || '';
             
-            // Extrair preço
+            // Pegar TODO o texto do card
+            const fullText = card.textContent || '';
+            
+            // Extrair preço (melhor match possível)
             let price = '';
-            const priceSelectors = [
-              '.cBkeyd span',
-              '.price',
-              '[class*="preco"]',
-              '[class*="valor"]',
-              '[class*="lance"]',
-              'span[class*="text"]'
-            ];
-            
-            for (const selector of priceSelectors) {
-              const priceEl = card.querySelector(selector);
-              if (priceEl?.textContent?.trim() && (priceEl.textContent.includes('R$') || priceEl.textContent.includes('Consultar'))) {
-                price = priceEl.textContent.trim();
-                break;
-              }
+            const priceMatches = fullText.match(/R\$\s*[\d.,]+/);
+            if (priceMatches && priceMatches.length > 0) {
+              // Pegar o contexto ao redor do preço
+              const priceIndex = fullText.indexOf(priceMatches[0]);
+              const context = fullText.substring(Math.max(0, priceIndex - 100), priceIndex + priceMatches[0].length + 100);
+              // Pegar apenas a linha com R$
+              const lines = context.split('\n').filter(l => l.trim());
+              const priceLine = lines.find(l => l.includes('R$'));
+              price = priceLine?.trim() || priceMatches[0];
             }
             
-            // Extrair informações adicionais
-            const infoElements = card.querySelectorAll('.text-body-small, .text-caption, [class*="info"], [class*="caption"]');
-            const infoTexts: string[] = [];
-            infoElements.forEach(el => {
-              const text = el.textContent?.trim();
-              if (text && text.length > 0) infoTexts.push(text);
-            });
-            
-            // Extrair data do leilão
+            // Extrair data do leilão (formato: dd/mm - HH:mm)
             let auctionDate = '';
-            for (const text of infoTexts) {
-              const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-              if (dateMatch) {
-                auctionDate = text;
-                break;
-              }
+            const dateMatch = fullText.match(/\d{1,2}\/\d{2}\s*-\s*\d{1,2}:\d{2}/);
+            if (dateMatch) {
+              auctionDate = dateMatch[0];
             }
             
             // Extrair quilometragem
             let mileage: number | undefined = undefined;
-            for (const text of infoTexts) {
-              const mileageMatch = text.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
-              if (mileageMatch) {
-                mileage = parseInt(mileageMatch[1].replace(/\./g, ''));
-                break;
-              }
+            const mileageMatch = fullText.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+            if (mileageMatch) {
+              mileage = parseInt(mileageMatch[1].replace(/\./g, ''), 10);
             }
             
             // Extrair tipo de leilão
             let auctionType = 'Online';
-            for (const text of infoTexts) {
-              if (text.toLowerCase().includes('presencial') || text.toLowerCase().includes('offline')) {
-                auctionType = 'Presencial';
-                break;
-              }
+            if (fullText.toLowerCase().includes('tomada de pre')) {
+              auctionType = 'Tomada de Preço';
+            } else if (fullText.toLowerCase().includes('mercado balcão') || fullText.toLowerCase().includes('compre já')) {
+              auctionType = 'Mercado Balcão';
+            } else if (fullText.toLowerCase().includes('presencial')) {
+              auctionType = 'Presencial';
             }
             
             vehicles.push({
@@ -193,10 +174,10 @@ export class SuperbidRealScraper extends BaseScraper {
               detailUrl,
               imageUrl,
               price,
-              infoTexts,
               auctionDate,
               mileage,
-              auctionType
+              auctionType,
+              fullText: fullText.substring(0, 500) // debug
             });
           } catch (error) {
             console.error('Erro ao extrair veículo:', error);
