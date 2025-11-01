@@ -1,4 +1,5 @@
-﻿import http from 'http';
+﻿import 'dotenv/config';
+import http from 'http';
 import https from 'https';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import url from 'url';
