@@ -39,7 +39,7 @@ export class SuperbidRealScraper extends BaseScraper {
 
         try {
           await this.page.goto(pageUrl, {
-            waitUntil: 'networkidle0',
+            waitUntil: 'domcontentloaded',
             timeout: 30000,
           });
 
@@ -48,7 +48,7 @@ export class SuperbidRealScraper extends BaseScraper {
           });
           
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
-          await this.randomDelay(1000, 2000);
+          await this.randomDelay(2000, 3000);
 
           const pageVehicles = await this.scrapePage(currentPage);
           
