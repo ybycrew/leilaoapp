@@ -21,3 +21,5 @@ echo ""
 echo "Para monitorar logs em tempo real:"
 echo "  pm2 logs scraping-api --follow"
 
+
+
