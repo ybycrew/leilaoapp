@@ -39,13 +39,16 @@ export class SuperbidRealScraper extends BaseScraper {
 
         try {
           await this.page.goto(pageUrl, {
-            waitUntil: 'domcontentloaded',
+            waitUntil: 'networkidle0',
             timeout: 30000,
           });
 
           await this.page.waitForSelector('a[href^="/oferta/"]', {
-            timeout: 10000
+            timeout: 20000
           });
+          
+          // Aguardar um pouco mais para garantir que JS terminou de renderizar
+          await this.randomDelay(1000, 2000);
 
           const pageVehicles = await this.scrapePage(currentPage);
           
