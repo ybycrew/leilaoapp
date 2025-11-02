@@ -73,51 +73,112 @@ export class SuperbidRealScraper extends BaseScraper {
             // Modal de cookies não encontrado ou já fechado
           }
 
-          // Aguardar pelo seletor principal com múltiplas tentativas
+          // Aguardar pelo seletor principal com múltiplas tentativas e diferentes seletores
           let found = false;
-          for (let attempt = 0; attempt < 5; attempt++) {
-            try {
-              await this.page.waitForSelector('a[href^="/oferta/"]', {
-                timeout: 15000
-              });
-              found = true;
-              break;
-            } catch (e) {
-              console.log(`[${this.auctioneerName}] Tentativa ${attempt + 1}/5 de aguardar seletores...`);
-              await this.randomDelay(2000, 3000);
+          const selectors = [
+            'a[href^="/oferta/"]',
+            'a[href*="/oferta/"]',
+            'a[href*="oferta"]',
+            'a[href^="https://www.superbid.net/oferta/"]',
+            'a[href^="https://exchange.superbid.net/oferta/"]',
+          ];
+          
+          for (let attempt = 0; attempt < 8; attempt++) {
+            for (const selector of selectors) {
+              try {
+                const count = await this.page.evaluate((sel) => {
+                  return document.querySelectorAll(sel).length;
+                }, selector);
+                
+                if (count > 0) {
+                  console.log(`[${this.auctioneerName}] Encontrados ${count} elementos com seletor: ${selector}`);
+                  found = true;
+                  break;
+                }
+              } catch (e) {
+                // Continuar tentando
+              }
+            }
+            
+            if (found) break;
+            
+            console.log(`[${this.auctioneerName}] Tentativa ${attempt + 1}/8 de aguardar seletores...`);
+            
+            // Aguardar e verificar estado da página
+            await this.randomDelay(3000, 5000);
+            
+            // Verificar se a página ainda está carregando
+            const isLoading = await this.page.evaluate(() => {
+              return document.readyState !== 'complete';
+            });
+            
+            if (isLoading) {
+              console.log(`[${this.auctioneerName}] Página ainda carregando, aguardando mais...`);
+              await this.randomDelay(5000, 8000);
             }
           }
 
-          // Sempre verificar manualmente quantos elementos existem
-          const count = await this.page.evaluate(() => {
-            return document.querySelectorAll('a[href^="/oferta/"]').length;
-          });
-          
-          console.log(`[${this.auctioneerName}] Encontrados ${count} links na página após aguardar seletores`);
-          
-          if (count === 0) {
-            // Tentar aguardar mais um pouco e verificar novamente
-            console.log(`[${this.auctioneerName}] Nenhum link encontrado, aguardando mais 10 segundos...`);
-            await this.randomDelay(10000, 15000);
+          // Sempre verificar manualmente quantos elementos existem com todos os seletores
+          const allCounts = await this.page.evaluate(() => {
+            const selectors = [
+              'a[href^="/oferta/"]',
+              'a[href*="/oferta/"]',
+              'a[href*="oferta"]',
+              'a[href^="https://www.superbid.net/oferta/"]',
+              'a[href^="https://exchange.superbid.net/oferta/"]',
+            ];
             
-            const countAfterWait = await this.page.evaluate(() => {
-              return document.querySelectorAll('a[href^="/oferta/"]').length;
+            const counts: Record<string, number> = {};
+            selectors.forEach(sel => {
+              counts[sel] = document.querySelectorAll(sel).length;
             });
             
-            console.log(`[${this.auctioneerName}] Após espera adicional: ${countAfterWait} links encontrados`);
+            // Também contar todos os links para debug
+            counts['totalLinks'] = document.querySelectorAll('a').length;
+            counts['readyState'] = document.readyState === 'complete' ? 1 : 0;
             
-            if (countAfterWait === 0) {
+            return counts;
+          });
+          
+          console.log(`[${this.auctioneerName}] Contagem de elementos:`, JSON.stringify(allCounts, null, 2));
+          
+          const totalOfertaLinks = Object.entries(allCounts)
+            .filter(([key]) => key.includes('oferta'))
+            .reduce((sum, [, count]) => sum + (count as number), 0);
+          
+          if (totalOfertaLinks === 0) {
+            // Tentar aguardar mais um pouco e verificar novamente
+            console.log(`[${this.auctioneerName}] Nenhum link encontrado, aguardando mais 15 segundos...`);
+            await this.randomDelay(15000, 20000);
+            
+            const countAfterWait = await this.page.evaluate(() => {
+              return {
+                oferta: document.querySelectorAll('a[href*="oferta"]').length,
+                total: document.querySelectorAll('a').length,
+                readyState: document.readyState
+              };
+            });
+            
+            console.log(`[${this.auctioneerName}] Após espera adicional:`, countAfterWait);
+            
+            if (countAfterWait.oferta === 0) {
               // Debug: verificar o que há na página
               const pageInfo = await this.page.evaluate(() => {
                 return {
                   url: window.location.href,
                   title: document.title,
-                  bodyText: document.body?.textContent?.substring(0, 200) || '',
-                  allLinks: Array.from(document.querySelectorAll('a')).slice(0, 10).map(a => a.getAttribute('href'))
+                  readyState: document.readyState,
+                  bodyText: document.body?.textContent?.substring(0, 300) || '',
+                  allLinks: Array.from(document.querySelectorAll('a')).slice(0, 20).map(a => ({
+                    href: a.getAttribute('href'),
+                    text: a.textContent?.substring(0, 50)
+                  })),
+                  scripts: Array.from(document.querySelectorAll('script')).length,
+                  scriptsLoaded: Array.from(document.querySelectorAll('script')).filter(s => s.src).length
                 };
               });
               
-              console.log(`[${this.auctioneerName}] Debug da página:`, JSON.stringify(pageInfo, null, 2));
+              console.log(`[${this.auctioneerName}] Debug completo da página:`, JSON.stringify(pageInfo, null, 2));
               
               throw new Error('Nenhum veículo encontrado na página após múltiplas tentativas e espera adicional');
             }
