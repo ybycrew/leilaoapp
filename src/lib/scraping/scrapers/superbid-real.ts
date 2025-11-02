@@ -251,8 +251,8 @@ export class SuperbidRealScraper extends BaseScraper {
       const extractedVehicles = await this.page.evaluate(() => {
         const vehicles: any[] = [];
         
-        // Usar o seletor correto para encontrar cards
-        const cards = Array.from(document.querySelectorAll('a[href^="/oferta/"]'));
+        // Usar o seletor correto para encontrar cards - os links são do exchange.superbid.net
+        const cards = Array.from(document.querySelectorAll('a[href*="oferta"]'));
         
         cards.forEach((card) => {
           try {
@@ -262,9 +262,16 @@ export class SuperbidRealScraper extends BaseScraper {
             
             if (!title || title.length < 5) return;
             
-            // Extrair link
+            // Extrair link - pode ser absoluto (exchange.superbid.net) ou relativo
             const href = card.getAttribute('href') || '';
-            const detailUrl = href?.startsWith('http') ? href : `https://www.superbid.net${href || ''}`;
+            let detailUrl = href;
+            if (href.startsWith('http')) {
+              detailUrl = href;
+            } else if (href.startsWith('/')) {
+              detailUrl = `https://www.superbid.net${href}`;
+            } else {
+              detailUrl = `https://www.superbid.net/${href}`;
+            }
             
             // Extrair imagem
             const imageUrl = img?.src || '';
