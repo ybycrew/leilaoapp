@@ -69,6 +69,7 @@ export abstract class BaseScraper {
             '--disable-ipc-flooding-protection',
             '--disable-extensions',
             '--disable-plugins',
+            '--disable-blink-features=AutomationControlled',
           ],
           executablePath: process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
           headless: 'new',

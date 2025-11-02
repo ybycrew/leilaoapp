@@ -88,17 +88,39 @@ export class SuperbidRealScraper extends BaseScraper {
             }
           }
 
-          if (!found) {
-            // Verificar se elementos existem mesmo sem waitForSelector
-            const count = await this.page.evaluate(() => {
+          // Sempre verificar manualmente quantos elementos existem
+          const count = await this.page.evaluate(() => {
+            return document.querySelectorAll('a[href^="/oferta/"]').length;
+          });
+          
+          console.log(`[${this.auctioneerName}] Encontrados ${count} links na página após aguardar seletores`);
+          
+          if (count === 0) {
+            // Tentar aguardar mais um pouco e verificar novamente
+            console.log(`[${this.auctioneerName}] Nenhum link encontrado, aguardando mais 10 segundos...`);
+            await this.randomDelay(10000, 15000);
+            
+            const countAfterWait = await this.page.evaluate(() => {
               return document.querySelectorAll('a[href^="/oferta/"]').length;
             });
             
-            if (count === 0) {
-              throw new Error('Nenhum veículo encontrado na página após múltiplas tentativas');
-            }
+            console.log(`[${this.auctioneerName}] Após espera adicional: ${countAfterWait} links encontrados`);
             
-            console.log(`[${this.auctioneerName}] Encontrados ${count} links sem waitForSelector`);
+            if (countAfterWait === 0) {
+              // Debug: verificar o que há na página
+              const pageInfo = await this.page.evaluate(() => {
+                return {
+                  url: window.location.href,
+                  title: document.title,
+                  bodyText: document.body?.textContent?.substring(0, 200) || '',
+                  allLinks: Array.from(document.querySelectorAll('a')).slice(0, 10).map(a => a.getAttribute('href'))
+                };
+              });
+              
+              console.log(`[${this.auctioneerName}] Debug da página:`, JSON.stringify(pageInfo, null, 2));
+              
+              throw new Error('Nenhum veículo encontrado na página após múltiplas tentativas e espera adicional');
+            }
           }
           
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
