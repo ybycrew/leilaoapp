@@ -29,14 +29,14 @@ export default async function DebugPage() {
               <div className="space-y-2">
                 {debugInfo.sample.map((vehicle: any) => (
                   <div key={vehicle.id} className="border-b pb-2">
-                    <div className="font-mono text-sm">
-                      <div><strong>ID:</strong> {vehicle.id}</div>
-                      <div><strong>Título:</strong> {vehicle.titulo || '(vazio)'}</div>
-                      <div><strong>Marca:</strong> {vehicle.marca || '(null)'}</div>
-                      <div><strong>Modelo:</strong> {vehicle.modelo || '(null)'}</div>
-                      <div><strong>Estado:</strong> {vehicle.estado || '(null)'}</div>
-                      <div><strong>Cidade:</strong> {vehicle.cidade || '(null)'}</div>
-                    </div>
+                      <div className="font-mono text-sm">
+                        <div><strong>ID:</strong> {vehicle.id}</div>
+                        <div><strong>Título:</strong> {vehicle.titulo || '(vazio)'}</div>
+                        <div><strong>Brand:</strong> {vehicle.brand || '(null)'}</div>
+                        <div><strong>Model:</strong> {vehicle.model || '(null)'}</div>
+                        <div><strong>State:</strong> {vehicle.state || '(null)'}</div>
+                        <div><strong>City:</strong> {vehicle.city || '(null)'}</div>
+                      </div>
                   </div>
                 ))}
               </div>

@@ -22,7 +22,7 @@ export async function debugVehiclesTable() {
     // 2. Buscar alguns veículos para ver estrutura
     const { data: sampleData, error: sampleError } = await supabase
       .from('vehicles')
-      .select('id, marca, modelo, estado, cidade, titulo')
+      .select('id, brand, model, state, city, titulo')
       .limit(5);
 
     if (sampleError) {
@@ -32,20 +32,20 @@ export async function debugVehiclesTable() {
     // 3. Contar veículos com marca não-nula
     const { count: marcaCount } = await supabase
       .from('vehicles')
-      .select('marca', { count: 'exact', head: true })
-      .not('marca', 'is', null);
+      .select('brand', { count: 'exact', head: true })
+      .not('brand', 'is', null);
 
     // 4. Contar veículos com modelo não-nulo
     const { count: modeloCount } = await supabase
       .from('vehicles')
-      .select('modelo', { count: 'exact', head: true })
-      .not('modelo', 'is', null);
+      .select('model', { count: 'exact', head: true })
+      .not('model', 'is', null);
 
     // 5. Contar veículos com estado não-nulo
     const { count: estadoCount } = await supabase
       .from('vehicles')
-      .select('estado', { count: 'exact', head: true })
-      .not('estado', 'is', null);
+      .select('state', { count: 'exact', head: true })
+      .not('state', 'is', null);
 
     return {
       total: count || 0,
