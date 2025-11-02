@@ -1,0 +1,17 @@
+# Force UTF-8 encoding for all text files
+* text=auto eol=lf
+
+# Explicitly set UTF-8 for TypeScript files
+*.ts text eol=lf charset=utf-8
+*.tsx text eol=lf charset=utf-8
+*.js text eol=lf charset=utf-8
+*.jsx text eol=lf charset=utf-8
+
+# Ensure binary files are treated as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
