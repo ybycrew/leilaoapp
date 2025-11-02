@@ -39,16 +39,50 @@ export class SuperbidRealScraper extends BaseScraper {
 
         try {
           await this.page.goto(pageUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000,
+            waitUntil: 'load',
+            timeout: 60000,
           });
 
+          // Fechar modal de cookies se aparecer
+          try {
+            const cookieButtons = await this.page.$$eval('button', (buttons) => {
+              return buttons
+                .filter(btn => {
+                  const text = btn.textContent || '';
+                  return text.includes('Aceitar todos os cookies') || text.includes('Rejeitar todos');
+                })
+                .map(btn => {
+                  const rect = btn.getBoundingClientRect();
+                  return {
+                    visible: rect.width > 0 && rect.height > 0 && rect.top >= 0
+                  };
+                });
+            });
+            
+            if (cookieButtons.length > 0 && cookieButtons[0].visible) {
+              await this.page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const acceptBtn = buttons.find(btn => {
+                  const text = btn.textContent || '';
+                  return text.includes('Aceitar todos os cookies') || text.includes('Rejeitar todos');
+                });
+                if (acceptBtn) {
+                  (acceptBtn as HTMLElement).click();
+                }
+              });
+              await this.randomDelay(1000, 2000);
+            }
+          } catch (e) {
+            // Modal de cookies não encontrado ou já fechado
+          }
+
+          // Aguardar pelo seletor principal
           await this.page.waitForSelector('a[href^="/oferta/"]', {
-            timeout: 20000
+            timeout: 30000
           });
           
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
-          await this.randomDelay(2000, 3000);
+          await this.randomDelay(3000, 5000);
 
           const pageVehicles = await this.scrapePage(currentPage);
           
@@ -121,7 +155,7 @@ export class SuperbidRealScraper extends BaseScraper {
           try {
             // Extrair título do alt da imagem
             const img = card.querySelector('img');
-            const title = img?.alt || '';
+            const title = img?.alt?.trim() || '';
             
             if (!title || title.length < 5) return;
             
@@ -132,43 +166,74 @@ export class SuperbidRealScraper extends BaseScraper {
             // Extrair imagem
             const imageUrl = img?.src || '';
             
-            // Pegar TODO o texto do card
+            // Pegar todos os parágrafos e texto do card
+            const paragraphs = Array.from(card.querySelectorAll('p')).map(p => p.textContent?.trim()).filter(Boolean);
             const fullText = card.textContent || '';
             
-            // Extrair preço (melhor match possível)
+            // Extrair preço - procurar em parágrafos primeiro, depois no texto completo
             let price = '';
-            const priceMatches = fullText.match(/R\$\s*[\d.,]+/);
-            if (priceMatches && priceMatches.length > 0) {
-              // Pegar o contexto ao redor do preço
-              const priceIndex = fullText.indexOf(priceMatches[0]);
-              const context = fullText.substring(Math.max(0, priceIndex - 100), priceIndex + priceMatches[0].length + 100);
-              // Pegar apenas a linha com R$
-              const lines = context.split('\n').filter(l => l.trim());
-              const priceLine = lines.find(l => l.includes('R$'));
-              price = priceLine?.trim() || priceMatches[0];
+            const priceParagraph = paragraphs.find(p => p?.includes('R$'));
+            if (priceParagraph) {
+              const priceMatch = priceParagraph.match(/R\$\s*[\d.,]+/);
+              if (priceMatch) {
+                price = priceMatch[0];
+              }
+            } else {
+              const priceMatches = fullText.match(/R\$\s*[\d.,]+/);
+              if (priceMatches && priceMatches.length > 0) {
+                price = priceMatches[0];
+              }
             }
             
-            // Extrair data do leilão (formato: dd/mm - HH:mm)
+            // Extrair data do leilão - primeiro parágrafo geralmente tem a data
             let auctionDate = '';
-            const dateMatch = fullText.match(/\d{1,2}\/\d{2}\s*-\s*\d{1,2}:\d{2}/);
-            if (dateMatch) {
-              auctionDate = dateMatch[0];
+            if (paragraphs.length > 0) {
+              const firstPara = paragraphs[0];
+              const dateMatch = firstPara?.match(/\d{1,2}\/\d{2}\s*-\s*\d{1,2}:\d{2}/);
+              if (dateMatch) {
+                auctionDate = dateMatch[0];
+              } else {
+                // Tentar outro formato
+                const dateMatch2 = firstPara?.match(/\d{1,2}\/\d{2}/);
+                if (dateMatch2) {
+                  auctionDate = dateMatch2[0];
+                }
+              }
             }
             
-            // Extrair quilometragem
+            // Se não encontrou nos parágrafos, tentar no texto completo
+            if (!auctionDate) {
+              const dateMatch = fullText.match(/\d{1,2}\/\d{2}\s*-\s*\d{1,2}:\d{2}/);
+              if (dateMatch) {
+                auctionDate = dateMatch[0];
+              }
+            }
+            
+            // Extrair quilometragem - procurar em parágrafos e texto
             let mileage: number | undefined = undefined;
-            const mileageMatch = fullText.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
-            if (mileageMatch) {
-              mileage = parseInt(mileageMatch[1].replace(/\./g, ''), 10);
+            const mileageParagraph = paragraphs.find(p => p?.toLowerCase().includes('km'));
+            if (mileageParagraph) {
+              const mileageMatch = mileageParagraph.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+              if (mileageMatch) {
+                mileage = parseInt(mileageMatch[1].replace(/\./g, ''), 10);
+              }
+            } else {
+              const mileageMatch = fullText.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+              if (mileageMatch) {
+                mileage = parseInt(mileageMatch[1].replace(/\./g, ''), 10);
+              }
             }
             
-            // Extrair tipo de leilão
+            // Extrair tipo de leilão - procurar nos parágrafos e texto
             let auctionType = 'Online';
-            if (fullText.toLowerCase().includes('tomada de pre')) {
+            const fullTextLower = fullText.toLowerCase();
+            if (fullTextLower.includes('tomada de pre') || fullTextLower.includes('tomada de preço')) {
               auctionType = 'Tomada de Preço';
-            } else if (fullText.toLowerCase().includes('mercado balcão') || fullText.toLowerCase().includes('compre já')) {
+            } else if (fullTextLower.includes('mercado balcão') || fullTextLower.includes('compre já')) {
               auctionType = 'Mercado Balcão';
-            } else if (fullText.toLowerCase().includes('presencial')) {
+            } else if (fullTextLower.includes('judicial')) {
+              auctionType = 'Judicial';
+            } else if (fullTextLower.includes('presencial')) {
               auctionType = 'Presencial';
             }
             
@@ -285,11 +350,23 @@ export class SuperbidRealScraper extends BaseScraper {
 
   private parseAuctionDate(dateString: string): Date | undefined {
     try {
-      const match = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      // Formato: "dd/mm - HH:mm" ou "dd/mm/yyyy"
+      const match = dateString.match(/(\d{1,2})\/(\d{1,2})(?:\s*-\s*\d{1,2}:\d{2})?/);
       if (match) {
-        const [, day, month, year] = match;
-        const fullYear = year.length === 2 ? parseInt('20' + year) : parseInt(year);
-        return new Date(fullYear, parseInt(month) - 1, parseInt(day));
+        const [, day, month] = match;
+        const currentYear = new Date().getFullYear();
+        // Assumir ano atual ou próximo se for data futura no próximo ano
+        let year = currentYear;
+        const parsedDay = parseInt(day);
+        const parsedMonth = parseInt(month) - 1;
+        const auctionDate = new Date(year, parsedMonth, parsedDay);
+        
+        // Se a data já passou este ano, pode ser do próximo ano
+        if (auctionDate < new Date()) {
+          year = currentYear + 1;
+        }
+        
+        return new Date(year, parsedMonth, parsedDay);
       }
       return undefined;
     } catch {
