@@ -38,48 +38,68 @@ export class SuperbidRealScraper extends BaseScraper {
         console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
 
         try {
-          await this.page.goto(pageUrl, {
-            waitUntil: 'load',
-            timeout: 60000,
-          });
+          // Tentar navegar com timeout maior e ignorar erros de rede
+          try {
+            await this.page.goto(pageUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: 60000,
+            });
+          } catch (navError: any) {
+            // Se der timeout mas a página carregou parcialmente, continuar
+            if (navError.message.includes('timeout') || navError.name === 'TimeoutError') {
+              console.log(`[${this.auctioneerName}] Timeout na navegação, mas continuando...`);
+            } else {
+              throw navError;
+            }
+          }
+
+          // Aguardar um pouco para página processar
+          await this.randomDelay(2000, 3000);
 
           // Fechar modal de cookies se aparecer
           try {
-            const cookieButtons = await this.page.$$eval('button', (buttons) => {
-              return buttons
-                .filter(btn => {
-                  const text = btn.textContent || '';
-                  return text.includes('Aceitar todos os cookies') || text.includes('Rejeitar todos');
-                })
-                .map(btn => {
-                  const rect = btn.getBoundingClientRect();
-                  return {
-                    visible: rect.width > 0 && rect.height > 0 && rect.top >= 0
-                  };
-                });
-            });
-            
-            if (cookieButtons.length > 0 && cookieButtons[0].visible) {
-              await this.page.evaluate(() => {
-                const buttons = Array.from(document.querySelectorAll('button'));
-                const acceptBtn = buttons.find(btn => {
-                  const text = btn.textContent || '';
-                  return text.includes('Aceitar todos os cookies') || text.includes('Rejeitar todos');
-                });
-                if (acceptBtn) {
-                  (acceptBtn as HTMLElement).click();
-                }
+            await this.page.evaluate(() => {
+              const buttons = Array.from(document.querySelectorAll('button'));
+              const acceptBtn = buttons.find(btn => {
+                const text = btn.textContent || '';
+                return text.includes('Aceitar todos os cookies') || text.includes('Rejeitar todos');
               });
-              await this.randomDelay(1000, 2000);
-            }
+              if (acceptBtn) {
+                (acceptBtn as HTMLElement).click();
+              }
+            });
+            await this.randomDelay(1000, 2000);
           } catch (e) {
             // Modal de cookies não encontrado ou já fechado
           }
 
-          // Aguardar pelo seletor principal
-          await this.page.waitForSelector('a[href^="/oferta/"]', {
-            timeout: 30000
-          });
+          // Aguardar pelo seletor principal com múltiplas tentativas
+          let found = false;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+              await this.page.waitForSelector('a[href^="/oferta/"]', {
+                timeout: 15000
+              });
+              found = true;
+              break;
+            } catch (e) {
+              console.log(`[${this.auctioneerName}] Tentativa ${attempt + 1}/5 de aguardar seletores...`);
+              await this.randomDelay(2000, 3000);
+            }
+          }
+
+          if (!found) {
+            // Verificar se elementos existem mesmo sem waitForSelector
+            const count = await this.page.evaluate(() => {
+              return document.querySelectorAll('a[href^="/oferta/"]').length;
+            });
+            
+            if (count === 0) {
+              throw new Error('Nenhum veículo encontrado na página após múltiplas tentativas');
+            }
+            
+            console.log(`[${this.auctioneerName}] Encontrados ${count} links sem waitForSelector`);
+          }
           
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
           await this.randomDelay(3000, 5000);
