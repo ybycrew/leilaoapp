@@ -275,9 +275,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {filterOptions.states.map(state => (
-                        <SelectItem key={state} value={state}>{state}</SelectItem>
-                      ))}
+                      {filterOptions.states && filterOptions.states.length > 0 ? (
+                        filterOptions.states.map(state => (
+                          <SelectItem key={state} value={state}>{state}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -293,9 +297,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas</SelectItem>
-                        {filterOptions.citiesByState[filters.state].map(city => (
-                          <SelectItem key={city} value={city}>{city}</SelectItem>
-                        ))}
+                        {filterOptions.citiesByState[filters.state] && filterOptions.citiesByState[filters.state].length > 0 ? (
+                          filterOptions.citiesByState[filters.state].map(city => (
+                            <SelectItem key={city} value={city}>{city}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="loading" disabled>Nenhuma cidade disponível</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -341,9 +349,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       <SelectValue placeholder="Adicionar marca" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filterOptions.brands.map(brand => (
-                        <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                      ))}
+                      {filterOptions.brands && filterOptions.brands.length > 0 ? (
+                        filterOptions.brands.map(brand => (
+                          <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>Carregando marcas...</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   {(filters.brand || []).length > 0 && (
@@ -363,63 +375,79 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   )}
                 </div>
 
-                {availableModels.length > 0 && (
-                  <div>
-                    <Label htmlFor="model">Modelo</Label>
-                    <Select
-                      value=""
-                      onValueChange={(value) => {
-                        if (value && !(filters.model || []).includes(value)) {
-                          updateFilter('model', [...(filters.model || []), value]);
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="model">
-                        <SelectValue placeholder="Adicionar modelo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.map(model => (
+                <div>
+                  <Label htmlFor="model">Modelo</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (value && !(filters.model || []).includes(value)) {
+                        updateFilter('model', [...(filters.model || []), value]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="model">
+                      <SelectValue placeholder={availableModels.length > 0 ? "Adicionar modelo" : "Selecione uma marca primeiro"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableModels.length > 0 ? (
+                        availableModels.map(model => (
                           <SelectItem key={model} value={model}>{model}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {(filters.model || []).length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {filters.model?.map(model => (
-                          <Badge key={model} variant="secondary" className="flex items-center gap-1">
-                            {model}
-                            <X
-                              className="h-3 w-3 cursor-pointer"
-                              onClick={() => {
-                                updateFilter('model', filters.model?.filter(m => m !== model));
-                              }}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        ))
+                      ) : filterOptions.models && filterOptions.models.length > 0 ? (
+                        filterOptions.models.slice(0, 100).map(model => (
+                          <SelectItem key={model} value={model}>{model}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>Nenhum modelo disponível</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {(filters.model || []).length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {filters.model?.map(model => (
+                        <Badge key={model} variant="secondary" className="flex items-center gap-1">
+                          {model}
+                          <X
+                            className="h-3 w-3 cursor-pointer"
+                            onClick={() => {
+                              updateFilter('model', filters.model?.filter(m => m !== model));
+                            }}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label htmlFor="minYear">Ano Mínimo</Label>
                     <Input
                       id="minYear"
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="2020"
                       value={filters.minYear || ''}
-                      onChange={(e) => updateFilter('minYear', e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        updateFilter('minYear', value || undefined);
+                      }}
                     />
                   </div>
                   <div>
                     <Label htmlFor="maxYear">Ano Máximo</Label>
                     <Input
                       id="maxYear"
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="2024"
                       value={filters.maxYear || ''}
-                      onChange={(e) => updateFilter('maxYear', e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        updateFilter('maxYear', value || undefined);
+                      }}
                     />
                   </div>
                 </div>
@@ -446,14 +474,16 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                           {fuel}
                         </label>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground">Nenhum combustível disponível</p>
+                    )}
                   </div>
                 </div>
 
                 <div>
                   <Label>Câmbio</Label>
                   <div className="space-y-2 mt-2">
-                    {filterOptions.transmissions.slice(0, 5).map(transmission => (
+                    {filterOptions.transmissions && filterOptions.transmissions.length > 0 ? filterOptions.transmissions.slice(0, 5).map(transmission => (
                       <div key={transmission} className="flex items-center space-x-2">
                         <Checkbox
                           id={`transmission-${transmission}`}
@@ -467,7 +497,9 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                           {transmission}
                         </label>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground">Nenhum câmbio disponível</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -526,9 +558,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       <SelectValue placeholder="Adicionar leiloeiro" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filterOptions.auctioneers.map(auctioneer => (
-                        <SelectItem key={auctioneer} value={auctioneer}>{auctioneer}</SelectItem>
-                      ))}
+                      {filterOptions.auctioneers && filterOptions.auctioneers.length > 0 ? (
+                        filterOptions.auctioneers.map(auctioneer => (
+                          <SelectItem key={auctioneer} value={auctioneer}>{auctioneer}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>Carregando leiloeiros...</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                   {(filters.auctioneer || []).length > 0 && (
@@ -557,20 +593,30 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <Label htmlFor="minPrice">Mínimo</Label>
                   <Input
                     id="minPrice"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder="R$ 0"
                     value={filters.minPrice || ''}
-                    onChange={(e) => updateFilter('minPrice', e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      updateFilter('minPrice', value || undefined);
+                    }}
                   />
                 </div>
                 <div>
                   <Label htmlFor="maxPrice">Máximo</Label>
                   <Input
                     id="maxPrice"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder="R$ 500.000"
                     value={filters.maxPrice || ''}
-                    onChange={(e) => updateFilter('maxPrice', e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      updateFilter('maxPrice', value || undefined);
+                    }}
                   />
                 </div>
               </div>
@@ -640,9 +686,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     <SelectValue placeholder="Adicionar cor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {filterOptions.colors.slice(0, 20).map(color => (
-                      <SelectItem key={color} value={color}>{color}</SelectItem>
-                    ))}
+                    {filterOptions.colors && filterOptions.colors.length > 0 ? (
+                      filterOptions.colors.slice(0, 20).map(color => (
+                        <SelectItem key={color} value={color}>{color}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 {(filters.color || []).length > 0 && (
