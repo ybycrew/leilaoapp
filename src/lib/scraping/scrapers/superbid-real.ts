@@ -434,7 +434,7 @@ export class SuperbidRealScraper extends BaseScraper {
         images: images.length > 0 ? images : undefined
       };
 
-      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title} - ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''} - R$ ${vehicle.current_bid || 'N/A'}`);
+      console.log(`[${this.auctioneerName}] Veículo ${index}: ${vehicle.title.substring(0, 60)} | ${vehicle.brand} ${vehicle.model} ${vehicle.year_manufacture || ''} | R$ ${vehicle.current_bid || 'N/A'} | KM: ${vehicle.mileage || 'N/A'} | Data: ${vehicle.auction_date ? vehicle.auction_date.toLocaleDateString('pt-BR') : 'N/A'} | Tipo: ${vehicle.auction_type}`);
       return vehicle;
 
     } catch (error) {
@@ -489,31 +489,62 @@ export class SuperbidRealScraper extends BaseScraper {
     const titleLower = title.toLowerCase();
     
     const brandPatterns = [
-      /(chevrolet|chev|gm)\s+(\w+)/i,
-      /(ford)\s+(\w+)/i,
-      /(volkswagen|vw)\s+(\w+)/i,
-      /(fiat)\s+(\w+)/i,
-      /(honda)\s+(\w+)/i,
-      /(toyota)\s+(\w+)/i,
-      /(nissan)\s+(\w+)/i,
-      /(hyundai)\s+(\w+)/i,
-      /(peugeot)\s+(\w+)/i,
-      /(renault)\s+(\w+)/i,
-      /(citroën|citroen)\s+(\w+)/i,
-      /(bmw)\s+(\w+)/i,
-      /(mercedes|mercedes-benz)\s+(\w+)/i,
-      /(audi)\s+(\w+)/i,
-      /(volvo)\s+(\w+)/i
+      { pattern: /(chevrolet|chev|gm)\s+(\w+)/i, brandName: 'Chevrolet' },
+      { pattern: /(ford)\s+(\w+)/i, brandName: 'Ford' },
+      { pattern: /(volkswagen|vw|vw\/)\s*(\w+)/i, brandName: 'Volkswagen' },
+      { pattern: /(fiat)\s+(\w+)/i, brandName: 'Fiat' },
+      { pattern: /(honda)\s*\/(\w+)/i, brandName: 'Honda' },
+      { pattern: /(honda)\s+(\w+)/i, brandName: 'Honda' },
+      { pattern: /(toyota)\s+(\w+)/i, brandName: 'Toyota' },
+      { pattern: /(nissan)\s+(\w+)/i, brandName: 'Nissan' },
+      { pattern: /(hyundai)\s+(\w+)/i, brandName: 'Hyundai' },
+      { pattern: /(peugeot)\s+(\w+)/i, brandName: 'Peugeot' },
+      { pattern: /(renault)\s+(\w+)/i, brandName: 'Renault' },
+      { pattern: /(citroën|citroen)\s+(\w+)/i, brandName: 'Citroën' },
+      { pattern: /(bmw)\s+(\w+)/i, brandName: 'BMW' },
+      { pattern: /(mercedes|mercedes-benz|m\.?\s*benz)\s+(\w+)/i, brandName: 'Mercedes-Benz' },
+      { pattern: /(audi)\s+(\w+)/i, brandName: 'Audi' },
+      { pattern: /(volvo)\s+(\w+)/i, brandName: 'Volvo' },
+      { pattern: /(yamaha)\s+(\w+)/i, brandName: 'Yamaha' },
+      { pattern: /(suzuki)\s+(\w+)/i, brandName: 'Suzuki' },
+      { pattern: /(dafra)\s+(\w+)/i, brandName: 'Dafra' },
     ];
 
-    for (const pattern of brandPatterns) {
+    for (const { pattern, brandName } of brandPatterns) {
       const match = title.match(pattern);
       if (match) {
+        const modelPart = match[2] || match[1];
         return {
-          brand: match[1].toUpperCase(),
-          model: match[2].toUpperCase()
+          brand: brandName,
+          model: modelPart.toUpperCase()
         };
       }
+    }
+
+    // Fallback: tentar identificar marca por palavras isoladas
+    if (titleLower.includes('gol') && !titleLower.includes('volkswagen')) {
+      return { brand: 'Volkswagen', model: 'GOL' };
+    }
+    if (titleLower.includes('fox') && !titleLower.includes('volkswagen')) {
+      return { brand: 'Volkswagen', model: 'FOX' };
+    }
+    if (titleLower.includes('uno') && !titleLower.includes('fiat')) {
+      return { brand: 'Fiat', model: 'UNO' };
+    }
+    if (titleLower.includes('palio') && !titleLower.includes('fiat')) {
+      return { brand: 'Fiat', model: 'PALIO' };
+    }
+    if (titleLower.includes('ka') && !titleLower.includes('ford')) {
+      return { brand: 'Ford', model: 'KA' };
+    }
+    if (titleLower.includes('fiesta') && !titleLower.includes('ford')) {
+      return { brand: 'Ford', model: 'FIESTA' };
+    }
+    if (titleLower.includes('corsa') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
+      return { brand: 'Chevrolet', model: 'CORSA' };
+    }
+    if (titleLower.includes('celta') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
+      return { brand: 'Chevrolet', model: 'CELTA' };
     }
 
     return { brand: brand || 'Desconhecida', model: model || 'Desconhecido' };
@@ -564,7 +595,65 @@ export class SuperbidRealScraper extends BaseScraper {
       return false;
     }
     
+    // Filtrar produtos que claramente não são veículos
+    const titleLower = vehicle.title.toLowerCase();
+    const excludeKeywords = [
+      'chave fixa',
+      'anel trava',
+      'molas de tensão',
+      'acessórios para',
+      'produto sem imagem',
+      'lote',
+      'peças',
+      'ferramentas',
+      'equipamentos',
+    ];
+    
+    // Se o título contém palavras que indicam que não é um veículo, filtrar
+    for (const keyword of excludeKeywords) {
+      if (titleLower.includes(keyword) && !this.looksLikeVehicle(titleLower)) {
+        console.log(`[${this.auctioneerName}] Filtrando item que não parece ser veículo: ${vehicle.title.substring(0, 50)}`);
+        return false;
+      }
+    }
+    
+    // Verificar se tem pelo menos uma marca conhecida no título
+    const hasBrand = vehicle.brand && vehicle.brand !== 'Desconhecida';
+    const titleHasBrand = this.titleHasVehicleBrand(vehicle.title);
+    
+    if (!hasBrand && !titleHasBrand) {
+      // Se não tem marca e o título não parece ser de veículo, filtrar
+      if (!this.looksLikeVehicle(titleLower)) {
+        console.log(`[${this.auctioneerName}] Filtrando item sem marca conhecida que não parece veículo: ${vehicle.title.substring(0, 50)}`);
+        return false;
+      }
+    }
+    
     return true;
+  }
+
+  private looksLikeVehicle(title: string): boolean {
+    const vehicleKeywords = [
+      'carro', 'moto', 'veículo', 'automóvel', 'caminhão', 'van', 'ônibus',
+      'chevrolet', 'fiat', 'volkswagen', 'vw', 'ford', 'honda', 'toyota',
+      'hyundai', 'nissan', 'renault', 'jeep', 'peugeot', 'citroën', 'bmw',
+      'mercedes', 'audi', 'volvo', 'gm', 'yamaha', 'suzuki', 'kawasaki',
+      'ano', 'modelo', 'km', 'quilometragem', 'placa', 'cor', 'combustível'
+    ];
+    
+    return vehicleKeywords.some(keyword => title.includes(keyword));
+  }
+
+  private titleHasVehicleBrand(title: string): boolean {
+    const brands = [
+      'chevrolet', 'fiat', 'volkswagen', 'vw', 'ford', 'honda', 'toyota',
+      'hyundai', 'nissan', 'renault', 'jeep', 'peugeot', 'citroën', 'citroen',
+      'bmw', 'mercedes', 'audi', 'volvo', 'gm', 'yamaha', 'suzuki', 'dafra',
+      'ka', 'gol', 'fox', 'uno', 'palio', 'corsa', 'celta', 'fiesta'
+    ];
+    
+    const titleLower = title.toLowerCase();
+    return brands.some(brand => titleLower.includes(brand));
   }
 
   private isDuplicatePage(currentTitles: string[], seenTitles: Set<string>): boolean {
