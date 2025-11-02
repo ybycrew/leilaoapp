@@ -460,21 +460,23 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                 <div>
                   <Label>Combustível</Label>
                   <div className="space-y-2 mt-2">
-                    {filterOptions.fuels.slice(0, 10).map(fuel => (
-                      <div key={fuel} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`fuel-${fuel}`}
-                          checked={(filters.fuelType || []).includes(fuel)}
-                          onCheckedChange={() => toggleArrayFilter('fuelType', fuel)}
-                        />
-                        <label
-                          htmlFor={`fuel-${fuel}`}
-                          className="text-sm font-medium leading-none cursor-pointer"
-                        >
-                          {fuel}
-                        </label>
-                      </div>
-                    )) : (
+                    {filterOptions.fuels && filterOptions.fuels.length > 0 ? (
+                      filterOptions.fuels.slice(0, 10).map(fuel => (
+                        <div key={fuel} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`fuel-${fuel}`}
+                            checked={(filters.fuelType || []).includes(fuel)}
+                            onCheckedChange={() => toggleArrayFilter('fuelType', fuel)}
+                          />
+                          <label
+                            htmlFor={`fuel-${fuel}`}
+                            className="text-sm font-medium leading-none cursor-pointer"
+                          >
+                            {fuel}
+                          </label>
+                        </div>
+                      ))
+                    ) : (
                       <p className="text-sm text-muted-foreground">Nenhum combustível disponível</p>
                     )}
                   </div>
