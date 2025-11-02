@@ -81,6 +81,12 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
+  // Sincronizar com currentFilters quando mudarem
+  useEffect(() => {
+    setFilters(currentFilters);
+    setSelectedModels(currentFilters.model || []);
+  }, [currentFilters]);
+
   // Quando a marca muda, buscar modelos
   useEffect(() => {
     const selectedBrands = filters.brand || [];
@@ -91,9 +97,14 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       ).then(modelArrays => {
         const allModels = new Set<string>();
         modelArrays.forEach(models => {
-          models.forEach(model => allModels.add(model));
+          if (Array.isArray(models)) {
+            models.forEach(model => allModels.add(model));
+          }
         });
         setAvailableModels(Array.from(allModels).sort());
+      }).catch(error => {
+        console.error('Erro ao buscar modelos:', error);
+        setAvailableModels([]);
       });
     } else {
       setAvailableModels([]);

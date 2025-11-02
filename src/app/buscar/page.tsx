@@ -121,7 +121,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
                 <Input 
                   name="q"
                   defaultValue={params.q}
-                  placeholder="Buscar veÃ­culos..." 
+                  placeholder="Buscar veículos..." 
                   className="pl-10"
                 />
               </div>
@@ -133,7 +133,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
       <div className="container mx-auto px-4 py-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-            Erro ao buscar veÃ­culos: {error}
+            Erro ao buscar veículos: {error}
           </div>
         )}
 
@@ -146,19 +146,14 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <VehicleFilters 
-              filterOptions={filterOptions}
-              currentFilters={normalizedFilters}
-            />
-
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">
-                  Mostrando <strong>{total} veÃ­culos</strong>
+                  Mostrando <strong>{total} veículos</strong>
                   {params.q && ` para "${params.q}"`}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {stats.totalVehicles} veÃ­culos no total â€¢ {stats.totalBrands} marcas
+                  {stats.totalVehicles} veículos no total • {stats.totalBrands} marcas
                 </p>
               </div>
               <SortSelect defaultValue={params.orderBy} />
@@ -166,9 +161,9 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
 
             {vehicles.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">Nenhum veÃ­culo encontrado.</p>
+                <p className="text-muted-foreground">Nenhum veículo encontrado.</p>
                 <Link href="/buscar">
-                  <Button className="mt-4">Ver todos os veÃ­culos</Button>
+                  <Button className="mt-4">Ver todos os veículos</Button>
                 </Link>
               </div>
             ) : (
@@ -213,7 +208,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
                         {vehicle.auction_date && (
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            <span>LeilÃ£o: {new Date(vehicle.auction_date).toLocaleDateString('pt-BR')}</span>
+                            <span>Leilão: {new Date(vehicle.auction_date).toLocaleDateString('pt-BR')}</span>
                           </div>
                         )}
                         {vehicle.mileage && (
@@ -245,7 +240,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          <Button size="sm">Ver LeilÃ£o</Button>
+                          <Button size="sm">Ver Leilão</Button>
                         </a>
                       </div>
 
