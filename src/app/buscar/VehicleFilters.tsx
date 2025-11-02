@@ -266,7 +266,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <Select
                     value={filters.state || ''}
                     onValueChange={(value) => {
-                      updateFilter('state', value);
+                      updateFilter('state', value === 'all' ? undefined : value);
                       updateFilter('city', undefined); // Reset cidade ao mudar estado
                     }}
                   >
@@ -274,7 +274,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       <SelectValue placeholder="Selecione o estado" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todos</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
                       {filterOptions.states.map(state => (
                         <SelectItem key={state} value={state}>{state}</SelectItem>
                       ))}
@@ -286,13 +286,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     <Label htmlFor="city">Cidade</Label>
                     <Select
                       value={filters.city || ''}
-                      onValueChange={(value) => updateFilter('city', value)}
+                      onValueChange={(value) => updateFilter('city', value === 'all' ? undefined : value)}
                     >
                       <SelectTrigger id="city">
                         <SelectValue placeholder="Selecione a cidade" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todas</SelectItem>
+                        <SelectItem value="all">Todas</SelectItem>
                         {filterOptions.citiesByState[filters.state].map(city => (
                           <SelectItem key={city} value={city}>{city}</SelectItem>
                         ))}
