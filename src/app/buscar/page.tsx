@@ -10,6 +10,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -139,10 +140,12 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
 
         <div className="flex gap-6">
           <aside className="hidden md:block flex-shrink-0">
-            <VehicleFilters 
-              filterOptions={filterOptions}
-              currentFilters={normalizedFilters}
-            />
+            <Suspense fallback={<div className="text-sm text-muted-foreground">Carregando filtros...</div>}>
+              <VehicleFilters 
+                filterOptions={filterOptions}
+                currentFilters={normalizedFilters}
+              />
+            </Suspense>
           </aside>
 
           <div className="flex-1 min-w-0">
