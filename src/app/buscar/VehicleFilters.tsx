@@ -76,15 +76,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [isPending, startTransition] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
 
-  // Estado dos filtros
-  const [filters, setFilters] = useState(currentFilters);
+  // Estado dos filtros - garantir que não seja undefined
+  const [filters, setFilters] = useState(currentFilters || {});
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   // Sincronizar com currentFilters quando mudarem
   useEffect(() => {
-    setFilters(currentFilters);
-    setSelectedModels(currentFilters.model || []);
+    if (currentFilters) {
+      setFilters(currentFilters);
+      setSelectedModels(currentFilters.model || []);
+    }
   }, [currentFilters]);
 
   // Quando a marca muda, buscar modelos
