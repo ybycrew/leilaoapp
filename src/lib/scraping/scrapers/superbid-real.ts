@@ -262,6 +262,13 @@ export class SuperbidRealScraper extends BaseScraper {
             
             if (!title || title.length < 5) return;
             
+            // Filtrar títulos que são claramente ícones ou elementos não-veículos
+            const titleLower = title.toLowerCase();
+            if (titleLower.includes('ícone') || titleLower.includes('icone') || 
+                titleLower.includes('cartão de crédito') || titleLower.includes('cartao de credito')) {
+              return; // Pular este card
+            }
+            
             // Extrair link - pode ser absoluto (exchange.superbid.net) ou relativo
             const href = card.getAttribute('href') || '';
             let detailUrl = href;
@@ -488,35 +495,104 @@ export class SuperbidRealScraper extends BaseScraper {
     const { brand, model } = extractBrandAndModel(title);
     const titleLower = title.toLowerCase();
     
+    // Casos especiais primeiro
+    // Porsche
+    if (title.match(/i\/?porsche|porsche/i)) {
+      const match = title.match(/(?:i\/)?porsche\s+(\w+)/i);
+      if (match) return { brand: 'Porsche', model: match[1].toUpperCase() };
+    }
+    
+    // Land Rover / LR
+    if (title.match(/i\/?lr|land\s*rover|lr\s*rrs/i)) {
+      const match = title.match(/(?:i\/)?lr\s*rrs\s*(\w+)/i);
+      if (match) return { brand: 'Land Rover', model: 'RANGE ROVER SPORT' };
+      if (title.match(/land\s*rover/i)) return { brand: 'Land Rover', model: 'RANGE ROVER' };
+    }
+    
+    // Audi Q5, Q7, etc
+    if (title.match(/^q\d+|audi\s+q\d+/i)) {
+      const match = title.match(/(q\d+)/i);
+      if (match) return { brand: 'Audi', model: match[1].toUpperCase() };
+    }
+    
+    // Ford F-250, F-350 (precisa estar no início ou após espaço/barra)
+    if (title.match(/\bf-?\d+/i)) {
+      const match = title.match(/\b(f-?\d+)/i);
+      if (match && !titleLower.includes('ford')) {
+        return { brand: 'Ford', model: match[1].toUpperCase() };
+      }
+    }
+    
+    // RAM/RAMPAGE ou RAM 1500
+    if (title.match(/ram\/?rampage|ram\s+rampage/i)) {
+      const match = title.match(/ram\/?rampage\s+(\w+)/i);
+      if (match) return { brand: 'RAM', model: match[1].toUpperCase() };
+      return { brand: 'RAM', model: 'RAMPAGE' };
+    }
+    if (title.match(/\bram\s+1500/i)) {
+      return { brand: 'RAM', model: '1500' };
+    }
+    
+    // IVECO
+    if (title.match(/iveco/i)) {
+      const match = title.match(/iveco\s+(\w+)/i);
+      if (match) return { brand: 'Iveco', model: match[1].toUpperCase() };
+    }
+    
+    // SCANIA
+    if (title.match(/scania/i)) {
+      const match = title.match(/scania\/?\s*([a-z0-9]+)/i);
+      if (match) return { brand: 'Scania', model: match[1].toUpperCase() };
+    }
+    
     const brandPatterns = [
       { pattern: /(chevrolet|chev|gm)\s+(\w+)/i, brandName: 'Chevrolet' },
       { pattern: /(ford)\s+(\w+)/i, brandName: 'Ford' },
       { pattern: /(volkswagen|vw|vw\/)\s*(\w+)/i, brandName: 'Volkswagen' },
       { pattern: /(fiat)\s+(\w+)/i, brandName: 'Fiat' },
-      { pattern: /(honda)\s*\/(\w+)/i, brandName: 'Honda' },
-      { pattern: /(honda)\s+(\w+)/i, brandName: 'Honda' },
+      { pattern: /(honda)\s*\/(\w+(?:-?\w+)?)/i, brandName: 'Honda' }, // Melhor para HR-V, CG-125
+      { pattern: /(honda)\s+(\w+(?:\s+\w+)?)/i, brandName: 'Honda' },
+      { pattern: /(toyota)\s*\/(.*?modelo:\s*)?(\w+)/i, brandName: 'Toyota' }, // Para "TOYOTA / Modelo: COROLLA"
       { pattern: /(toyota)\s+(\w+)/i, brandName: 'Toyota' },
+      { pattern: /(nissan)\s*\/(\w+)/i, brandName: 'Nissan' },
       { pattern: /(nissan)\s+(\w+)/i, brandName: 'Nissan' },
       { pattern: /(hyundai)\s+(\w+)/i, brandName: 'Hyundai' },
       { pattern: /(peugeot)\s+(\w+)/i, brandName: 'Peugeot' },
       { pattern: /(renault)\s+(\w+)/i, brandName: 'Renault' },
       { pattern: /(citroën|citroen)\s+(\w+)/i, brandName: 'Citroën' },
-      { pattern: /(bmw)\s+(\w+)/i, brandName: 'BMW' },
+      { pattern: /(bmw)\s+(\w+(?:\s+\w+)?)/i, brandName: 'BMW' }, // Para "BMW M135I" ou "BMW X6"
       { pattern: /(mercedes|mercedes-benz|m\.?\s*benz)\s+(\w+)/i, brandName: 'Mercedes-Benz' },
       { pattern: /(audi)\s+(\w+)/i, brandName: 'Audi' },
       { pattern: /(volvo)\s+(\w+)/i, brandName: 'Volvo' },
       { pattern: /(yamaha)\s+(\w+)/i, brandName: 'Yamaha' },
       { pattern: /(suzuki)\s+(\w+)/i, brandName: 'Suzuki' },
       { pattern: /(dafra)\s+(\w+)/i, brandName: 'Dafra' },
+      { pattern: /(jeep)\s+(\w+)/i, brandName: 'Jeep' },
+      { pattern: /(mini)\s+(\w+)/i, brandName: 'MINI' },
     ];
 
     for (const { pattern, brandName } of brandPatterns) {
       const match = title.match(pattern);
       if (match) {
-        const modelPart = match[2] || match[1];
+        // Pegar o último grupo capturado (que geralmente é o modelo)
+        const modelPart = match[match.length - 1] || match[1];
+        
+        // Limpar modelo - remover partes desnecessárias
+        let cleanModel = modelPart
+          .replace(/\s*modelo:\s*/i, '')
+          .replace(/\s*\/.*$/, '') // Remove tudo após barra
+          .replace(/\s*ano.*$/i, '') // Remove "ano 2020"
+          .trim();
+        
+        // Limitar tamanho do modelo (geralmente não passa de 3-4 palavras)
+        const modelWords = cleanModel.split(/\s+/);
+        if (modelWords.length > 4) {
+          cleanModel = modelWords.slice(0, 4).join(' ');
+        }
+        
         return {
           brand: brandName,
-          model: modelPart.toUpperCase()
+          model: cleanModel.toUpperCase() || 'Desconhecido'
         };
       }
     }
@@ -597,17 +673,35 @@ export class SuperbidRealScraper extends BaseScraper {
     
     // Filtrar produtos que claramente não são veículos
     const titleLower = vehicle.title.toLowerCase();
+    
+    // Filtrar ícones e elementos de interface
+    if (titleLower.includes('ícone') || titleLower.includes('icone') || 
+        titleLower === 'cartão de crédito' || titleLower === 'cartao de credito' ||
+        titleLower.includes('ícone cartão')) {
+      console.log(`[${this.auctioneerName}] Filtrando ícone/elemento de interface: ${vehicle.title.substring(0, 50)}`);
+      return false;
+    }
+    
     const excludeKeywords = [
       'chave fixa',
       'anel trava',
       'molas de tensão',
       'acessórios para',
       'produto sem imagem',
-      'lote',
+      'linha de produção', // Excluir "LOTE 37 LINHA DE PRODUÇÃO DE MOTOS"
       'peças',
       'ferramentas',
       'equipamentos',
     ];
+    
+    // Filtrar "LOTE" mas só se não parecer veículo (ex: "LOTE 0119: GM/CELTA" deve passar)
+    if (titleLower.includes('lote') && !this.looksLikeVehicle(titleLower)) {
+      // Se tem "lote" mas não parece veículo, filtrar
+      if (!titleLower.match(/(chevrolet|fiat|volkswagen|vw|ford|honda|toyota|gm|carro|moto|veículo)/i)) {
+        console.log(`[${this.auctioneerName}] Filtrando item com 'lote' que não parece veículo: ${vehicle.title.substring(0, 50)}`);
+        return false;
+      }
+    }
     
     // Se o título contém palavras que indicam que não é um veículo, filtrar
     for (const keyword of excludeKeywords) {
