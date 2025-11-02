@@ -131,6 +131,13 @@ export async function getFilterOptions() {
   const supabase = await createClient();
 
   try {
+    // DIAGNÓSTICO: Verificar quantos veículos existem na tabela
+    const { count: totalCount } = await supabase
+      .from('vehicles')
+      .select('*', { count: 'exact', head: true });
+    
+    console.log(`[getFilterOptions] Total de veículos na tabela: ${totalCount}`);
+
     // Buscar marcas
     const { data: brandsData, error: brandsError } = await supabase
       .from('vehicles')
@@ -138,7 +145,12 @@ export async function getFilterOptions() {
       .not('marca', 'is', null);
 
     if (brandsError) {
-      console.error('Erro ao buscar marcas:', brandsError);
+      console.error('[getFilterOptions] Erro ao buscar marcas:', brandsError);
+    } else {
+      console.log(`[getFilterOptions] Marcas encontradas (raw):`, brandsData?.length || 0);
+      if (brandsData && brandsData.length > 0) {
+        console.log(`[getFilterOptions] Primeiras 5 marcas:`, brandsData.slice(0, 5).map(v => v.marca));
+      }
     }
 
     const brands = Array.from(
@@ -149,6 +161,8 @@ export async function getFilterOptions() {
       )
     ).sort();
 
+    console.log(`[getFilterOptions] Marcas únicas após filtro:`, brands.length);
+
     // Buscar modelos
     const { data: modelsData, error: modelsError } = await supabase
       .from('vehicles')
@@ -156,7 +170,9 @@ export async function getFilterOptions() {
       .not('modelo', 'is', null);
 
     if (modelsError) {
-      console.error('Erro ao buscar modelos:', modelsError);
+      console.error('[getFilterOptions] Erro ao buscar modelos:', modelsError);
+    } else {
+      console.log(`[getFilterOptions] Modelos encontrados (raw):`, modelsData?.length || 0);
     }
 
     const models = Array.from(
@@ -174,7 +190,9 @@ export async function getFilterOptions() {
       .not('estado', 'is', null);
 
     if (statesError) {
-      console.error('Erro ao buscar estados:', statesError);
+      console.error('[getFilterOptions] Erro ao buscar estados:', statesError);
+    } else {
+      console.log(`[getFilterOptions] Estados encontrados (raw):`, statesData?.length || 0);
     }
 
     const states = Array.from(

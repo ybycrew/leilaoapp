@@ -108,14 +108,14 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
   const stats = await getVehicleStats();
   const filterOptions = await getFilterOptions();
   
-  // Log para debug (remover em produção)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('Filter options:', {
-      brandsCount: filterOptions.brands.length,
-      modelsCount: filterOptions.models.length,
-      statesCount: filterOptions.states.length,
-    });
-  }
+  // Log detalhado para debug
+  console.log('[BuscarPage] Filter options recebidos:', {
+    brandsCount: filterOptions.brands.length,
+    modelsCount: filterOptions.models.length,
+    statesCount: filterOptions.states.length,
+    brands: filterOptions.brands.slice(0, 5),
+    states: filterOptions.states.slice(0, 5),
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
