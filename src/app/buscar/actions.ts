@@ -131,38 +131,73 @@ export async function getFilterOptions() {
   const supabase = await createClient();
 
   try {
-    const { data: brandsData } = await supabase
+    // Buscar marcas
+    const { data: brandsData, error: brandsError } = await supabase
       .from('vehicles')
       .select('marca')
       .not('marca', 'is', null);
 
-    const brands = Array.from(new Set(brandsData?.map(v => v.marca).filter(Boolean) || []))
-      .sort();
+    if (brandsError) {
+      console.error('Erro ao buscar marcas:', brandsError);
+    }
 
-    const { data: modelsData } = await supabase
+    const brands = Array.from(
+      new Set(
+        brandsData
+          ?.map(v => v.marca)
+          .filter((marca): marca is string => Boolean(marca && marca.trim() !== '')) || []
+      )
+    ).sort();
+
+    // Buscar modelos
+    const { data: modelsData, error: modelsError } = await supabase
       .from('vehicles')
       .select('modelo')
       .not('modelo', 'is', null);
 
-    const models = Array.from(new Set(modelsData?.map(v => v.modelo).filter(Boolean) || []))
-      .sort();
+    if (modelsError) {
+      console.error('Erro ao buscar modelos:', modelsError);
+    }
 
-    const { data: statesData } = await supabase
+    const models = Array.from(
+      new Set(
+        modelsData
+          ?.map(v => v.modelo)
+          .filter((modelo): modelo is string => Boolean(modelo && modelo.trim() !== '')) || []
+      )
+    ).sort();
+
+    // Buscar estados
+    const { data: statesData, error: statesError } = await supabase
       .from('vehicles')
       .select('estado')
       .not('estado', 'is', null);
 
-    const states = Array.from(new Set(statesData?.map(v => v.estado).filter(Boolean) || []))
-      .sort();
+    if (statesError) {
+      console.error('Erro ao buscar estados:', statesError);
+    }
 
-    const { data: citiesData } = await supabase
+    const states = Array.from(
+      new Set(
+        statesData
+          ?.map(v => v.estado)
+          .filter((estado): estado is string => Boolean(estado && estado.trim() !== '')) || []
+      )
+    ).sort();
+
+    // Buscar cidades por estado
+    const { data: citiesData, error: citiesError } = await supabase
       .from('vehicles')
       .select('cidade, estado')
       .not('cidade', 'is', null);
 
+    if (citiesError) {
+      console.error('Erro ao buscar cidades:', citiesError);
+    }
+
     const citiesByState: Record<string, string[]> = {};
     citiesData?.forEach(v => {
-      if (v.cidade && v.estado) {
+      if (v.cidade && v.cidade.trim() !== '' && v.estado && v.estado.trim() !== '') {
         if (!citiesByState[v.estado]) {
           citiesByState[v.estado] = [];
         }
@@ -176,37 +211,92 @@ export async function getFilterOptions() {
       citiesByState[state].sort();
     });
 
-    const { data: auctioneersData } = await supabase
-      .from('vehicles')
-      .select('leiloeiro')
-      .not('leiloeiro', 'is', null);
+    // Buscar leiloeiros (pode não existir a coluna)
+    let auctioneers: string[] = [];
+    try {
+      const { data: auctioneersData, error: auctioneersError } = await supabase
+        .from('vehicles')
+        .select('leiloeiro')
+        .not('leiloeiro', 'is', null);
 
-    const auctioneers = Array.from(new Set(auctioneersData?.map(v => v.leiloeiro).filter(Boolean) || []))
-      .sort();
+      if (auctioneersError) {
+        console.warn('Erro ao buscar leiloeiros (coluna pode não existir):', auctioneersError);
+      } else {
+        auctioneers = Array.from(
+          new Set(
+            auctioneersData
+              ?.map(v => v.leiloeiro)
+              .filter((leiloeiro): leiloeiro is string => Boolean(leiloeiro && leiloeiro.trim() !== '')) || []
+          )
+        ).sort();
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar leiloeiros:', err);
+    }
 
-    const { data: fuelData } = await supabase
+    // Buscar combustíveis
+    const { data: fuelData, error: fuelError } = await supabase
       .from('vehicles')
       .select('combustivel')
       .not('combustivel', 'is', null);
 
-    const fuels = Array.from(new Set(fuelData?.map(v => v.combustivel).filter(Boolean) || []))
-      .sort();
+    if (fuelError) {
+      console.error('Erro ao buscar combustíveis:', fuelError);
+    }
 
-    const { data: transmissionData } = await supabase
+    const fuels = Array.from(
+      new Set(
+        fuelData
+          ?.map(v => v.combustivel)
+          .filter((combustivel): combustivel is string => Boolean(combustivel && combustivel.trim() !== '')) || []
+      )
+    ).sort();
+
+    // Buscar transmissões (cambio)
+    const { data: transmissionData, error: transmissionError } = await supabase
       .from('vehicles')
       .select('cambio')
       .not('cambio', 'is', null);
 
-    const transmissions = Array.from(new Set(transmissionData?.map(v => v.cambio).filter(Boolean) || []))
-      .sort();
+    if (transmissionError) {
+      console.error('Erro ao buscar transmissões:', transmissionError);
+    }
 
-    const { data: colorsData } = await supabase
+    const transmissions = Array.from(
+      new Set(
+        transmissionData
+          ?.map(v => v.cambio)
+          .filter((cambio): cambio is string => Boolean(cambio && cambio.trim() !== '')) || []
+      )
+    ).sort();
+
+    // Buscar cores
+    const { data: colorsData, error: colorsError } = await supabase
       .from('vehicles')
       .select('cor')
       .not('cor', 'is', null);
 
-    const colors = Array.from(new Set(colorsData?.map(v => v.cor).filter(Boolean) || []))
-      .sort();
+    if (colorsError) {
+      console.error('Erro ao buscar cores:', colorsError);
+    }
+
+    const colors = Array.from(
+      new Set(
+        colorsData
+          ?.map(v => v.cor)
+          .filter((cor): cor is string => Boolean(cor && cor.trim() !== '')) || []
+      )
+    ).sort();
+
+    console.log('Filter options loaded:', {
+      brands: brands.length,
+      models: models.length,
+      states: states.length,
+      fuels: fuels.length,
+      transmissions: transmissions.length,
+      colors: colors.length,
+      auctioneers: auctioneers.length,
+    });
 
     return {
       brands,
@@ -219,7 +309,7 @@ export async function getFilterOptions() {
       colors,
     };
   } catch (error) {
-    console.error('Erro ao buscar opÃ§Ãµes de filtro:', error);
+    console.error('Erro geral ao buscar opções de filtro:', error);
     return {
       brands: [],
       models: [],

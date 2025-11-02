@@ -275,12 +275,14 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      {filterOptions.states && filterOptions.states.length > 0 ? (
+                      {!filterOptions || !filterOptions.states ? (
+                        <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
+                      ) : filterOptions.states.length > 0 ? (
                         filterOptions.states.map(state => (
                           <SelectItem key={state} value={state}>{state}</SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
+                        <SelectItem value="empty" disabled>Nenhum estado disponível</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -349,12 +351,14 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       <SelectValue placeholder="Adicionar marca" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filterOptions.brands && filterOptions.brands.length > 0 ? (
+                      {!filterOptions || !filterOptions.brands ? (
+                        <SelectItem value="loading" disabled>Carregando marcas...</SelectItem>
+                      ) : filterOptions.brands.length > 0 ? (
                         filterOptions.brands.map(brand => (
                           <SelectItem key={brand} value={brand}>{brand}</SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="loading" disabled>Carregando marcas...</SelectItem>
+                        <SelectItem value="empty" disabled>Nenhuma marca disponível</SelectItem>
                       )}
                     </SelectContent>
                   </Select>

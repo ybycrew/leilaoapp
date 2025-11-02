@@ -203,7 +203,7 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     // 3. Processar cada veículo
     for (const vehicleData of vehicles) {
       try {
-        const { created, updated } = await processVehicle(vehicleData, auctioneerId);
+        const { created, updated } = await processVehicle(vehicleData, auctioneerId, auctioneerName);
         
         if (created) result.vehiclesCreated++;
         if (updated) result.vehiclesUpdated++;
@@ -239,7 +239,8 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
  */
 async function processVehicle(
   vehicleData: VehicleData,
-  auctioneerId: string
+  auctioneerId: string,
+  auctioneerName: string
 ): Promise<{ created: boolean; updated: boolean }> {
   // 1. Buscar preço FIPE (DESABILITADO TEMPORARIAMENTE - API com rate limit 429)
   let fipePrice: number | undefined;
@@ -277,69 +278,229 @@ async function processVehicle(
     hasFinancing: vehicleData.has_financing || false,
   });
 
-  // 4. Preparar dados para salvar
-  const vehicleToSave = {
-    auctioneer_id: auctioneerId,
-    external_id: vehicleData.external_id,
-    lot_number: vehicleData.lot_number,
-    title: vehicleData.title,
-    description: vehicleData.title, // Pode ser melhorado
-    brand: vehicleData.brand,
-    model: vehicleData.model,
-    version: vehicleData.version,
-    year_manufacture: vehicleData.year_manufacture,
-    year_model: vehicleData.year_model,
-    vehicle_type: vehicleData.vehicle_type,
-    color: vehicleData.color,
-    fuel_type: vehicleData.fuel_type,
-    transmission: vehicleData.transmission,
-    mileage: vehicleData.mileage,
-    license_plate: vehicleData.license_plate,
-    state: vehicleData.state,
-    city: vehicleData.city,
-    current_bid: vehicleData.current_bid,
-    minimum_bid: vehicleData.minimum_bid,
-    appraised_value: vehicleData.appraised_value,
-    fipe_price: fipePrice,
-    fipe_code: fipeCode,
-    fipe_discount_percentage: fipeDiscountPercentage,
-    auction_date: vehicleData.auction_date?.toISOString(),
-    auction_type: vehicleData.auction_type,
-    auction_status: 'scheduled',
-    has_financing: vehicleData.has_financing,
-    accepts_financing: false,
-    condition: vehicleData.condition,
-    deal_score: dealScore,
-    original_url: vehicleData.original_url,
-    thumbnail_url: vehicleData.thumbnail_url,
-    is_active: true,
-    scraped_at: new Date().toISOString(),
+  // 4. Extrair URL base do leiloeiro para leiloeiro_url
+  const leiloeiroUrl = vehicleData.original_url 
+    ? new URL(vehicleData.original_url).origin 
+    : '';
+
+  // 5. Normalizar tipo de leilão para valores aceitos pelo schema
+  const normalizeAuctionType = (type?: string): 'online' | 'presencial' | 'hibrido' => {
+    if (!type) return 'online';
+    const typeLower = type.toLowerCase();
+    if (typeLower.includes('presencial')) return 'presencial';
+    if (typeLower.includes('hibrido') || typeLower.includes('híbrido')) return 'hibrido';
+    return 'online';
   };
 
-  // 5. Inserir ou atualizar no banco (UPSERT)
-  const { data, error } = await supabase
-    .from('vehicles')
-    .upsert(vehicleToSave, {
-      onConflict: 'auctioneer_id,external_id',
-      ignoreDuplicates: false,
-    })
-    .select('id')
-    .single();
+  // 6. Normalizar tipo de veículo para valores aceitos pelo schema
+  const normalizeVehicleType = (type?: string): 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' => {
+    if (!type) return 'carro';
+    const typeLower = type.toLowerCase();
+    if (typeLower.includes('moto')) return 'moto';
+    if (typeLower.includes('caminhao') || typeLower.includes('caminhão')) return 'caminhao';
+    if (typeLower.includes('van')) return 'van';
+    return 'carro';
+  };
 
-  if (error) {
-    throw new Error(`Erro ao salvar veículo: ${error.message}`);
+  // 7. Preparar dados para salvar - MAPEAMENTO CORRETO PARA PORTUGUÊS
+  // Nota: Alguns campos podem não existir na tabela, então tentamos incluí-los
+  // Se falhar no insert, podemos removê-los e tentar novamente
+  const vehicleToSave: any = {
+    // Campos obrigatórios do schema (tentar incluir mesmo se não existir)
+    titulo: vehicleData.title,
+    
+    // Campos do leiloeiro (podem não existir em todas as versões do schema)
+    // Tentamos incluí-los e, se falhar, removemos no catch
+    leiloeiro: auctioneerName,
+    leiloeiro_url: leiloeiroUrl,
+    
+    // Dados do veículo (português conforme schema)
+    marca: vehicleData.brand || null,
+    modelo: vehicleData.model || null,
+    ano: vehicleData.year_model || vehicleData.year_manufacture || null,
+    ano_modelo: vehicleData.year_model || null,
+    tipo_veiculo: normalizeVehicleType(vehicleData.vehicle_type),
+    cor: vehicleData.color || null,
+    combustivel: vehicleData.fuel_type || null,
+    cambio: vehicleData.transmission || null,
+    km: vehicleData.mileage || null,
+    
+    // Localização
+    estado: vehicleData.state || 'SP',
+    cidade: vehicleData.city || 'São Paulo',
+    
+    // Preços
+    preco_inicial: vehicleData.minimum_bid || vehicleData.current_bid || 0,
+    preco_atual: vehicleData.current_bid || 0,
+    
+    // Leilão
+    tipo_leilao: normalizeAuctionType(vehicleData.auction_type),
+    aceita_financiamento: vehicleData.has_financing || false,
+    data_leilao: vehicleData.auction_date?.toISOString() || null,
+    
+    // FIPE e Score
+    fipe_preco: fipePrice || null,
+    fipe_codigo: fipeCode || null,
+    deal_score: dealScore,
+    
+    // Descrição e imagens
+    descricao: vehicleData.title, // Pode ser melhorado depois com scraping de detalhes
+    imagens: vehicleData.images && vehicleData.images.length > 0 ? vehicleData.images : [],
+    
+    // Campo para UPSERT (evitar duplicatas)
+    external_id: vehicleData.external_id || null,
+  };
+
+  // 8. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
+  let existingVehicleId: string | null = null;
+  let isUpdate = false;
+  
+  if (vehicleData.external_id) {
+    try {
+      // Tentar primeiro usando leiloeiro + external_id (se a coluna existir)
+      const { data: existing, error: queryError } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('leiloeiro', auctioneerName)
+        .eq('external_id', vehicleData.external_id)
+        .maybeSingle();
+      
+      if (queryError) {
+        // Se falhar, pode ser que a coluna leiloeiro não exista
+        // Tentar apenas com external_id
+        console.warn(`[${auctioneerName}] Coluna leiloeiro não encontrada, usando apenas external_id:`, queryError.message);
+        const { data: existingAlt } = await supabase
+          .from('vehicles')
+          .select('id')
+          .eq('external_id', vehicleData.external_id)
+          .maybeSingle();
+        
+        if (existingAlt) {
+          existingVehicleId = existingAlt.id;
+          isUpdate = true;
+        }
+      } else if (existing) {
+        existingVehicleId = existing.id;
+        isUpdate = true;
+      }
+    } catch (err: any) {
+      // Se houver qualquer erro, tentar apenas com external_id
+      console.warn(`[${auctioneerName}] Erro ao verificar veículo existente, usando apenas external_id:`, err.message);
+      const { data: existingAlt } = await supabase
+        .from('vehicles')
+        .select('id')
+        .eq('external_id', vehicleData.external_id)
+        .maybeSingle();
+      
+      if (existingAlt) {
+        existingVehicleId = existingAlt.id;
+        isUpdate = true;
+      }
+    }
   }
 
-  const vehicleId = data.id;
-
-  // 6. Salvar imagens (se houver)
-  if (vehicleData.images && vehicleData.images.length > 0) {
-    await saveVehicleImages(vehicleId, vehicleData.images);
+  // 9. Inserir ou atualizar no banco
+  let vehicleId: string;
+  
+  if (isUpdate && existingVehicleId) {
+    // Atualizar veículo existente
+    let data, error;
+    
+    const updateResult = await supabase
+      .from('vehicles')
+      .update(vehicleToSave)
+      .eq('id', existingVehicleId)
+      .select('id')
+      .single();
+    
+    data = updateResult.data;
+    error = updateResult.error;
+    
+    // Se falhar por causa de campos que não existem, remover campos opcionais e tentar novamente
+    if (error && (error.message.includes('does not exist') || error.message.includes('column'))) {
+      console.warn(`[${auctioneerName}] Tentando atualizar sem campos opcionais:`, error.message);
+      
+      // Remover campos que podem não existir
+      const vehicleToSaveMinimal = { ...vehicleToSave };
+      delete vehicleToSaveMinimal.leiloeiro;
+      delete vehicleToSaveMinimal.leiloeiro_url;
+      
+      const retryResult = await supabase
+        .from('vehicles')
+        .update(vehicleToSaveMinimal)
+        .eq('id', existingVehicleId)
+        .select('id')
+        .single();
+      
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+    
+    if (error) {
+      throw new Error(`Erro ao atualizar veículo: ${error.message}`);
+    }
+    
+    if (!data) {
+      throw new Error('Erro ao atualizar veículo: nenhum dado retornado');
+    }
+    
+    vehicleId = data.id;
+  } else {
+    // Inserir novo veículo
+    let data, error;
+    
+    // Tentar inserir com todos os campos
+    const insertResult = await supabase
+      .from('vehicles')
+      .insert(vehicleToSave)
+      .select('id')
+      .single();
+    
+    data = insertResult.data;
+    error = insertResult.error;
+    
+    // Se falhar por causa de campos que não existem, remover campos opcionais e tentar novamente
+    if (error && (error.message.includes('does not exist') || error.message.includes('column'))) {
+      console.warn(`[${auctioneerName}] Tentando inserir sem campos opcionais:`, error.message);
+      
+      // Remover campos que podem não existir
+      const vehicleToSaveMinimal = { ...vehicleToSave };
+      delete vehicleToSaveMinimal.leiloeiro;
+      delete vehicleToSaveMinimal.leiloeiro_url;
+      
+      const retryResult = await supabase
+        .from('vehicles')
+        .insert(vehicleToSaveMinimal)
+        .select('id')
+        .single();
+      
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+    
+    if (error) {
+      throw new Error(`Erro ao salvar veículo: ${error.message}`);
+    }
+    
+    if (!data) {
+      throw new Error('Erro ao salvar veículo: nenhum dado retornado');
+    }
+    
+    vehicleId = data.id;
   }
 
-  // Determinar se foi criação ou atualização
-  // Por simplicidade, consideramos sempre como atualização se não houver erro
-  return { created: true, updated: false };
+  // 10. Salvar imagens em tabela separada (se existir a tabela vehicle_images)
+  try {
+    if (vehicleData.images && vehicleData.images.length > 0) {
+      await saveVehicleImages(vehicleId, vehicleData.images);
+    }
+  } catch (imgError: any) {
+    // Se a tabela vehicle_images não existir, apenas logar o erro mas não falhar
+    console.warn(`[${auctioneerName}] Não foi possível salvar imagens separadamente:`, imgError.message);
+  }
+
+  // Retornar se foi criação ou atualização
+  return { created: !isUpdate, updated: isUpdate };
 }
 
 /**
