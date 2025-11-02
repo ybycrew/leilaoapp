@@ -502,11 +502,18 @@ export class SuperbidRealScraper extends BaseScraper {
       if (match) return { brand: 'Porsche', model: match[1].toUpperCase() };
     }
     
-    // Land Rover / LR
-    if (title.match(/i\/?lr|land\s*rover|lr\s*rrs/i)) {
-      const match = title.match(/(?:i\/)?lr\s*rrs\s*(\w+)/i);
-      if (match) return { brand: 'Land Rover', model: 'RANGE ROVER SPORT' };
-      if (title.match(/land\s*rover/i)) return { brand: 'Land Rover', model: 'RANGE ROVER' };
+    // Land Rover / LR - verificar primeiro antes dos padrões genéricos
+    if (title.match(/lr\s*r\.?\s*r\s*spt|lr\s*r\.?\s*r.*spt/i)) {
+      return { brand: 'Land Rover', model: 'RANGE ROVER SPORT' };
+    }
+    if (title.match(/i\/?lr\s*rrs|lr\s*rrs/i)) {
+      return { brand: 'Land Rover', model: 'RANGE ROVER SPORT' };
+    }
+    if (title.match(/land\s*rover/i)) {
+      return { brand: 'Land Rover', model: 'RANGE ROVER' };
+    }
+    if (title.match(/i\/?lr/i)) {
+      return { brand: 'Land Rover', model: 'RANGE ROVER' };
     }
     
     // Audi Q5, Q7, etc
@@ -553,6 +560,7 @@ export class SuperbidRealScraper extends BaseScraper {
       { pattern: /(honda)\s*\/(\w+(?:-?\w+)?)/i, brandName: 'Honda' }, // Melhor para HR-V, CG-125
       { pattern: /(honda)\s+(\w+(?:\s+\w+)?)/i, brandName: 'Honda' },
       { pattern: /(toyota)\s*\/(.*?modelo:\s*)?(\w+)/i, brandName: 'Toyota' }, // Para "TOYOTA / Modelo: COROLLA"
+      { pattern: /hilux\s+toyota|toyota\s+hilux|hilux\s+(?:toyota\s+)?fab/i, brandName: 'Toyota', modelName: 'HILUX' }, // "HILUX TOYOTA" ou "HILUX TOYOTA FAB/MOD"
       { pattern: /(toyota)\s+(\w+)/i, brandName: 'Toyota' },
       { pattern: /(nissan)\s*\/(\w+)/i, brandName: 'Nissan' },
       { pattern: /(nissan)\s+(\w+)/i, brandName: 'Nissan' },
@@ -560,6 +568,7 @@ export class SuperbidRealScraper extends BaseScraper {
       { pattern: /(peugeot)\s+(\w+)/i, brandName: 'Peugeot' },
       { pattern: /(renault)\s+(\w+)/i, brandName: 'Renault' },
       { pattern: /(citroën|citroen)\s+(\w+)/i, brandName: 'Citroën' },
+      { pattern: /(bmw)\s*\/(.*?modelo:\s*)?(\w+)/i, brandName: 'BMW' }, // Para "BMW / Modelo: 320I"
       { pattern: /(bmw)\s+(\w+(?:\s+\w+)?)/i, brandName: 'BMW' }, // Para "BMW M135I" ou "BMW X6"
       { pattern: /(mercedes|mercedes-benz|m\.?\s*benz)\s+(\w+)/i, brandName: 'Mercedes-Benz' },
       { pattern: /(audi)\s+(\w+)/i, brandName: 'Audi' },
@@ -571,24 +580,39 @@ export class SuperbidRealScraper extends BaseScraper {
       { pattern: /(mini)\s+(\w+)/i, brandName: 'MINI' },
     ];
 
-    for (const { pattern, brandName } of brandPatterns) {
+    for (const { pattern, brandName, modelName } of brandPatterns) {
       const match = title.match(pattern);
       if (match) {
+        // Se tem modelName fixo (como no caso de HILUX), usar ele
+        if (modelName) {
+          return { brand: brandName, model: modelName };
+        }
+        
         // Pegar o último grupo capturado (que geralmente é o modelo)
         const modelPart = match[match.length - 1] || match[1];
         
         // Limpar modelo - remover partes desnecessárias
         let cleanModel = modelPart
-          .replace(/\s*modelo:\s*/i, '')
-          .replace(/\s*\/.*$/, '') // Remove tudo após barra
+          .replace(/\s*modelo:\s*/i, '') // Remove "Modelo:"
+          .replace(/^\s*\/\s*/, '') // Remove barra no início
+          .replace(/\s*\/\s*.*$/, '') // Remove tudo após barra
           .replace(/\s*ano.*$/i, '') // Remove "ano 2020"
+          .replace(/\s*fab\/?mod.*$/i, '') // Remove "FAB/MOD"
+          .replace(/\s*combustível.*$/i, '') // Remove "combustível gasolina"
+          .replace(/\s*cor.*$/i, '') // Remove "cor preta"
+          .replace(/\s*,\s*/g, ' ') // Substitui vírgulas por espaço
+          .replace(/\s+/g, ' ') // Remove espaços múltiplos
           .trim();
         
-        // Limitar tamanho do modelo (geralmente não passa de 3-4 palavras)
-        const modelWords = cleanModel.split(/\s+/);
-        if (modelWords.length > 4) {
-          cleanModel = modelWords.slice(0, 4).join(' ');
+        // Limitar tamanho do modelo (geralmente não passa de 3 palavras)
+        const modelWords = cleanModel.split(/\s+/).filter(w => w && w.length > 1);
+        if (modelWords.length > 3) {
+          cleanModel = modelWords.slice(0, 3).join(' ');
         }
+        
+        // Remover palavras muito curtas ou que são apenas caracteres
+        const finalWords = cleanModel.split(/\s+/).filter(w => w.length > 1 && !/^[\/\s]+$/.test(w));
+        cleanModel = finalWords.join(' ').trim();
         
         return {
           brand: brandName,
@@ -598,10 +622,10 @@ export class SuperbidRealScraper extends BaseScraper {
     }
 
     // Fallback: tentar identificar marca por palavras isoladas
-    if (titleLower.includes('gol') && !titleLower.includes('volkswagen')) {
+    if (titleLower.includes('gol') && !titleLower.includes('volkswagen') && !titleLower.includes('vw')) {
       return { brand: 'Volkswagen', model: 'GOL' };
     }
-    if (titleLower.includes('fox') && !titleLower.includes('volkswagen')) {
+    if (titleLower.includes('fox') && !titleLower.includes('volkswagen') && !titleLower.includes('vw')) {
       return { brand: 'Volkswagen', model: 'FOX' };
     }
     if (titleLower.includes('uno') && !titleLower.includes('fiat')) {
@@ -610,7 +634,7 @@ export class SuperbidRealScraper extends BaseScraper {
     if (titleLower.includes('palio') && !titleLower.includes('fiat')) {
       return { brand: 'Fiat', model: 'PALIO' };
     }
-    if (titleLower.includes('ka') && !titleLower.includes('ford')) {
+    if ((titleLower.includes('ka') || titleLower.match(/\bford\s+ka/i)) && !titleLower.includes('ford')) {
       return { brand: 'Ford', model: 'KA' };
     }
     if (titleLower.includes('fiesta') && !titleLower.includes('ford')) {
@@ -621,6 +645,21 @@ export class SuperbidRealScraper extends BaseScraper {
     }
     if (titleLower.includes('celta') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
       return { brand: 'Chevrolet', model: 'CELTA' };
+    }
+    if (titleLower.includes('hilux') && !titleLower.includes('toyota')) {
+      return { brand: 'Toyota', model: 'HILUX' };
+    }
+    if (titleLower.includes('edge') && !titleLower.includes('ford')) {
+      return { brand: 'Ford', model: 'EDGE' };
+    }
+    if (titleLower.includes('s10') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
+      return { brand: 'Chevrolet', model: 'S10' };
+    }
+    if (titleLower.includes('equinox') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
+      return { brand: 'Chevrolet', model: 'EQUINOX' };
+    }
+    if (titleLower.includes('silverado') && !titleLower.includes('chevrolet') && !titleLower.includes('gm')) {
+      return { brand: 'Chevrolet', model: 'SILVERADO' };
     }
 
     return { brand: brand || 'Desconhecida', model: model || 'Desconhecido' };
@@ -694,10 +733,17 @@ export class SuperbidRealScraper extends BaseScraper {
       'equipamentos',
     ];
     
+    // Filtrar "LOTE X LINHA DE PRODUÇÃO" - sempre filtrar (independente do contexto)
+    if (titleLower.includes('linha de produção') || 
+        (titleLower.includes('lote') && titleLower.includes('linha de produção'))) {
+      console.log(`[${this.auctioneerName}] Filtrando linha de produção: ${vehicle.title.substring(0, 50)}`);
+      return false;
+    }
+    
     // Filtrar "LOTE" mas só se não parecer veículo (ex: "LOTE 0119: GM/CELTA" deve passar)
     if (titleLower.includes('lote') && !this.looksLikeVehicle(titleLower)) {
       // Se tem "lote" mas não parece veículo, filtrar
-      if (!titleLower.match(/(chevrolet|fiat|volkswagen|vw|ford|honda|toyota|gm|carro|moto|veículo)/i)) {
+      if (!titleLower.match(/(chevrolet|fiat|volkswagen|vw|ford|honda|toyota|gm|carro|moto|veículo|automóvel)/i)) {
         console.log(`[${this.auctioneerName}] Filtrando item com 'lote' que não parece veículo: ${vehicle.title.substring(0, 50)}`);
         return false;
       }
