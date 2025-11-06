@@ -1,6 +1,13 @@
 ﻿'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { 
+  filterValidBrands, 
+  isOnlyNumbers, 
+  isPart, 
+  isInvalidBrandWord,
+  separateBrandModel 
+} from '@/lib/vehicle-normalization';
 
 export interface SearchFilters {
   q?: string;
@@ -153,15 +160,47 @@ export async function getFilterOptions() {
       }
     }
 
-    const brands = Array.from(
+    // Filtrar marcas brutas removendo valores inválidos básicos
+    const rawBrands = Array.from(
       new Set(
         brandsData
           ?.map(v => v.brand)
-          .filter((brand): brand is string => Boolean(brand && brand.trim() !== '')) || []
+          .filter((brand): brand is string => {
+            if (!brand || typeof brand !== 'string') return false;
+            const trimmed = brand.trim();
+            if (trimmed.length === 0) return false;
+            
+            // Remover apenas números
+            if (isOnlyNumbers(trimmed)) return false;
+            
+            // Remover peças
+            if (isPart(trimmed)) return false;
+            
+            // Remover palavras inválidas
+            if (isInvalidBrandWord(trimmed)) return false;
+            
+            return true;
+          }) || []
       )
-    ).sort();
+    );
+
+    // Separar combinações como "CHEVROLET/CORSA"
+    const separatedBrands = new Set<string>();
+    for (const brand of rawBrands) {
+      const separated = separateBrandModel(brand);
+      if (separated.brand) {
+        separatedBrands.add(separated.brand);
+      } else {
+        separatedBrands.add(brand);
+      }
+    }
+
+    // Filtrar e normalizar marcas usando API FIPE (assíncrono, mas vamos fazer de forma otimizada)
+    // Por performance, vamos fazer validação básica primeiro e depois validar contra FIPE
+    const brands = await filterValidBrands(Array.from(separatedBrands), 'carros');
 
     console.log(`[getFilterOptions] Marcas únicas após filtro:`, brands.length);
+    console.log(`[getFilterOptions] Marcas filtradas (primeiras 10):`, brands.slice(0, 10));
 
     // Buscar modelos (coluna: model)
     const { data: modelsData, error: modelsError } = await supabase
@@ -175,13 +214,31 @@ export async function getFilterOptions() {
       console.log(`[getFilterOptions] Modelos encontrados (raw):`, modelsData?.length || 0);
     }
 
-    const models = Array.from(
+    // Filtrar modelos brutos removendo valores inválidos básicos
+    const rawModels = Array.from(
       new Set(
         modelsData
           ?.map(v => v.model)
-          .filter((model): model is string => Boolean(model && model.trim() !== '')) || []
+          .filter((model): model is string => {
+            if (!model || typeof model !== 'string') return false;
+            const trimmed = model.trim();
+            if (trimmed.length === 0) return false;
+            
+            // Remover apenas números
+            if (isOnlyNumbers(trimmed)) return false;
+            
+            // Remover peças
+            if (isPart(trimmed)) return false;
+            
+            return true;
+          }) || []
       )
-    ).sort();
+    );
+
+    // Por performance, não vamos validar todos os modelos contra FIPE aqui
+    // (seria muito lento). Apenas filtramos valores claramente inválidos.
+    // A validação completa será feita quando o usuário selecionar uma marca.
+    const models = rawModels.sort();
 
     // Buscar estados (coluna: state)
     const { data: statesData, error: statesError } = await supabase

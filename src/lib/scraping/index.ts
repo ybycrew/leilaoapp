@@ -5,6 +5,7 @@ import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
+import { normalizeVehicleBrandModel } from '../vehicle-normalization';
 import { calculateDealScore } from './utils';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -302,7 +303,40 @@ async function processVehicle(
     return 'carro';
   };
 
-  // 7. Preparar dados para salvar - MAPEAMENTO CORRETO PARA PORTUGUÊS
+  // 7. Normalizar marca e modelo usando serviço de normalização
+  const vehicleType = normalizeVehicleType(vehicleData.vehicle_type);
+  const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
+                            vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
+  
+  let normalizedBrand = vehicleData.brand || null;
+  let normalizedModel = vehicleData.model || null;
+  
+  try {
+    const normalizationResult = await normalizeVehicleBrandModel(
+      vehicleData.brand,
+      vehicleData.model,
+      vehicleTypeForFipe as 'carros' | 'motos' | 'caminhoes'
+    );
+    
+    normalizedBrand = normalizationResult.brand;
+    normalizedModel = normalizationResult.model;
+    
+    if (normalizationResult.wasSeparated || normalizationResult.wasNormalized) {
+      console.log(`[${auctioneerName}] Marca/Modelo normalizado:`, {
+        original: { brand: vehicleData.brand, model: vehicleData.model },
+        normalized: { brand: normalizedBrand, model: normalizedModel },
+        wasSeparated: normalizationResult.wasSeparated,
+        wasNormalized: normalizationResult.wasNormalized
+      });
+    }
+  } catch (error) {
+    console.warn(`[${auctioneerName}] Erro ao normalizar marca/modelo, usando valores originais:`, error);
+    // Em caso de erro, usa os valores originais
+    normalizedBrand = vehicleData.brand || null;
+    normalizedModel = vehicleData.model || null;
+  }
+
+  // 8. Preparar dados para salvar - MAPEAMENTO CORRETO PARA PORTUGUÊS
   // Nota: Alguns campos podem não existir na tabela, então tentamos incluí-los
   // Se falhar no insert, podemos removê-los e tentar novamente
   const vehicleToSave: any = {
@@ -314,9 +348,9 @@ async function processVehicle(
     leiloeiro: auctioneerName,
     leiloeiro_url: leiloeiroUrl,
     
-    // Dados do veículo (português conforme schema)
-    marca: vehicleData.brand || null,
-    modelo: vehicleData.model || null,
+    // Dados do veículo (português conforme schema) - usando valores normalizados
+    marca: normalizedBrand,
+    modelo: normalizedModel,
     ano: vehicleData.year_model || vehicleData.year_manufacture || null,
     ano_modelo: vehicleData.year_model || null,
     tipo_veiculo: normalizeVehicleType(vehicleData.vehicle_type),
