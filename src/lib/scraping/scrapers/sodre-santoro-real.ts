@@ -108,6 +108,23 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
       if (includeAggregations && page === 1) {
         aggregations = response;
+        const extracted = this.extractAggregations(response);
+        const keys = extracted ? Object.keys(extracted) : [];
+        console.log(`[${this.auctioneerName}] Aggregations keys: ${keys.join(', ') || 'none'}`);
+        if (extracted) {
+          const preview = Object.fromEntries(
+            Object.entries(extracted)
+              .slice(0, 3)
+              .map(([field, value]) => [field, {
+                hasBuckets: Boolean(value?.buckets || value?.validBuckets),
+                bucketCount: (value?.validBuckets || value?.buckets || []).length ?? 0,
+                keys: (value?.validBuckets || value?.buckets || [])
+                  .slice(0, 3)
+                  .map((bucket: any) => bucket?.key ?? bucket?.key_as_string),
+              }])
+          );
+          console.log(`[${this.auctioneerName}] Aggregations preview:`, JSON.stringify(preview));
+        }
       }
 
       if (results.length < this.perPage) {
