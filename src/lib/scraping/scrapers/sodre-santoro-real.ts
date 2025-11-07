@@ -1,322 +1,569 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
 
-interface SodreSearchLotsResponse {
-  results?: any[];
-  total?: number;
-  page?: number;
-  perPage?: number;
-}
-
 /**
- * Scraper que consome a API oficial do Sodré Santoro (POST /api/search-lots)
- * para coletar dados estruturados de veículos, evitando parsing de HTML.
+ * Scraper REAL para o leiloeiro Sodré Santoro
+ * Site: https://www.sodresantoro.com.br/veiculos/lotes?sort=auction_date_init_asc
+ * 
+ * ✅ Scraper ESPECÍFICO para o site real do Sodré Santoro
+ * - Coleta apenas leilões com datas futuras
+ * - Usa IDs reais extraídos das URLs
+ * - Seletores baseados na estrutura real do site
  */
 export class SodreSantoroRealScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.sodresantoro.com.br';
   private readonly vehiclesUrl = `${this.baseUrl}/veiculos/lotes?sort=auction_date_init_asc`;
-  private readonly perPage = 60;
 
   constructor() {
+    // Nome alinhado com o registro no banco
     super('Sodré Santoro');
   }
 
   async scrapeVehicles(): Promise<VehicleData[]> {
-    if (!this.page) {
-      throw new Error('Página não inicializada');
-    }
-
-    console.log(`[${this.auctioneerName}] Iniciando coleta via API oficial...`);
-    await this.page.goto(this.vehiclesUrl, {
-      waitUntil: 'domcontentloaded',
-      timeout: 60000,
-    });
-
-    await this.page.waitForFunction(() => typeof fetch === 'function');
+    if (!this.page) throw new Error('Página não inicializada');
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
-
-    let currentPage = 1;
-    let total = Infinity;
-
-    while ((currentPage - 1) * this.perPage < total) {
-      console.log(`[${this.auctioneerName}] Buscando página ${currentPage}...`);
-
-      const response = await this.fetchLotsPage(currentPage, this.perPage);
-      const results = response.results ?? [];
-
-      if (typeof response.total === 'number') {
-        total = response.total;
-      }
-
-      if (results.length === 0) {
-        console.log(`[${this.auctioneerName}] Página ${currentPage} vazia. Encerrando paginação.`);
-        break;
-      }
-
-      for (const lot of results) {
-        const vehicle = this.transformLot(lot);
-        if (!vehicle) {
-          continue;
-        }
-
-        if (seenIds.has(vehicle.external_id)) {
-          continue;
-        }
-
-        seenIds.add(vehicle.external_id);
-        vehicles.push(vehicle);
-      }
-
-      if (results.length < this.perPage) {
-        break;
-      }
-
-      currentPage += 1;
-      await this.randomDelay(150, 400);
-    }
-
-    console.log(`[${this.auctioneerName}] Coleta finalizada. ${vehicles.length} lotes processados.`);
-    return vehicles;
-  }
-
-  private async fetchLotsPage(pageNumber: number, perPage: number): Promise<SodreSearchLotsResponse> {
-    if (!this.page) {
-      throw new Error('Página não inicializada');
-    }
-
-    const payload = {
-      page: pageNumber,
-      perPage,
-      filters: {
-        segment_slug: ['veiculos'],
-      },
-      sort: [
-        {
-          auction_date_init: 'asc',
-        },
-      ],
-    };
+    const maxPages = 100; // Aumentado para usar recursos do GitHub Actions
+    let duplicatePageCount = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Zerar horário para comparar apenas datas
 
     try {
-      const data = await this.page.evaluate(async (body) => {
-        const res = await fetch('/api/search-lots', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        });
+      console.log(`[${this.auctioneerName}] Iniciando scraping do site Sodré Santoro...`);
+      console.log(`[${this.auctioneerName}] Filtrando apenas leilões com data >= ${today.toISOString().split('T')[0]}`);
+      console.log(`[${this.auctioneerName}] URL base: ${this.vehiclesUrl}`);
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+      // Loop através das páginas
+      for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+        const pageUrl = currentPage === 1 
+          ? this.vehiclesUrl 
+          : `${this.vehiclesUrl}&page=${currentPage}`;
+
+        console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
+
+        try {
+          await this.page.goto(pageUrl, {
+            waitUntil: 'domcontentloaded', // Mais rápido que networkidle0
+            timeout: 30000, // Reduzido de 90s para 30s
+          });
+
+          // Aguardar apenas o essencial (GitHub Actions tem recursos ilimitados)
+          await this.randomDelay(100, 300); // Mínimo para GitHub Actions
+
+          // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
+          // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
+          const selectorUnion = 'a[href*="/lote/"], .lote-card, .vehicle-card, [data-testid*="vehicle"], a[href*="/leilao/"]';
+          await this.page.waitForSelector(selectorUnion, {
+            timeout: 10000, // Reduzido de 30s para 10s
+          }).catch(() => {
+            console.log(`[${this.auctioneerName}] Timeout ao aguardar cards na página ${currentPage}`);
+          });
+
+          await this.scrollToLoadContent();
+
+          const pageVehicles = await this.extractVehiclesFromPage(currentPage);
+
+          // Se nada foi encontrado, capture HTML parcial para debug
+          if (pageVehicles.length === 0) {
+            const snapshot = await this.page.evaluate(() => document.body.innerText.slice(0, 500));
+            console.log(`[${this.auctioneerName}] Snapshot de página vazia (500 chars):`, snapshot);
+          }
+
+          console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos extraídos`);
+
+          if (pageVehicles.length === 0) {
+            console.log(`[${this.auctioneerName}] Nenhum veículo encontrado, última página alcançada`);
+            break;
+          }
+
+          // Processar veículos
+          let processedCount = 0;
+          let skippedCount = 0;
+          let duplicatesInPage = 0;
+          let futureAuctionsCount = 0;
+
+          for (const rawVehicle of pageVehicles) {
+            try {
+              // Validar dados mínimos
+              if (!rawVehicle.title || !rawVehicle.detailUrl) {
+                skippedCount++;
+                continue;
+              }
+
+              const detailUrl = rawVehicle.detailUrl.startsWith('http') 
+                ? rawVehicle.detailUrl 
+                : `${this.baseUrl}${rawVehicle.detailUrl}`;
+
+              // Extrair ID externo REAL da URL
+              const externalId = this.extractRealExternalId(detailUrl);
+
+              // Verificar duplicatas
+              if (seenIds.has(externalId)) {
+                duplicatesInPage++;
+                continue;
+              }
+              
+              seenIds.add(externalId);
+
+              // Verificar se a data do leilão é futura
+              const auctionDate = this.extractAuctionDate(rawVehicle.infoTexts, rawVehicle.auctionDate);
+              if (auctionDate && auctionDate < today) {
+                console.log(`[${this.auctioneerName}] Pulando leilão passado: ${auctionDate.toISOString().split('T')[0]}`);
+                skippedCount++;
+                continue;
+              }
+
+              if (auctionDate) {
+                futureAuctionsCount++;
+              }
+
+              // Processar dados do veículo
+              const vehicleData = await this.processVehicleData(rawVehicle, detailUrl, externalId, auctionDate);
+              
+              if (vehicleData) {
+                vehicles.push(vehicleData);
+                processedCount++;
+              } else {
+                skippedCount++;
+              }
+            } catch (error) {
+              console.error(`[${this.auctioneerName}] Erro ao processar veículo:`, error);
+              skippedCount++;
+            }
+          }
+
+          console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
+
+          // Saída antecipada: se não há leilões futuros, para após algumas páginas
+          if (futureAuctionsCount === 0 && currentPage > 10) {
+            console.log(`[${this.auctioneerName}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando scraping`);
+            break;
+          }
+
+          // Verificar se página está se repetindo
+          if (duplicatesInPage >= pageVehicles.length * 0.9) {
+            duplicatePageCount++;
+            console.log(`[${this.auctioneerName}] Página com muitas duplicatas (${duplicatePageCount}ª consecutiva)`);
+            
+            if (duplicatePageCount >= 2) {
+              console.log(`[${this.auctioneerName}] Duas páginas consecutivas duplicadas, fim alcançado`);
+              break;
+            }
+          } else {
+            duplicatePageCount = 0;
+          }
+
+          // Delay entre páginas (mínimo para GitHub Actions)
+          await this.randomDelay(100, 200);
+
+        } catch (pageError) {
+          console.error(`[${this.auctioneerName}] Erro na página ${currentPage}:`, pageError);
+          continue;
+        }
+      }
+
+      console.log(`[${this.auctioneerName}] ✅ Total de veículos coletados: ${vehicles.length}`);
+      return vehicles;
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro no scraping:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Extrai ID externo REAL da URL do Sodré Santoro
+   */
+  private extractRealExternalId(detailUrl: string): string {
+    try {
+      // Primeiro tentar ID de LOTE: /lote/{ID}
+      let match = detailUrl.match(/\/lote\/([^\/\?]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+
+      // Depois tentar ID de leilão: /leilao/{ID}
+      match = detailUrl.match(/\/leilao\/([^\/\?]+)/);
+      if (match && match[1]) {
+        return match[1]; // Retorna o ID real extraído da URL
+      }
+
+      // Fallback: tentar extrair da última parte da URL
+      const urlParts = detailUrl.split('/');
+      const lastPart = urlParts[urlParts.length - 1];
+      
+      if (lastPart && lastPart.length > 3 && !lastPart.includes('?')) {
+        return lastPart;
+      }
+
+      // Se não conseguir extrair ID real, usar hash do título
+      console.warn(`[${this.auctioneerName}] Não foi possível extrair ID real da URL: ${detailUrl}`);
+      return `sodre-real-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    } catch {
+      return `sodre-real-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+  }
+
+  /**
+   * Faz scroll para carregar conteúdo lazy loading
+   */
+  private async scrollToLoadContent(): Promise<void> {
+    if (!this.page) return;
+
+    try {
+      await this.page.evaluate(() => {
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+      
+      await this.randomDelay(200, 400); // Mínimo para GitHub Actions
+      
+      await this.page.evaluate(() => {
+        window.scrollTo(0, 0);
+      });
+      
+      await this.randomDelay(100, 200); // Mínimo para GitHub Actions
+      
+      await this.page.evaluate(() => {
+        const images = document.querySelectorAll('img[data-src], img[loading="lazy"]');
+        images.forEach(img => {
+          const dataSrc = img.getAttribute('data-src');
+          if (dataSrc && !img.getAttribute('src')) {
+            img.setAttribute('src', dataSrc);
+          }
+        });
+      });
+    } catch (error) {
+      console.log(`[${this.auctioneerName}] Erro no scroll:`, error);
+    }
+  }
+
+  /**
+   * Extrai veículos da página atual com seletores específicos do Sodré Santoro
+   */
+  private async extractVehiclesFromPage(pageNumber: number): Promise<any[]> {
+    if (!this.page) return [];
+
+    try {
+      return await this.page.evaluate(() => {
+        // Seletores específicos baseados na estrutura real do site Sodré Santoro
+        // Priorizar seletores que apontam para o detalhe do LOTE (1 veículo por link)
+        const selectors = [
+          'a[href*="/lote/"]',
+          '.lote-card a[href]',
+          '.vehicle-card a[href]',
+          '[data-testid*="vehicle"] a[href]',
+          'a[href*="/veiculo/"]',
+          'a[href*="/leilao/"]'
+        ];
+
+        let cards: Element[] = [];
+        
+        for (const selector of selectors) {
+          const elements = document.querySelectorAll(selector);
+          if (elements.length > 0) {
+            cards = Array.from(elements);
+            console.log(`Encontrados ${cards.length} elementos com seletor: ${selector}`);
+            break;
+          }
         }
 
-        return res.json();
-      }, payload);
+        if (cards.length === 0) {
+          console.log('Nenhum card encontrado, tentando seletores alternativos...');
+          const fallbackSelectors = ['a[href*="leilao"]', 'a[href*="lote"]', '.item', 'article', 'li'];
+          for (const selector of fallbackSelectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0) {
+              cards = Array.from(elements);
+              console.log(`Encontrados ${cards.length} elementos com seletor fallback: ${selector}`);
+              break;
+            }
+          }
+        }
 
-      return data as SodreSearchLotsResponse;
-    } catch (error: any) {
-      console.error(`[${this.auctioneerName}] Erro ao consultar API na página ${pageNumber}:`, error?.message ?? error);
-      return { results: [], total: 0, page: pageNumber, perPage };
+        const seenHrefs = new Set<string>();
+        return cards.map(card => {
+          try {
+            // Extrair URL do detalhe
+            let href = (card as HTMLAnchorElement).href || card.querySelector('a')?.getAttribute('href') || '';
+            if (!href) return null;
+
+            // Normalizar href relativo
+            if (!href.startsWith('http')) {
+              const a = document.createElement('a');
+              a.href = href;
+              href = a.pathname + a.search;
+            }
+
+            // Dedupe por href na própria página
+            if (seenHrefs.has(href)) return null;
+            seenHrefs.add(href);
+
+            const detailUrl = href;
+
+            // Extrair título - seletores específicos do Sodré Santoro
+            const titleSelectors = [
+              '.text-body-medium.text-on-surface.uppercase.h-10.line-clamp-2',
+              '.text-body-medium',
+              '.title', '.titulo', '.vehicle-title', '.lote-title',
+              'h1', 'h2', 'h3', '.text-headline-small'
+            ];
+            
+            let title = '';
+            for (const selector of titleSelectors) {
+              const titleEl = card.querySelector(selector);
+              if (titleEl?.textContent?.trim()) {
+                title = titleEl.textContent.trim();
+                break;
+              }
+            }
+
+            // Extrair preço - seletores específicos do Sodré Santoro
+            const priceSelectors = [
+              '.text-primary.text-headline-small',
+              '.price', '.preco', '.lance', '.valor',
+              '.text-primary', '.text-headline-small', '[class*="price"]'
+            ];
+            
+            let price = '';
+            for (const selector of priceSelectors) {
+              const priceEl = card.querySelector(selector);
+              if (priceEl?.textContent?.trim()) {
+                price = priceEl.textContent.trim();
+                break;
+              }
+            }
+
+            // Extrair imagem
+            const img = card.querySelector('img');
+            const imageUrl = img?.src || img?.getAttribute('data-src') || '';
+
+            // Extrair informações adicionais - formato específico do Sodré Santoro
+            const smallTexts = Array.from(card.querySelectorAll('.line-clamp-1.text-body-small, .text-body-small, .text-caption, .info'));
+            const infoTexts = smallTexts.map(el => el.textContent?.trim()).filter(text => text);
+
+            // Extrair data do leilão - geralmente está nos smallTexts
+            let auctionDate = '';
+            for (const text of infoTexts) {
+              if (text && text.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/)) {
+                auctionDate = text;
+                break;
+              }
+            }
+
+            return {
+              title,
+              price,
+              imageUrl,
+              detailUrl,
+              infoTexts,
+              auctionDate,
+              rawHtml: card.outerHTML.substring(0, 200) // Para debug
+            };
+          } catch (err) {
+            console.error('Erro ao extrair dados do card:', err);
+            return null;
+          }
+        }).filter(v => v !== null);
+      });
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro ao extrair veículos da página ${pageNumber}:`, error);
+      return [];
     }
   }
 
-  private transformLot(lot: any): VehicleData | null {
-    const externalId = this.extractExternalId(lot);
-    const title = lot?.lot_title || lot?.title || '';
+  /**
+   * Processa dados do veículo com filtro de data
+   */
+  private async processVehicleData(rawVehicle: any, detailUrl: string, externalId: string, auctionDate?: Date): Promise<VehicleData | null> {
+    try {
+      // Usar a nova função híbrida para extrair marca e modelo
+      const { brand, model } = extractBrandAndModel(rawVehicle.title);
+      
+      // Parse do preço
+      const currentBid = this.parsePrice(rawVehicle.price);
+      
+      // Extrair informações adicionais
+      const location = rawVehicle.infoTexts.find((text: string) => 
+        text && (text.includes(',') || text.includes('-') || text.match(/\b[A-Z]{2}\b/))
+      ) || '';
+      
+      const { state, city } = this.parseLocation(location);
+      
+      // Extrair ano do título
+      const yearModel = this.extractYearFromTitle(rawVehicle.title);
+      
+      // Buscar detalhes adicionais se necessário
+      let allImages: string[] = [];
+      if (rawVehicle.imageUrl) {
+        allImages = [rawVehicle.imageUrl];
+      }
 
-    if (!externalId || !title) {
+      return {
+        external_id: externalId,
+        title: rawVehicle.title,
+        brand: brand || 'Desconhecida',
+        model: model || 'Desconhecido',
+        year_manufacture: yearModel,
+        year_model: yearModel,
+        vehicle_type: this.detectVehicleType(rawVehicle.title),
+        mileage: this.extractMileage(rawVehicle.infoTexts),
+        state: state || 'SP',
+        city: city || 'São Paulo',
+        current_bid: currentBid,
+        auction_date: auctionDate,
+        auction_type: 'Online',
+        condition: 'Usado',
+        original_url: detailUrl,
+        thumbnail_url: rawVehicle.imageUrl || undefined,
+        images: allImages.length > 0 ? allImages : undefined,
+      };
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro ao processar dados do veículo:`, error);
       return null;
     }
-
-    const { brand: fallbackBrand, model: fallbackModel } = extractBrandAndModel(title);
-
-    const brand = this.normalizeText(lot?.lot_brand) || fallbackBrand || 'Desconhecida';
-    const model = this.normalizeText(lot?.lot_model) || fallbackModel || 'Desconhecido';
-
-    const stateCity = this.resolveLocation(lot);
-
-    const vehicle: VehicleData = {
-      external_id: externalId,
-      lot_number: lot?.lot_number?.toString?.() ?? lot?.lotNumber?.toString?.(),
-      title,
-      brand,
-      model,
-      version: this.normalizeText(lot?.lot_version),
-      year_manufacture: this.parseYearValue(lot?.lot_year_manufacture) ?? undefined,
-      year_model: this.parseYearValue(lot?.lot_year_model) ?? undefined,
-      vehicle_type: this.resolveVehicleType(lot),
-      color: this.normalizeText(lot?.lot_color),
-      fuel_type: this.normalizeText(lot?.lot_fuel),
-      transmission: this.normalizeText(lot?.lot_transmission),
-      mileage: this.parseNumber(lot?.lot_km) ?? undefined,
-      license_plate: this.normalizeText(lot?.lot_plate),
-      state: stateCity.state,
-      city: stateCity.city,
-      current_bid: this.parseNumber(lot?.bid_actual ?? lot?.price) ?? undefined,
-      minimum_bid: this.parseNumber(lot?.bid_initial) ?? undefined,
-      appraised_value: this.parseNumber(lot?.lot_appraised_value ?? lot?.reserved_price) ?? undefined,
-      auction_date: this.parseDate(lot?.lot_date_end ?? lot?.auction_date_end ?? lot?.auction_date_init) ?? undefined,
-      auction_type: this.normalizeText(lot?.auction_type) || 'Online',
-      has_financing: this.parseBoolean(lot?.lot_financeable),
-      condition: this.normalizeText(lot?.lot_status),
-      original_url: `${this.baseUrl}/lote/${externalId}`,
-      thumbnail_url: this.extractImages(lot)[0] ?? undefined,
-      images: this.extractImages(lot),
-    };
-
-    return vehicle;
   }
 
-  private extractExternalId(lot: any): string | null {
-    const possible = [lot?.id, lot?.lot_id, lot?.index_id, lot?.lotNumber];
-    for (const value of possible) {
-      if (value === undefined || value === null) continue;
-      const str = String(value).trim();
-      if (str.length > 0) {
-        return str;
+  /**
+   * Extrai data do leilão dos textos informativos
+   */
+  private extractAuctionDate(infoTexts: string[], auctionDateText?: string): Date | undefined {
+    // Primeiro tentar o texto específico da data
+    if (auctionDateText) {
+      const dateMatch = auctionDateText.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (dateMatch) {
+        const [, day, month, year] = dateMatch;
+        const fullYear = year.length === 2 ? parseInt('20' + year) : parseInt(year);
+        return new Date(fullYear, parseInt(month) - 1, parseInt(day));
       }
     }
-    return null;
-  }
 
-  private normalizeText(value: any): string | undefined {
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim();
+    // Depois tentar nos textos informativos
+    for (const text of infoTexts) {
+      const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (dateMatch) {
+        const [, day, month, year] = dateMatch;
+        const fullYear = year.length === 2 ? parseInt('20' + year) : parseInt(year);
+        return new Date(fullYear, parseInt(month) - 1, parseInt(day));
+      }
     }
     return undefined;
   }
 
-  private parseNumber(value: any): number | null {
-    if (typeof value === 'number') {
-      return Number.isFinite(value) ? value : null;
-    }
-
-    if (typeof value === 'string') {
-      const normalized = value
-        .replace(/[^0-9,-\.]/g, '')
-        .replace(/\.(?=\d{3}(?:\D|$))/g, '')
-        .replace(',', '.');
-
-      const parsed = parseFloat(normalized);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
-    return null;
-  }
-
-  private parseYearValue(value: any): number | null {
-    const parsed = this.parseNumber(value);
-    if (!parsed) return null;
-    const year = Math.floor(parsed);
-    if (year >= 1950 && year <= new Date().getFullYear() + 1) {
-      return year;
-    }
-    return null;
-  }
-
-  private parseDate(value: any): Date | null {
-    if (!value) return null;
-
-    if (value instanceof Date && !isNaN(value.getTime())) {
-      return value;
-    }
-
-    if (typeof value === 'number') {
-      const date = new Date(value);
-      return isNaN(date.getTime()) ? null : date;
-    }
-
-    if (typeof value === 'string') {
-      const isoCandidate = value.replace(' ', 'T');
-      const date = new Date(isoCandidate);
-      if (!isNaN(date.getTime())) {
-        return date;
+  /**
+   * Extrai ano do título
+   */
+  private extractYearFromTitle(title: string): number | undefined {
+    const yearMatch = title.match(/(\d{2})\/(\d{2})|(\d{4})/);
+    if (yearMatch) {
+      if (yearMatch[3]) {
+        return parseInt(yearMatch[3]);
+      } else if (yearMatch[2]) {
+        return parseInt('20' + yearMatch[2]);
       }
     }
-
-    return null;
+    return undefined;
   }
 
-  private parseBoolean(value: any): boolean {
-    if (typeof value === 'boolean') {
-      return value;
-    }
-    if (typeof value === 'number') {
-      return value === 1;
-    }
-    if (typeof value === 'string') {
-      const normalized = value.toLowerCase();
-      return ['true', '1', 'financiavel', 'financiável', 'sim'].includes(normalized);
-    }
-    return false;
-  }
-
-  private resolveLocation(lot: any): { state: string; city: string } {
-    let state = this.normalizeText(lot?.lot_state) || this.normalizeText(lot?.state);
-    let city = this.normalizeText(lot?.lot_city) || this.normalizeText(lot?.city);
-
-    const location = this.normalizeText(lot?.lot_location);
-    if ((!state || !city) && location) {
-      const cleaned = location.replace(/\s*-\s*/g, ',').replace(/\s*\/\s*/g, ',');
-      const parts = cleaned.split(',').map((part) => part.trim()).filter(Boolean);
-
-      if (!city && parts.length > 0) {
-        city = parts[0];
-      }
-
-      if (!state && parts.length > 1) {
-        const last = parts[parts.length - 1];
-        state = last.length === 2 ? last.toUpperCase() : last;
+  /**
+   * Extrai quilometragem dos textos informativos
+   */
+  private extractMileage(infoTexts: string[]): number | undefined {
+    for (const text of infoTexts) {
+      const match = text.match(/(\d{1,3}(?:\.\d{3})*)\s*km/i);
+      if (match) {
+        return parseInt(match[1].replace(/\./g, ''));
       }
     }
-
-    if (!state && typeof city === 'string' && city.includes('/')) {
-      const [cityPart, statePart] = city.split('/');
-      city = cityPart.trim();
-      state = statePart?.trim()?.toUpperCase();
-    }
-
-    if (!state) state = 'SP';
-    if (!city) city = 'São Paulo';
-
-    return { state, city };
+    return undefined;
   }
 
-  private resolveVehicleType(lot: any): string {
-    const candidates = [
-      lot?.lot_category,
-      lot?.segment_label,
-      lot?.lot_segment,
+  /**
+   * Extrai marca e modelo do título
+   */
+  private parseTitleForBrandModel(title: string): { brand: string; model: string } {
+    const brands = [
+      'Chevrolet', 'Fiat', 'Volkswagen', 'VW', 'Ford', 'Honda', 
+      'Toyota', 'Hyundai', 'Nissan', 'Renault', 'Jeep', 'Peugeot',
+      'BMW', 'Mercedes', 'Audi', 'Volvo', 'Mitsubishi', 'Subaru'
     ];
 
-    for (const candidate of candidates) {
-      const text = this.normalizeText(candidate);
-      if (!text) continue;
-      const lower = text.toLowerCase();
-      if (lower.includes('moto')) return 'Moto';
-      if (lower.includes('caminh')) return 'Caminhão';
-      if (lower.includes('ônibus') || lower.includes('onibus')) return 'Ônibus';
-      if (lower.includes('van') || lower.includes('utilit')) return 'Utilitário';
-      if (lower.includes('sucata')) return 'Sucata';
-      if (lower.includes('judicial')) return 'Judicial';
-      return text;
+    let brand = '';
+    let model = '';
+
+    for (const b of brands) {
+      const regex = new RegExp(b, 'i');
+      if (regex.test(title)) {
+        brand = this.normalizeBrand(b);
+        
+        const parts = title.split(new RegExp(b, 'i'));
+        if (parts[1]) {
+          model = parts[1]
+            .replace(/\d{4}\/?\d{0,4}/, '')
+            .replace(/\d+\.\d+/, '')
+            .trim()
+            .split(/\s+/)
+            .slice(0, 2)
+            .join(' ');
+        }
+        break;
+      }
+    }
+
+    return {
+      brand: brand || 'Desconhecida',
+      model: model || 'Desconhecido',
+    };
+  }
+
+  /**
+   * Normaliza nome da marca
+   */
+  protected normalizeBrand(brand: string): string {
+    const brandMap: { [key: string]: string } = {
+      'VW': 'Volkswagen',
+      'BMW': 'BMW',
+      'Mercedes': 'Mercedes-Benz'
+    };
+    return brandMap[brand] || brand;
+  }
+
+  /**
+   * Detecta tipo de veículo
+   */
+  private detectVehicleType(title: string): string {
+    const titleLower = title.toLowerCase();
+
+    if (titleLower.includes('moto') || titleLower.includes('motocicleta')) {
+      return 'Moto';
+    }
+    if (titleLower.includes('caminhão') || titleLower.includes('truck')) {
+      return 'Caminhão';
+    }
+    if (titleLower.includes('van') || titleLower.includes('furgão')) {
+      return 'Van';
+    }
+    if (titleLower.includes('suv') || titleLower.includes('utilitário')) {
+      return 'SUV';
+    }
+    if (titleLower.includes('pickup') || titleLower.includes('caminhonete')) {
+      return 'Caminhonete';
     }
 
     return 'Carro';
   }
 
-  private extractImages(lot: any): string[] {
-    if (Array.isArray(lot?.lot_pictures)) {
-      return lot.lot_pictures.filter((url: any) => typeof url === 'string' && url.length > 0);
-    }
+  /**
+   * Extrai estado e cidade
+   */
+  private parseLocation(location: string): { state: string; city: string } {
+    const stateMatch = location.match(/\b([A-Z]{2})\b/);
+    const state = stateMatch ? stateMatch[1] : 'SP';
 
-    if (typeof lot?.lot_picture === 'string') {
-      return [lot.lot_picture];
-    }
+    const city = location
+      .replace(/\b[A-Z]{2}\b/, '')
+      .replace(/[-,/]/g, '')
+      .trim() || 'São Paulo';
 
-    return [];
+    return { state, city };
   }
 }

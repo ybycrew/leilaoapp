@@ -5,13 +5,7 @@ import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
-import {
-  normalizeVehicleBrandModel,
-  normalizeStateCity,
-  normalizeState,
-  normalizeCityName,
-  isValidState
-} from '../vehicle-normalization';
+import { normalizeVehicleBrandModel } from '../vehicle-normalization';
 import { calculateDealScore } from './utils';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -291,46 +285,31 @@ async function processVehicle(
     : '';
 
   // 5. Normalizar tipo de leilão para valores aceitos pelo schema
-  const normalizeAuctionType = (type?: string): 'online' | 'onsite' | 'hybrid' => {
+  const normalizeAuctionType = (type?: string): 'online' | 'presencial' | 'hibrido' => {
     if (!type) return 'online';
     const typeLower = type.toLowerCase();
-    if (typeLower.includes('presencial') || typeLower.includes('onsite')) return 'onsite';
-    if (typeLower.includes('hibrido') || typeLower.includes('híbrido') || typeLower.includes('hybrid')) return 'hybrid';
+    if (typeLower.includes('presencial')) return 'presencial';
+    if (typeLower.includes('hibrido') || typeLower.includes('híbrido')) return 'hibrido';
     return 'online';
   };
 
-  const normalizeVehicleType = (type?: string): 'car' | 'motorcycle' | 'truck' | 'van' | 'other' => {
-    if (!type) return 'car';
+  // 6. Normalizar tipo de veículo para valores aceitos pelo schema
+  const normalizeVehicleType = (type?: string): 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' => {
+    if (!type) return 'carro';
     const typeLower = type.toLowerCase();
-    if (typeLower.includes('moto') || typeLower.includes('motorcycle')) return 'motorcycle';
-    if (typeLower.includes('caminhao') || typeLower.includes('caminhão') || typeLower.includes('truck')) return 'truck';
-    if (typeLower.includes('van') || typeLower.includes('utilitario')) return 'van';
-    return 'car';
+    if (typeLower.includes('moto')) return 'moto';
+    if (typeLower.includes('caminhao') || typeLower.includes('caminhão')) return 'caminhao';
+    if (typeLower.includes('van')) return 'van';
+    return 'carro';
   };
 
   // 7. Normalizar marca e modelo usando serviço de normalização
   const vehicleType = normalizeVehicleType(vehicleData.vehicle_type);
-  const vehicleTypeForFipe = vehicleType === 'motorcycle' ? 'motos' :
-                            vehicleType === 'truck' ? 'caminhoes' : 'carros';
+  const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
+                            vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
   
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
-
-  const locationNormalization = normalizeStateCity(vehicleData.state, vehicleData.city);
-  let normalizedState = locationNormalization.state ?? normalizeState(vehicleData.state);
-  let normalizedCity = locationNormalization.city ?? normalizeCityName(vehicleData.city);
-
-  if (!normalizedState || !isValidState(normalizedState)) {
-    normalizedState = normalizeState(vehicleData.state);
-  }
-
-  if (!normalizedState || !isValidState(normalizedState)) {
-    normalizedState = 'SP';
-  }
-
-  if (!normalizedCity) {
-    normalizedCity = normalizeCityName(vehicleData.city) || 'São Paulo';
-  }
   
   try {
     const normalizationResult = await normalizeVehicleBrandModel(
@@ -361,40 +340,49 @@ async function processVehicle(
   // Nota: Alguns campos podem não existir na tabela, então tentamos incluí-los
   // Se falhar no insert, podemos removê-los e tentar novamente
   const vehicleToSave: any = {
-    auctioneer_id: auctioneerId,
-    external_id: vehicleData.external_id || null,
-    lot_number: vehicleData.lot_number ?? null,
-    title: vehicleData.title,
-    description: vehicleData.description ?? vehicleData.title,
-    brand: normalizedBrand,
-    model: normalizedModel,
-    version: vehicleData.version ?? null,
-    year_manufacture: vehicleData.year_manufacture ?? vehicleData.year_model ?? null,
-    year_model: vehicleData.year_model ?? null,
-    vehicle_type: vehicleType,
-    color: vehicleData.color || null,
-    fuel_type: vehicleData.fuel_type || null,
-    transmission: vehicleData.transmission || null,
-    mileage: vehicleData.mileage || null,
-    license_plate: vehicleData.license_plate || null,
-    state: normalizedState,
-    city: normalizedCity,
-    current_bid: vehicleData.current_bid || 0,
-    minimum_bid: vehicleData.minimum_bid || vehicleData.current_bid || 0,
-    appraised_value: vehicleData.appraised_value ?? null,
-    fipe_price: fipePrice ?? null,
-    fipe_code: fipeCode ?? null,
-    fipe_discount_percentage: fipeDiscountPercentage ?? null,
-    deal_score: dealScore,
-    has_financing: vehicleData.has_financing || false,
-    accepts_financing: vehicleData.has_financing || false,
-    condition: vehicleData.condition ?? null,
-    auction_date: vehicleData.auction_date?.toISOString() || null,
-    auction_type: normalizeAuctionType(vehicleData.auction_type),
-    original_url: vehicleData.original_url,
-    thumbnail_url: vehicleData.thumbnail_url || null,
+    // Campos obrigatórios do schema (tentar incluir mesmo se não existir)
+    titulo: vehicleData.title,
+    
+    // Campos do leiloeiro (podem não existir em todas as versões do schema)
+    // Tentamos incluí-los e, se falhar, removemos no catch
     leiloeiro: auctioneerName,
+    leiloeiro_url: leiloeiroUrl,
+    
+    // Dados do veículo (português conforme schema) - usando valores normalizados
+    marca: normalizedBrand,
+    modelo: normalizedModel,
+    ano: vehicleData.year_model || vehicleData.year_manufacture || null,
+    ano_modelo: vehicleData.year_model || null,
+    tipo_veiculo: normalizeVehicleType(vehicleData.vehicle_type),
+    cor: vehicleData.color || null,
+    combustivel: vehicleData.fuel_type || null,
+    cambio: vehicleData.transmission || null,
+    km: vehicleData.mileage || null,
+    
+    // Localização
+    estado: vehicleData.state || 'SP',
+    cidade: vehicleData.city || 'São Paulo',
+    
+    // Preços
+    preco_inicial: vehicleData.minimum_bid || vehicleData.current_bid || 0,
+    preco_atual: vehicleData.current_bid || 0,
+    
+    // Leilão
+    tipo_leilao: normalizeAuctionType(vehicleData.auction_type),
     aceita_financiamento: vehicleData.has_financing || false,
+    data_leilao: vehicleData.auction_date?.toISOString() || null,
+    
+    // FIPE e Score
+    fipe_preco: fipePrice || null,
+    fipe_codigo: fipeCode || null,
+    deal_score: dealScore,
+    
+    // Descrição e imagens
+    descricao: vehicleData.title, // Pode ser melhorado depois com scraping de detalhes
+    imagens: vehicleData.images && vehicleData.images.length > 0 ? vehicleData.images : [],
+    
+    // Campo para UPSERT (evitar duplicatas)
+    external_id: vehicleData.external_id || null,
   };
 
   // 8. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
@@ -407,7 +395,7 @@ async function processVehicle(
       const { data: existing, error: queryError } = await supabase
         .from('vehicles')
         .select('id')
-        .eq('auctioneer_id', auctioneerId)
+        .eq('leiloeiro', auctioneerName)
         .eq('external_id', vehicleData.external_id)
         .maybeSingle();
       
