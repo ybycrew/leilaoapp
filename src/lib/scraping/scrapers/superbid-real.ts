@@ -126,8 +126,8 @@ export class SuperbidRealScraper extends BaseScraper {
     const brand = product?.brand?.description || templateValues.get('marca') || fallbackBrand || 'Desconhecida';
     const model = product?.model?.description || templateValues.get('modelo') || fallbackModel || 'Desconhecido';
 
-    const yearManufacture = this.parseYear(templateValues.get('anofabricacao'));
-    const yearModel = this.parseYear(templateValues.get('anomodelo') ?? templateValues.get('anomodelo2'));
+    const yearManufacture = this.parseYearValue(templateValues.get('anofabricacao'));
+    const yearModel = this.parseYearValue(templateValues.get('anomodelo') ?? templateValues.get('anomodelo2'));
 
     const mileage = this.parseNumber(templateValues.get('km') ?? templateValues.get('quilometragem'));
 
@@ -268,7 +268,7 @@ export class SuperbidRealScraper extends BaseScraper {
     return null;
   }
 
-  private parseYear(value: any): number | null {
+  private parseYearValue(value: any): number | null {
     const parsed = this.parseNumber(value);
     if (!parsed) return null;
     const year = Math.floor(parsed);

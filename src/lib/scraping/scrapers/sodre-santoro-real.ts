@@ -145,8 +145,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
       brand,
       model,
       version: this.normalizeText(lot?.lot_version),
-      year_manufacture: this.parseYear(lot?.lot_year_manufacture) ?? undefined,
-      year_model: this.parseYear(lot?.lot_year_model) ?? undefined,
+      year_manufacture: this.parseYearValue(lot?.lot_year_manufacture) ?? undefined,
+      year_model: this.parseYearValue(lot?.lot_year_model) ?? undefined,
       vehicle_type: this.resolveVehicleType(lot),
       color: this.normalizeText(lot?.lot_color),
       fuel_type: this.normalizeText(lot?.lot_fuel),
@@ -207,7 +207,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
     return null;
   }
 
-  private parseYear(value: any): number | null {
+  private parseYearValue(value: any): number | null {
     const parsed = this.parseNumber(value);
     if (!parsed) return null;
     const year = Math.floor(parsed);
