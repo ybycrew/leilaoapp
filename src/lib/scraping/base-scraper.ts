@@ -5,6 +5,7 @@ export interface VehicleData {
   external_id: string;
   lot_number?: string;
   title: string;
+  description?: string;
   brand: string;
   model: string;
   version?: string;
