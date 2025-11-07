@@ -108,6 +108,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
       if (includeAggregations && page === 1) {
         aggregations = response;
+        const responseKeys = Object.keys(response ?? {});
+        console.log(`[${this.auctioneerName}] Response keys: ${responseKeys.join(', ') || 'none'}`);
         const extracted = this.extractAggregations(response);
         const keys = extracted ? Object.keys(extracted) : [];
         console.log(`[${this.auctioneerName}] Aggregations keys: ${keys.join(', ') || 'none'}`);
