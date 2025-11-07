@@ -1,19 +1,12 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
 
-type LotFilters = Record<string, string[]>;
-
 interface SodreSearchLotsResponse {
   results?: any[];
   total?: number;
   page?: number;
   perPage?: number;
-  aggregations?: Record<string, any>;
-  aggs?: Record<string, any>;
 }
-
-const SEGMENT_SLUG = 'veiculos';
-const AGGREGATION_FIELDS = ['lot_financeable', 'lot_category', 'lot_origin', 'lot_sinister'];
 
 /**
  * Scraper que consome a API oficial do Sodré Santoro (POST /api/search-lots)
@@ -43,45 +36,14 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
-    const processedFilterKeys = new Set<string>();
 
-    const baseFilters: LotFilters = {};
-
-    const baseAggs = await this.collectVehiclesForFilters(baseFilters, vehicles, seenIds, processedFilterKeys, true);
-
-    const aggregationData = this.extractAggregations(baseAggs);
-    const additionalFilters = this.buildFilterCombinations(aggregationData);
-
-    for (const filters of additionalFilters) {
-      await this.collectVehiclesForFilters(filters, vehicles, seenIds, processedFilterKeys, false);
-    }
-
-    return vehicles;
-  }
-
-  private async collectVehiclesForFilters(
-    filters: LotFilters,
-    vehicles: VehicleData[],
-    seenIds: Set<string>,
-    processedFilterKeys: Set<string>,
-    includeAggregations: boolean
-  ): Promise<SodreSearchLotsResponse | null> {
-    const combinationKey = this.getFilterKey(filters);
-    if (processedFilterKeys.has(combinationKey)) {
-      return null;
-    }
-    processedFilterKeys.add(combinationKey);
-
-    if (combinationKey.length > 0) {
-      console.log(`[${this.auctioneerName}] Aplicando filtros: ${JSON.stringify(filters)}`);
-    }
-
-    let page = 1;
+    let currentPage = 1;
     let total = Infinity;
-    let aggregations: SodreSearchLotsResponse | null = null;
 
-    while ((page - 1) * this.perPage < total) {
-      const response = await this.fetchPage(page, this.perPage, filters, includeAggregations && page === 1);
+    while ((currentPage - 1) * this.perPage < total) {
+      console.log(`[${this.auctioneerName}] Buscando página ${currentPage}...`);
+
+      const response = await this.fetchLotsPage(currentPage, this.perPage);
       const results = response.results ?? [];
 
       if (typeof response.total === 'number') {
@@ -89,6 +51,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
       }
 
       if (results.length === 0) {
+        console.log(`[${this.auctioneerName}] Página ${currentPage} vazia. Encerrando paginação.`);
         break;
       }
 
@@ -106,27 +69,19 @@ export class SodreSantoroRealScraper extends BaseScraper {
         vehicles.push(vehicle);
       }
 
-      if (includeAggregations && page === 1) {
-        aggregations = response;
-      }
-
       if (results.length < this.perPage) {
         break;
       }
 
-      page += 1;
+      currentPage += 1;
       await this.randomDelay(150, 400);
     }
 
-    return aggregations;
+    console.log(`[${this.auctioneerName}] Coleta finalizada. ${vehicles.length} lotes processados.`);
+    return vehicles;
   }
 
-  private async fetchPage(
-    pageNumber: number,
-    perPage: number,
-    filters: LotFilters,
-    includeAggregations: boolean
-  ): Promise<SodreSearchLotsResponse> {
+  private async fetchLotsPage(pageNumber: number, perPage: number): Promise<SodreSearchLotsResponse> {
     if (!this.page) {
       throw new Error('Página não inicializada');
     }
@@ -134,19 +89,15 @@ export class SodreSantoroRealScraper extends BaseScraper {
     const payload = {
       page: pageNumber,
       perPage,
-      filters: this.mergeFilters(filters),
+      filters: {
+        segment_slug: ['veiculos'],
+      },
       sort: [
         {
           auction_date_init: 'asc',
         },
       ],
     };
-
-    if (includeAggregations) {
-      Object.assign(payload, {
-        aggregations: AGGREGATION_FIELDS,
-      });
-    }
 
     try {
       const data = await this.page.evaluate(async (body) => {
@@ -170,82 +121,6 @@ export class SodreSantoroRealScraper extends BaseScraper {
       console.error(`[${this.auctioneerName}] Erro ao consultar API na página ${pageNumber}:`, error?.message ?? error);
       return { results: [], total: 0, page: pageNumber, perPage };
     }
-  }
-
-  private buildFilterCombinations(aggregations: Record<string, any> | null): LotFilters[] {
-    if (!aggregations) {
-      return [];
-    }
-
-    const combinations: LotFilters[] = [];
-
-    for (const field of AGGREGATION_FIELDS) {
-      const aggregation = aggregations[field];
-      if (!aggregation) continue;
-
-      const buckets = aggregation.validBuckets || aggregation.buckets || [];
-      for (const bucket of buckets) {
-        const rawKey = bucket?.key ?? bucket?.key_as_string;
-        const count = bucket?.doc_count ?? bucket?.count ?? 0;
-        if (rawKey === undefined || rawKey === null || count <= 0) continue;
-
-        const value = Array.isArray(rawKey)
-          ? rawKey.map((item: any) => (typeof item === 'string' ? item : String(item)))
-          : [typeof rawKey === 'string' ? rawKey : bucket?.key_as_string ?? String(rawKey)];
-
-        combinations.push({ [field]: value });
-      }
-    }
-
-    return combinations;
-  }
-
-  private extractAggregations(response: SodreSearchLotsResponse | null): Record<string, any> | null {
-    if (!response) {
-      return null;
-    }
-
-    if (response.aggregations && Object.keys(response.aggregations).length > 0) {
-      return response.aggregations;
-    }
-
-    if (response.aggs && Object.keys(response.aggs).length > 0) {
-      return response.aggs;
-    }
-
-    return null;
-  }
-
-  private getFilterKey(filters: LotFilters): string {
-    const entries = Object.entries(filters)
-      .map(([key, value]) => `${key}:${(value ?? []).slice().sort().join('|')}`)
-      .sort();
-
-    return entries.join(';');
-  }
-
-  private mergeFilters(filters: LotFilters): LotFilters {
-    const merged: LotFilters = {
-      segment_slug: [SEGMENT_SLUG],
-    };
-
-    Object.entries(filters || {}).forEach(([key, value]) => {
-      if (!value) return;
-      const arrayValue = Array.isArray(value) ? value : [value];
-      const sanitized = arrayValue
-        .map((item) => {
-          if (item === undefined || item === null) return null;
-          if (typeof item === 'string') return item;
-          return String(item);
-        })
-        .filter((item): item is string => typeof item === 'string' && item.length > 0);
-
-      if (sanitized.length > 0) {
-        merged[key] = sanitized;
-      }
-    });
-
-    return merged;
   }
 
   private transformLot(lot: any): VehicleData | null {
