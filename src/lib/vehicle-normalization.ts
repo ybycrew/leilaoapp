@@ -444,8 +444,6 @@ export function normalizeBrandName(brand: string): string {
     .join(' ');
 }
 
-const isFipeLookupEnabled = () => process.env.SCRAPER_ENABLE_FIPE_LOOKUP === 'true';
-
 /**
  * Valida e normaliza marca usando API FIPE
  */
@@ -482,14 +480,6 @@ export async function validateAndNormalizeBrand(
   // Aplicar alias, se houver
   const aliasApplied = applyBrandAlias(trimmed);
   const candidateForFipe = aliasApplied;
-
-  if (!isFipeLookupEnabled()) {
-    return {
-      isValid: true,
-      normalized: normalizeBrandName(aliasApplied),
-      fipeBrand: null,
-    };
-  }
 
   // Tentar encontrar na FIPE
   const fipeBrand = await findFipeBrandByName(candidateForFipe, vehicleType);
@@ -534,14 +524,6 @@ export async function validateAndNormalizeModel(
     return { isValid: false, normalized: null, fipeModel: null };
   }
   
-  if (!isFipeLookupEnabled()) {
-    return {
-      isValid: true,
-      normalized: trimmed,
-      fipeModel: null,
-    };
-  }
-
   // Buscar marca na FIPE primeiro
   const fipeBrand = await findFipeBrandByName(brand, vehicleType);
   
@@ -688,11 +670,6 @@ export async function filterValidBrands(
     // Verificar se é marca proibida
     if (isBannedBrandName(trimmed)) continue;
     
-    if (!isFipeLookupEnabled()) {
-      validBrands.add(normalizeBrandName(trimmed));
-      continue;
-    }
-
     // Tentar validar na FIPE
     const validation = await validateAndNormalizeBrand(trimmed, vehicleType);
     if (validation.isValid && validation.normalized) {
@@ -710,8 +687,8 @@ export async function filterValidBrands(
  * Filtra lista de modelos removendo valores inválidos
  */
 export async function filterValidModels(
-  models: string[],
   brand: string,
+  models: string[],
   vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
 ): Promise<string[]> {
   const validModels = new Set<string>();
@@ -736,16 +713,15 @@ export async function filterValidModels(
     // Verificar se é uma peça
     if (isPart(trimmed)) continue;
     
-    if (!isFipeLookupEnabled()) {
-      validModels.add(trimmed);
-      continue;
-    }
-
+    // Tentar validar na FIPE
     const validation = await validateAndNormalizeModel(brand, trimmed, vehicleType);
     if (validation.normalized) {
       validModels.add(validation.normalized);
     } else {
-      validModels.add(trimmed);
+      // Mesmo não validado, adiciona se não for claramente inválido
+      if (!isOnlyNumbers(trimmed) && !isPart(trimmed)) {
+        validModels.add(trimmed);
+      }
     }
   }
   
