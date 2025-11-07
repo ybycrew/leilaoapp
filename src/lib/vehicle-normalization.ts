@@ -3,14 +3,193 @@
  * Valida e normaliza dados usando API FIPE como fonte de verdade
  */
 
-import { 
-  findFipeBrandByName, 
+import {
+  findFipeBrandByName,
   findFipeModelByName,
   getAllFipeBrands,
   getFipeModelsByBrand,
   type FipeBrand,
   type FipeModel
 } from './fipe';
+
+// Mapeamento de aliases conhecidos para marcas oficiais
+const BRAND_ALIAS_MAP: Record<string, string> = {
+  'citroen': 'Citroën',
+  'citroën': 'Citroën',
+  'citroem': 'Citroën',
+  'gm': 'Chevrolet',
+  'general motors': 'Chevrolet',
+  'chevy': 'Chevrolet',
+  'volkswagen': 'Volkswagen',
+  'vw': 'Volkswagen',
+  'mercedes benz': 'Mercedes-Benz',
+  'mercedes-benz': 'Mercedes-Benz',
+  'mercedesbenz': 'Mercedes-Benz',
+  'mercedez': 'Mercedes-Benz',
+  'mercedez-benz': 'Mercedes-Benz',
+};
+
+// Marcas que devem ser descartadas (valores genéricos ou inválidos)
+const BANNED_BRAND_NAMES = new Set([
+  'cross lander',
+  'crosslander',
+  'conservado',
+  'conservada',
+  'conservados',
+  'conservadas',
+  'desconhecido',
+  'desconhecida',
+  'desconhecidos',
+  'desconhecidas',
+  'não informado',
+  'nao informado',
+  'não-informado',
+  'nao-informado',
+  'naoinformado',
+  'importado',
+  'importados',
+  'diverso',
+  'diversos',
+  'diversa',
+  'diversas',
+]);
+
+const VALID_STATE_CODES = new Set([
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+]);
+
+const STATE_NAME_TO_UF: Record<string, string> = {
+  'ACRE': 'AC',
+  'ALAGOAS': 'AL',
+  'AMAPA': 'AP',
+  'AMAPÁ': 'AP',
+  'AMAZONAS': 'AM',
+  'BAHIA': 'BA',
+  'CEARA': 'CE',
+  'CEARÁ': 'CE',
+  'DISTRITO FEDERAL': 'DF',
+  'FEDERAL DISTRICT': 'DF',
+  'ESPIRITO SANTO': 'ES',
+  'ESPÍRITO SANTO': 'ES',
+  'GOIAS': 'GO',
+  'GOIÁS': 'GO',
+  'MARANHAO': 'MA',
+  'MARANHÃO': 'MA',
+  'MATO GROSSO': 'MT',
+  'MATO GROSSO DO SUL': 'MS',
+  'MINAS GERAIS': 'MG',
+  'PARA': 'PA',
+  'PARÁ': 'PA',
+  'PARAIBA': 'PB',
+  'PARAÍBA': 'PB',
+  'PARANA': 'PR',
+  'PARANÁ': 'PR',
+  'PERNAMBUCO': 'PE',
+  'PIAUI': 'PI',
+  'PIAUÍ': 'PI',
+  'RIO DE JANEIRO': 'RJ',
+  'RIO GRANDE DO NORTE': 'RN',
+  'RIO GRANDE DO SUL': 'RS',
+  'RONDONIA': 'RO',
+  'RONDÔNIA': 'RO',
+  'RORAIMA': 'RR',
+  'SANTA CATARINA': 'SC',
+  'SAO PAULO': 'SP',
+  'SÃO PAULO': 'SP',
+  'SERGIPE': 'SE',
+  'TOCANTINS': 'TO',
+};
+
+const CITY_LOWERCASE_WORDS = new Set([
+  'da', 'das', 'de', 'do', 'dos', 'del', 'della', 'di', 'd', 'e', 'na', 'nas', 'no', 'nos'
+]);
+
+function removeDiacritics(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
+function capitalizeCitySegment(segment: string): string {
+  if (!segment) {
+    return segment;
+  }
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
+
+function capitalizeCityWord(word: string, index: number): string {
+  const lower = word.toLowerCase();
+
+  if (lower.startsWith("d'") && index !== 0) {
+    const remainder = lower.slice(2);
+    const capitalized = capitalizeCityWord(remainder, 0);
+    return `d'${capitalized}`;
+  }
+
+  if (CITY_LOWERCASE_WORDS.has(lower) && index !== 0) {
+    return lower;
+  }
+
+  return lower
+    .split('-')
+    .map(part => part
+      .split("'")
+      .map(sub => capitalizeCitySegment(sub))
+      .join("'"))
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('-');
+}
+
+function formatCityName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => capitalizeCityWord(word, index))
+    .join(' ');
+}
+
+function splitCityAndState(rawCity: string | null | undefined): { city: string | null; stateCandidate: string | null } {
+  if (!rawCity || typeof rawCity !== 'string') {
+    return { city: null, stateCandidate: null };
+  }
+
+  let text = rawCity.trim();
+  if (!text) {
+    return { city: null, stateCandidate: null };
+  }
+
+  text = text.replace(/\s{2,}/g, ' ');
+  text = text.replace(/,?\s*brasil$/i, '').trim();
+
+  let stateCandidate: string | null = null;
+  const patterns = [
+    /[\/|\-]\s*([A-Za-z]{2})$/i,
+    /\(([A-Za-z]{2})\)$/i,
+    /,\s*([A-Za-z]{2})$/i,
+    /\s([A-Za-z]{2})$/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const candidate = match[1].toUpperCase();
+      if (VALID_STATE_CODES.has(candidate)) {
+        stateCandidate = candidate;
+        text = text.replace(pattern, '').trim();
+        break;
+      }
+    }
+  }
+
+  text = text.replace(/^(cidade|município|municipio)\s+de\s+/i, '');
+  text = text.replace(/^(de|da|das|do|dos)\s+/i, '');
+
+  const city = text.length ? text : null;
+
+  return {
+    city,
+    stateCandidate,
+  };
+}
 
 // Lista de palavras que são peças de veículos (não marcas/modelos)
 const PARTS_WORDS = new Set([
@@ -81,6 +260,110 @@ export function isInvalidBrandWord(value: string): boolean {
 }
 
 /**
+ * Verifica se a marca está em uma lista proibida
+ */
+export function isBannedBrandName(value: string): boolean {
+  const valueLower = value.toLowerCase().trim();
+  return BANNED_BRAND_NAMES.has(valueLower);
+}
+
+/**
+ * Normaliza uma sigla de estado brasileiro
+ */
+export function normalizeState(value: string | null | undefined): string | null {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const upper = trimmed.toUpperCase();
+  const onlyLetters = upper.replace(/[^A-Z]/g, '');
+
+  if (onlyLetters.length === 2 && VALID_STATE_CODES.has(onlyLetters)) {
+    return onlyLetters;
+  }
+
+  const sanitized = removeDiacritics(upper).replace(/[^A-Z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!sanitized) {
+    return null;
+  }
+
+  if (STATE_NAME_TO_UF[sanitized]) {
+    return STATE_NAME_TO_UF[sanitized];
+  }
+
+  const twoLetterMatch = sanitized.match(/([A-Z]{2})$/);
+  if (twoLetterMatch && VALID_STATE_CODES.has(twoLetterMatch[1])) {
+    return twoLetterMatch[1];
+  }
+
+  return null;
+}
+
+/**
+ * Verifica se um estado é válido
+ */
+export function isValidState(value: string | null | undefined): boolean {
+  const normalized = normalizeState(value);
+  return Boolean(normalized);
+}
+
+/**
+ * Normaliza nome de cidade, removendo sufixos de estado
+ */
+export function normalizeCityName(city: string | null | undefined): string | null {
+  const { city: rawCity } = splitCityAndState(city);
+  if (!rawCity) {
+    return null;
+  }
+
+  return formatCityName(rawCity);
+}
+
+/**
+ * Normaliza estado e cidade simultaneamente, tentando extrair UF do campo da cidade quando necessário
+ */
+export function normalizeStateCity(
+  stateInput: string | null | undefined,
+  cityInput: string | null | undefined
+): { state: string | null; city: string | null } {
+  let normalizedState = normalizeState(stateInput);
+  let normalizedCity: string | null = null;
+
+  if (cityInput) {
+    const { city, stateCandidate } = splitCityAndState(cityInput);
+    if (city) {
+      normalizedCity = formatCityName(city);
+    }
+
+    if (!normalizedState && stateCandidate) {
+      normalizedState = normalizeState(stateCandidate);
+    }
+  }
+
+  return {
+    state: normalizedState,
+    city: normalizedCity,
+  };
+}
+
+/**
+ * Aplica aliases conhecidos para marcas
+ */
+function applyBrandAlias(value: string): string {
+  const valueLower = value.toLowerCase().trim();
+  if (BRAND_ALIAS_MAP[valueLower]) {
+    return BRAND_ALIAS_MAP[valueLower];
+  }
+  return value;
+}
+
+/**
  * Separa combinações como "CHEVROLET/CORSA" em marca e modelo
  */
 export function separateBrandModel(combined: string): { brand: string | null; model: string | null } {
@@ -121,6 +404,12 @@ export function normalizeBrandName(brand: string): string {
   if (!brand || typeof brand !== 'string') return brand;
   
   const trimmed = brand.trim();
+
+  // Aplicar alias conhecido antes de normalizar casing
+  const aliasApplied = applyBrandAlias(trimmed);
+  if (aliasApplied !== trimmed) {
+    return aliasApplied;
+  }
   
   // Se já está normalizado (primeira letra maiúscula, resto minúscula), retorna
   if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)*$/.test(trimmed)) {
@@ -167,25 +456,34 @@ export async function validateAndNormalizeBrand(
   }
 
   const trimmed = brand.trim();
-  
+
   // Verificar se é apenas números
   if (isOnlyNumbers(trimmed)) {
     return { isValid: false, normalized: null, fipeBrand: null };
   }
-  
+
   // Verificar se é uma peça
   if (isPart(trimmed)) {
     return { isValid: false, normalized: null, fipeBrand: null };
   }
-  
+
   // Verificar se é palavra inválida
   if (isInvalidBrandWord(trimmed)) {
     return { isValid: false, normalized: null, fipeBrand: null };
   }
-  
+
+  // Verificar se é marca proibida
+  if (isBannedBrandName(trimmed)) {
+    return { isValid: false, normalized: null, fipeBrand: null };
+  }
+
+  // Aplicar alias, se houver
+  const aliasApplied = applyBrandAlias(trimmed);
+  const candidateForFipe = aliasApplied;
+
   // Tentar encontrar na FIPE
-  const fipeBrand = await findFipeBrandByName(trimmed, vehicleType);
-  
+  const fipeBrand = await findFipeBrandByName(candidateForFipe, vehicleType);
+
   if (fipeBrand) {
     return {
       isValid: true,
@@ -193,11 +491,11 @@ export async function validateAndNormalizeBrand(
       fipeBrand
     };
   }
-  
+
   // Se não encontrou na FIPE, retorna normalizado mas inválido
   return {
     isValid: false,
-    normalized: normalizeBrandName(trimmed),
+    normalized: normalizeBrandName(aliasApplied),
     fipeBrand: null
   };
 }
@@ -282,7 +580,12 @@ export async function normalizeVehicleBrandModel(
       wasSeparated = true;
     }
   }
-  
+ 
+  // Se a marca está na lista de proibidas, descartar imediatamente
+  if (finalBrand && isBannedBrandName(finalBrand)) {
+    finalBrand = null;
+  }
+
   // Se ainda temos uma combinação no brand, tentar separar
   if (finalBrand && finalBrand.includes('/')) {
     const separated = separateBrandModel(finalBrand);
@@ -363,6 +666,9 @@ export async function filterValidBrands(
     
     // Verificar se é palavra inválida
     if (isInvalidBrandWord(trimmed)) continue;
+
+    // Verificar se é marca proibida
+    if (isBannedBrandName(trimmed)) continue;
     
     // Tentar validar na FIPE
     const validation = await validateAndNormalizeBrand(trimmed, vehicleType);
@@ -386,9 +692,10 @@ export async function filterValidModels(
   vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
 ): Promise<string[]> {
   const validModels = new Set<string>();
-  
+ 
   // Buscar marca na FIPE
-  const fipeBrand = await findFipeBrandByName(brand, vehicleType);
+  const brandCandidate = applyBrandAlias(brand);
+  const fipeBrand = await findFipeBrandByName(brandCandidate, vehicleType);
   if (!fipeBrand) {
     // Se marca não é válida, retorna lista vazia
     return [];

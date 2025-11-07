@@ -1,12 +1,17 @@
 ﻿'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { 
-  filterValidBrands, 
-  isOnlyNumbers, 
-  isPart, 
+import {
+  filterValidBrands,
+  isOnlyNumbers,
+  isPart,
   isInvalidBrandWord,
-  separateBrandModel 
+  isBannedBrandName,
+  normalizeBrandName,
+  separateBrandModel,
+  normalizeState,
+  normalizeStateCity,
+  normalizeCityName
 } from '@/lib/vehicle-normalization';
 
 export interface SearchFilters {
@@ -184,20 +189,25 @@ export async function getFilterOptions() {
       )
     );
 
-    // Separar combinações como "CHEVROLET/CORSA"
-    const separatedBrands = new Set<string>();
+    const preNormalizedBrands = new Set<string>();
     for (const brand of rawBrands) {
       const separated = separateBrandModel(brand);
-      if (separated.brand) {
-        separatedBrands.add(separated.brand);
-      } else {
-        separatedBrands.add(brand);
-      }
+      const candidate = separated.brand || brand;
+      if (!candidate) continue;
+      
+      if (isBannedBrandName(candidate)) continue;
+      
+      const normalizedCandidate = normalizeBrandName(candidate);
+      if (!normalizedCandidate) continue;
+      
+      if (isBannedBrandName(normalizedCandidate)) continue;
+      
+      preNormalizedBrands.add(normalizedCandidate);
     }
 
     // Filtrar e normalizar marcas usando API FIPE (assíncrono, mas vamos fazer de forma otimizada)
     // Por performance, vamos fazer validação básica primeiro e depois validar contra FIPE
-    const brands = await filterValidBrands(Array.from(separatedBrands), 'carros');
+    const brands = await filterValidBrands(Array.from(preNormalizedBrands), 'carros');
 
     console.log(`[getFilterOptions] Marcas únicas após filtro:`, brands.length);
     console.log(`[getFilterOptions] Marcas filtradas (primeiras 10):`, brands.slice(0, 10));
@@ -252,13 +262,13 @@ export async function getFilterOptions() {
       console.log(`[getFilterOptions] Estados encontrados (raw):`, statesData?.length || 0);
     }
 
-    const states = Array.from(
-      new Set(
-        statesData
-          ?.map(v => v.state)
-          .filter((state): state is string => Boolean(state && state.trim() !== '')) || []
-      )
-    ).sort();
+    const stateSet = new Set<string>();
+    statesData?.forEach(v => {
+      const normalized = normalizeState(v.state);
+      if (normalized) {
+        stateSet.add(normalized);
+      }
+    });
 
     // Buscar cidades por estado (colunas: city, state)
     const { data: citiesData, error: citiesError } = await supabase
@@ -272,19 +282,28 @@ export async function getFilterOptions() {
 
     const citiesByState: Record<string, string[]> = {};
     citiesData?.forEach(v => {
-      if (v.city && v.city.trim() !== '' && v.state && v.state.trim() !== '') {
-        if (!citiesByState[v.state]) {
-          citiesByState[v.state] = [];
-        }
-        if (!citiesByState[v.state].includes(v.city)) {
-          citiesByState[v.state].push(v.city);
-        }
+      const location = normalizeStateCity(v.state, v.city);
+      const state = location.state ?? normalizeState(v.state);
+      const city = location.city ?? normalizeCityName(v.city);
+
+      if (!state || !city) {
+        return;
+      }
+
+      if (!citiesByState[state]) {
+        citiesByState[state] = [];
+      }
+      if (!citiesByState[state].includes(city)) {
+        citiesByState[state].push(city);
       }
     });
 
     Object.keys(citiesByState).forEach(state => {
-      citiesByState[state].sort();
+      stateSet.add(state);
+      citiesByState[state].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     });
+
+    const states = Array.from(stateSet).sort();
 
     // Buscar leiloeiros (coluna: auctioneer ou leiloeiro - tentar ambos)
     let auctioneers: string[] = [];

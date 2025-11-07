@@ -5,7 +5,13 @@ import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
-import { normalizeVehicleBrandModel } from '../vehicle-normalization';
+import {
+  normalizeVehicleBrandModel,
+  normalizeStateCity,
+  normalizeState,
+  normalizeCityName,
+  isValidState
+} from '../vehicle-normalization';
 import { calculateDealScore } from './utils';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -310,6 +316,22 @@ async function processVehicle(
   
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
+
+  const locationNormalization = normalizeStateCity(vehicleData.state, vehicleData.city);
+  let normalizedState = locationNormalization.state ?? normalizeState(vehicleData.state);
+  let normalizedCity = locationNormalization.city ?? normalizeCityName(vehicleData.city);
+
+  if (!normalizedState || !isValidState(normalizedState)) {
+    normalizedState = normalizeState(vehicleData.state);
+  }
+
+  if (!normalizedState || !isValidState(normalizedState)) {
+    normalizedState = 'SP';
+  }
+
+  if (!normalizedCity) {
+    normalizedCity = normalizeCityName(vehicleData.city) || 'São Paulo';
+  }
   
   try {
     const normalizationResult = await normalizeVehicleBrandModel(
@@ -360,8 +382,8 @@ async function processVehicle(
     km: vehicleData.mileage || null,
     
     // Localização
-    estado: vehicleData.state || 'SP',
-    cidade: vehicleData.city || 'São Paulo',
+    estado: normalizedState,
+    cidade: normalizedCity,
     
     // Preços
     preco_inicial: vehicleData.minimum_bid || vehicleData.current_bid || 0,

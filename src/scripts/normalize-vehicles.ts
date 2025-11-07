@@ -10,7 +10,14 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { normalizeVehicleBrandModel } from '../lib/vehicle-normalization';
+import {
+  isBannedBrandName,
+  isValidState,
+  normalizeVehicleBrandModel,
+  normalizeStateCity,
+  normalizeState,
+  normalizeCityName
+} from '../lib/vehicle-normalization';
 
 // Configuração do Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,6 +38,9 @@ interface NormalizationStats {
   normalized: number;
   invalid: number;
   errors: number;
+  bannedRemoved: number;
+  statesUpdated: number;
+  citiesUpdated: number;
 }
 
 async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
@@ -49,13 +59,16 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
     normalized: 0,
     invalid: 0,
     errors: 0,
+    bannedRemoved: 0,
+    statesUpdated: 0,
+    citiesUpdated: 0,
   };
 
   try {
     // Buscar todos os veículos (ou limitado)
     let query = supabase
       .from('vehicles')
-      .select('id, marca, modelo, tipo_veiculo')
+      .select('id, marca, modelo, tipo_veiculo, estado, cidade')
       .not('marca', 'is', null)
       .order('created_at', { ascending: false });
 
@@ -103,7 +116,19 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
         // Verificar se houve mudanças
         const brandChanged = vehicle.marca !== result.brand;
         const modelChanged = vehicle.modelo !== result.model;
-        const hasChanges = brandChanged || modelChanged;
+
+        const locationNormalization = normalizeStateCity(vehicle.estado, vehicle.cidade);
+        let normalizedState = locationNormalization.state ?? normalizeState(vehicle.estado);
+        let normalizedCity = locationNormalization.city ?? normalizeCityName(vehicle.cidade);
+
+        if (!normalizedState && vehicle.estado && isValidState(vehicle.estado)) {
+          normalizedState = vehicle.estado.toUpperCase();
+        }
+
+        const stateChanged = normalizedState !== undefined && normalizedState !== null && normalizedState !== vehicle.estado;
+        const cityChanged = normalizedCity !== undefined && normalizedCity !== null && normalizedCity !== vehicle.cidade;
+
+        const hasChanges = brandChanged || modelChanged || stateChanged || cityChanged;
 
         if (result.wasSeparated) {
           stats.separated++;
@@ -117,11 +142,29 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
           stats.invalid++;
         }
 
+        if (!result.brand && vehicle.marca && isBannedBrandName(vehicle.marca)) {
+          stats.bannedRemoved++;
+        }
+
+        if (stateChanged && normalizedState && isValidState(normalizedState)) {
+          stats.statesUpdated++;
+        }
+
+        if (cityChanged && normalizedCity) {
+          stats.citiesUpdated++;
+        }
+
         // Se houve mudanças, atualizar no banco
         if (hasChanges && !dryRun) {
-          const updateData: any = {};
+          const updateData: Record<string, any> = {};
           if (brandChanged) updateData.marca = result.brand;
           if (modelChanged) updateData.modelo = result.model;
+          if (stateChanged && normalizedState && isValidState(normalizedState)) {
+            updateData.estado = normalizedState;
+          }
+          if (cityChanged && normalizedCity) {
+            updateData.cidade = normalizedCity;
+          }
 
           const { error: updateError } = await supabase
             .from('vehicles')
@@ -151,6 +194,15 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
             if (result.wasSeparated) {
               console.log(`      ⚠️  Combinação separada`);
             }
+            if (!result.brand && vehicle.marca && isBannedBrandName(vehicle.marca)) {
+              console.log(`      🚫 Marca original marcada como proibida e removida`);
+            }
+            if (stateChanged && normalizedState && isValidState(normalizedState)) {
+              console.log(`      Estado: "${vehicle.estado}" → "${normalizedState}"`);
+            }
+            if (cityChanged && normalizedCity) {
+              console.log(`      Cidade: "${vehicle.cidade}" → "${normalizedCity}"`);
+            }
           }
         }
       } catch (error: any) {
@@ -173,6 +225,9 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
     console.log(`   Combinações separadas: ${stats.separated}`);
     console.log(`   Normalizados: ${stats.normalized}`);
     console.log(`   Inválidos: ${stats.invalid}`);
+    console.log(`   Marcas removidas (banned): ${stats.bannedRemoved}`);
+    console.log(`   Estados atualizados: ${stats.statesUpdated}`);
+    console.log(`   Cidades atualizadas: ${stats.citiesUpdated}`);
     console.log(`   Erros: ${stats.errors}`);
 
     if (dryRun) {
