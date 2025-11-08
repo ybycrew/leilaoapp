@@ -319,10 +319,13 @@ async function upsertBrands(
     throw new Error(`Erro ao upsert de marcas: ${error.message}`);
   }
 
+  const codes = payload.map((item) => item.fipe_code);
+
   const { data, error: selectError } = await db
     .from('fipe_brands')
     .select('id, fipe_code')
-    .eq('vehicle_type_id', vehicleTypeId);
+    .eq('vehicle_type_id', vehicleTypeId)
+    .in('fipe_code', codes);
 
   if (selectError || !data) {
     throw new Error(`Erro ao buscar marcas após upsert: ${selectError?.message ?? 'sem dados'}`);
@@ -362,10 +365,13 @@ async function upsertModels(
     throw new Error(`Erro ao upsert de modelos (marca ${brandCode}): ${error.message}`);
   }
 
+  const codes = payload.map((item) => item.fipe_code);
+
   const { data, error: selectError } = await db
     .from('fipe_models')
     .select('id, fipe_code')
-    .eq('brand_id', brandId);
+    .eq('brand_id', brandId)
+    .in('fipe_code', codes);
 
   if (selectError || !data) {
     throw new Error(`Erro ao buscar modelos da marca ${brandCode}: ${selectError?.message ?? 'sem dados'}`);
@@ -409,10 +415,13 @@ async function upsertModelYears(
     throw new Error(`Erro ao upsert de anos (modelo ${modelCode}): ${error.message}`);
   }
 
+  const codes = payload.map((item) => item.year_code);
+
   const { data, error: selectError } = await db
     .from('fipe_model_years')
     .select('id, year_code')
-    .eq('model_id', modelId);
+    .eq('model_id', modelId)
+    .in('year_code', codes);
 
   if (selectError || !data) {
     throw new Error(`Erro ao buscar anos do modelo ${modelCode}: ${selectError?.message ?? 'sem dados'}`);
