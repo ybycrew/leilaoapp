@@ -556,12 +556,17 @@ async function upsertModelYears(
 
   const payload = years.map((year) => {
     const { modelYear, fuelLabel } = parseYearName(year);
-    return {
+    const entry: Record<string, any> = {
       model_id: modelId,
       year_code: year.codigo,
-      model_year: modelYear,
-      fuel_label: fuelLabel,
     };
+    if (modelYear !== null && modelYear !== undefined) {
+      entry.model_year = modelYear;
+    }
+    if (fuelLabel) {
+      entry.fuel_label = fuelLabel;
+    }
+    return entry;
   });
 
   const db = supabase as any;
@@ -696,13 +701,30 @@ async function syncVehicleType(
 
         console.log(`      ↳ Ano ${yearIndex}/${selectedYears.length}: ${year.nome} (${year.codigo})`);
 
-        const priceData = await fetchWithRetry(
-          () => fipeApi
-            .get<FipePriceApi>(`/${vehicleType.apiSlug}/brands/${brand.codigo}/models/${model.codigo}/years/${encodeURIComponent(year.codigo)}`)
-            .then((res) => res.data),
-          `preço FIPE (${vehicleType.slug} / ${brand.codigo} / ${model.codigo} / ${year.codigo})`,
-          options.throttleMs,
-        );
+        let priceData: FipePriceApi | null = null;
+        try {
+          priceData = await fetchWithRetry(
+            () => fipeApi
+              .get<FipePriceApi>(`/${vehicleType.apiSlug}/brands/${brand.codigo}/models/${model.codigo}/years/${encodeURIComponent(year.codigo)}`)
+              .then((res) => res.data),
+            `preço FIPE (${vehicleType.slug} / ${brand.codigo} / ${model.codigo} / ${year.codigo})`,
+            options.throttleMs,
+          );
+        } catch (error: any) {
+          const status = error?.response?.status;
+          if (status === 401 || status === 403) {
+            console.warn(`      ⚠️  Token FIPE não autorizado (status ${status}). Pulando coleta de preços para este tipo.`);
+            // Evita novas tentativas de preço para este tipo de veículo.
+            options.skipPrices = true;
+            break;
+          }
+          throw error;
+        }
+
+        if (!priceData) {
+          await delay(options.throttleMs);
+          continue;
+        }
 
         const referenceLabel = pickFirstField<string>(priceData, ['MesReferencia', 'referenceMonth', 'reference']);
         const priceText = pickFirstField<string>(priceData, ['Valor', 'valor', 'price']);
