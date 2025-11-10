@@ -687,6 +687,7 @@ async function syncVehicleType(
       const yearMap = await upsertModelYears(supabase, modelId, model.codigo, selectedYears);
 
       if (options.skipPrices) {
+        // Se preços foram desabilitados (token sem permissão), seguimos apenas com estrutura.
         continue;
       }
 
@@ -714,7 +715,6 @@ async function syncVehicleType(
           const status = error?.response?.status;
           if (status === 401 || status === 403) {
             console.warn(`      ⚠️  Token FIPE não autorizado (status ${status}). Pulando coleta de preços para este tipo.`);
-            // Evita novas tentativas de preço para este tipo de veículo.
             options.skipPrices = true;
             break;
           }
@@ -783,6 +783,18 @@ async function syncVehicleType(
 
         await delay(options.throttleMs);
       }
+
+      if (options.skipPrices) {
+        console.warn(`   ⚠️  Coleta de preços desativada para ${vehicleType.slug} (109/401). Continuando apenas com estrutura.`);
+        // Não precisa processar outros modelos para preço.
+        // As estruturas (marcas/modelos/anos) já foram salvas antes do break.
+        break;
+      }
+    }
+
+    if (options.skipPrices) {
+      // Não adianta processar as demais marcas para preços; mas ainda coletamos estrutura.
+      console.warn(`⚠️  Preços desabilitados para ${vehicleType.slug} devido a token. Estrutura continuará sendo sincronizada.`);
     }
   }
 }
