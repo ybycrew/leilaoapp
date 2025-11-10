@@ -1,12 +1,16 @@
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { fipeApi } from '../lib/fipe-api';
+import { buildSearchKey, extractModelBase, normalizeBrandName, toAsciiUpper } from '../lib/fipe-normalization';
 
 interface VehicleTypeDefinition {
   slug: FipeVehicleType;
+  apiSlug: ApiVehicleType;
   description: string;
 }
 
 type FipeVehicleType = 'carros' | 'motos' | 'caminhoes';
+type ApiVehicleType = 'cars' | 'motorcycles' | 'trucks';
 
 type CliOptions = {
   types: FipeVehicleType[];
@@ -28,7 +32,8 @@ interface FipeModelApi {
 }
 
 interface FipeModelsResponse {
-  modelos: FipeModelApi[];
+  modelos?: FipeModelApi[];
+  models?: FipeModelApi[];
 }
 
 interface FipeYearApi {
@@ -37,13 +42,20 @@ interface FipeYearApi {
 }
 
 interface FipePriceApi {
-  Valor: string;
-  Marca: string;
-  Modelo: string;
-  AnoModelo: number;
-  Combustivel: string;
-  MesReferencia: string;
-  CodigoFipe: string;
+  Valor?: string;
+  Marca?: string;
+  Modelo?: string;
+  AnoModelo?: number;
+  Combustivel?: string;
+  MesReferencia?: string;
+  CodigoFipe?: string;
+  price?: string;
+  brand?: string;
+  model?: string;
+  modelYear?: number;
+  fuel?: string;
+  referenceMonth?: string;
+  codeFipe?: string;
 }
 
 interface VehicleTypeRow {
@@ -54,11 +66,13 @@ interface VehicleTypeRow {
 interface BrandRow {
   id: string;
   fipe_code: string;
+  search_name?: string;
 }
 
 interface ModelRow {
   id: string;
   fipe_code: string;
+  base_search_name?: string;
 }
 
 interface ModelYearRow {
@@ -66,10 +80,121 @@ interface ModelYearRow {
   year_code: string;
 }
 
+function normalizeBrandItem(item: any): FipeBrandApi | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  const codigo = item.codigo ?? item.code ?? item.id;
+  const nome = item.nome ?? item.name ?? item.description;
+  if (!codigo || !nome) {
+    return null;
+  }
+  return { codigo: String(codigo), nome: String(nome) };
+}
+
+function normalizeBrandList(data: unknown): FipeBrandApi[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.map(normalizeBrandItem).filter((item): item is FipeBrandApi => Boolean(item));
+  }
+  if (typeof data === 'object' && data !== null) {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.marcas)) {
+      return normalizeBrandList(obj.marcas);
+    }
+    if (Array.isArray(obj.brands)) {
+      return normalizeBrandList(obj.brands);
+    }
+    if (Array.isArray(obj.data)) {
+      return normalizeBrandList(obj.data);
+    }
+  }
+  return [];
+}
+
+function normalizeModelItem(item: any): FipeModelApi | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  const codigo = item.codigo ?? item.code ?? item.id;
+  const nome = item.nome ?? item.name ?? item.description;
+  if (!codigo || !nome) {
+    return null;
+  }
+  return { codigo: String(codigo), nome: String(nome) };
+}
+
+function normalizeModelList(data: unknown): FipeModelApi[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.map(normalizeModelItem).filter((item): item is FipeModelApi => Boolean(item));
+  }
+  if (typeof data === 'object' && data !== null) {
+    const obj = data as FipeModelsResponse & Record<string, unknown>;
+    if (Array.isArray(obj.modelos)) {
+      return normalizeModelList(obj.modelos);
+    }
+    if (Array.isArray(obj.models)) {
+      return normalizeModelList(obj.models);
+    }
+    if (Array.isArray(obj.data)) {
+      return normalizeModelList(obj.data);
+    }
+  }
+  return [];
+}
+
+function normalizeYearItem(item: any): FipeYearApi | null {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+  const codigo = item.codigo ?? item.code ?? item.id ?? item.year;
+  const nome = item.nome ?? item.name ?? item.description ?? item.label;
+  if (!codigo || !nome) {
+    return null;
+  }
+  return { codigo: String(codigo), nome: String(nome) };
+}
+
+function normalizeYearList(data: unknown): FipeYearApi[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.map(normalizeYearItem).filter((item): item is FipeYearApi => Boolean(item));
+  }
+  if (typeof data === 'object' && data !== null) {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.anos)) {
+      return normalizeYearList(obj.anos);
+    }
+    if (Array.isArray(obj.years)) {
+      return normalizeYearList(obj.years);
+    }
+    if (Array.isArray(obj.data)) {
+      return normalizeYearList(obj.data);
+    }
+  }
+  return [];
+}
+
+function pickFirstField<T>(source: any, keys: string[]): T | undefined {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      const value = (source as any)[key];
+      if (value !== undefined && value !== null) {
+        return value as T;
+      }
+    }
+  }
+  return undefined;
+}
+
 const VEHICLE_TYPES: VehicleTypeDefinition[] = [
-  { slug: 'carros', description: 'Automóveis' },
-  { slug: 'motos', description: 'Motocicletas' },
-  { slug: 'caminhoes', description: 'Caminhões' },
+  { slug: 'carros', apiSlug: 'cars', description: 'Automóveis' },
+  { slug: 'motos', apiSlug: 'motorcycles', description: 'Motocicletas' },
+  { slug: 'caminhoes', apiSlug: 'trucks', description: 'Caminhões' },
 ];
 
 const MONTH_MAP: Record<string, number> = {
@@ -91,13 +216,29 @@ const MONTH_MAP: Record<string, number> = {
 const DEFAULT_THROTTLE_MS = Number(process.env.FIPE_SYNC_DELAY_MS ?? 150);
 const MAX_RETRIES = 4;
 
-const api = axios.create({
-  baseURL: 'https://parallelum.com.br/fipe/api/v1',
-  timeout: 15000,
-  headers: {
-    'User-Agent': 'leilaoapp-fipe-sync/1.0',
-  },
-});
+function resolveVehicleType(value: string): FipeVehicleType | null {
+  const normalized = value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+  switch (normalized) {
+    case 'carro':
+    case 'carros':
+    case 'cars':
+      return 'carros';
+    case 'moto':
+    case 'motos':
+    case 'motorcycle':
+    case 'motorcycles':
+      return 'motos';
+    case 'caminhao':
+    case 'caminhoes':
+    case 'camiao':
+    case 'camioes':
+    case 'truck':
+    case 'trucks':
+      return 'caminhoes';
+    default:
+      return null;
+  }
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -182,7 +323,13 @@ function parseArgs(): CliOptions {
         {
           const value = readValue(arg, argv[i + 1]);
           if (value) {
-            opts.types = value.split(',').map((t) => t.trim()).filter((t): t is FipeVehicleType => ['carros', 'motos', 'caminhoes'].includes(t));
+            const requested = value
+              .split(',')
+              .map((t) => resolveVehicleType(t))
+              .filter((t): t is FipeVehicleType => Boolean(t));
+            if (requested.length > 0) {
+              opts.types = Array.from(new Set(requested));
+            }
             if (!arg.includes('=')) i++;
           }
         }
@@ -303,11 +450,16 @@ async function upsertBrands(
     return new Map();
   }
 
-  const payload = brands.map((brand) => ({
-    vehicle_type_id: vehicleTypeId,
-    fipe_code: brand.codigo,
-    name: brand.nome,
-  }));
+  const payload = brands.map((brand) => {
+    const normalized = normalizeBrandName(brand.nome);
+    return {
+      vehicle_type_id: vehicleTypeId,
+      fipe_code: brand.codigo,
+      name: brand.nome,
+      name_upper: normalized.upper,
+      search_name: normalized.search,
+    };
+  });
 
   const db = supabase as any;
 
@@ -349,11 +501,18 @@ async function upsertModels(
     return new Map();
   }
 
-  const payload = models.map((model) => ({
-    brand_id: brandId,
-    fipe_code: model.codigo,
-    name: model.nome,
-  }));
+  const payload = models.map((model) => {
+    const base = extractModelBase(model.nome);
+    return {
+      brand_id: brandId,
+      fipe_code: model.codigo,
+      name: model.nome,
+      name_upper: base.nameUpper,
+      base_name: base.baseName || model.nome,
+      base_name_upper: base.baseNameUpper || toAsciiUpper(model.nome),
+      base_search_name: base.baseSearchName || buildSearchKey(model.nome),
+    };
+  });
 
   const db = supabase as any;
 
@@ -449,11 +608,17 @@ async function syncVehicleType(
 
   const db = supabase as any;
 
-  const brands = await fetchWithRetry(
-    () => api.get<FipeBrandApi[]>(`/${vehicleType.slug}/marcas`).then((res) => res.data),
+  const brandsResponse = await fetchWithRetry(
+    () => fipeApi.get(`/${vehicleType.apiSlug}/brands`).then((res) => res.data),
     `listar marcas (${vehicleType.slug})`,
     options.throttleMs,
   );
+
+  const brands = normalizeBrandList(brandsResponse);
+  if (brands.length === 0) {
+    console.warn(`[${vehicleType.slug}] Nenhuma marca retornada pela API. Pulando tipo.`);
+    return;
+  }
 
   const selectedBrands = typeof options.brandLimit === 'number' ? brands.slice(0, options.brandLimit) : brands;
   console.log(`Encontradas ${brands.length} marcas. Processando ${selectedBrands.length}.`);
@@ -472,12 +637,16 @@ async function syncVehicleType(
     console.log(`\n➡️  [${vehicleType.slug}] Marca ${brandIndex}/${selectedBrands.length}: ${brand.nome} (${brand.codigo})`);
 
     const modelsResponse = await fetchWithRetry(
-      () => api.get<FipeModelsResponse>(`/${vehicleType.slug}/marcas/${brand.codigo}/modelos`).then((res) => res.data),
+      () => fipeApi.get(`/${vehicleType.apiSlug}/brands/${brand.codigo}/models`).then((res) => res.data),
       `listar modelos (${vehicleType.slug} / ${brand.codigo})`,
       options.throttleMs,
     );
 
-    const models = modelsResponse.modelos ?? [];
+    const models = normalizeModelList(modelsResponse);
+    if (models.length === 0) {
+      console.warn(`   ⚠️  Nenhum modelo retornado para a marca ${brand.codigo}. Pulando.`);
+      continue;
+    }
     const selectedModels = typeof options.modelLimit === 'number' ? models.slice(0, options.modelLimit) : models;
 
     console.log(`   • Modelos encontrados: ${models.length}. Processando ${selectedModels.length}.`);
@@ -495,11 +664,17 @@ async function syncVehicleType(
 
       console.log(`   ➜ Modelo ${modelIndex}/${selectedModels.length}: ${model.nome} (${model.codigo})`);
 
-      const years = await fetchWithRetry(
-        () => api.get<FipeYearApi[]>(`/${vehicleType.slug}/marcas/${brand.codigo}/modelos/${model.codigo}/anos`).then((res) => res.data),
+      const yearsResponse = await fetchWithRetry(
+        () => fipeApi.get(`/${vehicleType.apiSlug}/brands/${brand.codigo}/models/${model.codigo}/years`).then((res) => res.data),
         `listar anos (${vehicleType.slug} / ${brand.codigo} / ${model.codigo})`,
         options.throttleMs,
       );
+
+      const years = normalizeYearList(yearsResponse);
+      if (years.length === 0) {
+        console.warn(`      ⚠️  Nenhum ano retornado para o modelo ${model.codigo}. Pulando.`);
+        continue;
+      }
 
       const selectedYears = typeof options.yearLimit === 'number' ? years.slice(0, options.yearLimit) : years;
       console.log(`      • Anos encontrados: ${years.length}. Processando ${selectedYears.length}.`);
@@ -522,23 +697,36 @@ async function syncVehicleType(
         console.log(`      ↳ Ano ${yearIndex}/${selectedYears.length}: ${year.nome} (${year.codigo})`);
 
         const priceData = await fetchWithRetry(
-          () => api
-            .get<FipePriceApi>(`/${vehicleType.slug}/marcas/${brand.codigo}/modelos/${model.codigo}/anos/${encodeURIComponent(year.codigo)}`)
+          () => fipeApi
+            .get<FipePriceApi>(`/${vehicleType.apiSlug}/brands/${brand.codigo}/models/${model.codigo}/years/${encodeURIComponent(year.codigo)}`)
             .then((res) => res.data),
           `preço FIPE (${vehicleType.slug} / ${brand.codigo} / ${model.codigo} / ${year.codigo})`,
           options.throttleMs,
         );
 
-        const referenceDate = formatReferenceDate(priceData.MesReferencia) ?? null;
-        const priceCents = priceTextToCents(priceData.Valor) ?? null;
-        const fuelLabel = priceData.Combustivel || null;
-        const modelYear = Number.isFinite(priceData.AnoModelo) ? priceData.AnoModelo : null;
+        const referenceLabel = pickFirstField<string>(priceData, ['MesReferencia', 'referenceMonth', 'reference']);
+        const priceText = pickFirstField<string>(priceData, ['Valor', 'valor', 'price']);
+        const fuelRaw = pickFirstField<string>(priceData, ['Combustivel', 'fuel']);
+        const modelYearRaw = pickFirstField<number | string>(priceData, ['AnoModelo', 'modelYear']);
 
-        if (fuelLabel || modelYear) {
+        const referenceDate = formatReferenceDate(referenceLabel ?? null) ?? null;
+        const priceCents = priceTextToCents(priceText ?? null) ?? null;
+        const fuelLabel = fuelRaw ? String(fuelRaw) : null;
+        let modelYear: number | null = null;
+        if (typeof modelYearRaw === 'number') {
+          modelYear = Number.isFinite(modelYearRaw) ? modelYearRaw : null;
+        } else if (typeof modelYearRaw === 'string' && modelYearRaw.trim().length > 0) {
+          const parsedYear = Number.parseInt(modelYearRaw, 10);
+          modelYear = Number.isNaN(parsedYear) ? null : parsedYear;
+        }
+
+        const normalizedFuelLabel = fuelLabel ? fuelLabel.trim() : null;
+
+        if (normalizedFuelLabel || modelYear) {
           const { error: updateError } = await db
             .from('fipe_model_years')
             .update({
-              fuel_label: fuelLabel ?? undefined,
+              fuel_label: normalizedFuelLabel ?? undefined,
               model_year: modelYear ?? undefined,
             })
             .eq('id', modelYearId);
@@ -559,8 +747,8 @@ async function syncVehicleType(
           reference_month: referenceDate,
           currency: 'BRL',
           price_cents: priceCents ?? 0,
-          raw_price_text: priceData.Valor,
-          reference_label: priceData.MesReferencia,
+          raw_price_text: priceText ?? null,
+          reference_label: referenceLabel ?? null,
         };
 
         const { error: priceError } = await db

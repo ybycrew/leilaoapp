@@ -3,14 +3,8 @@
  * Valida e normaliza dados usando API FIPE como fonte de verdade
  */
 
-import { 
-  findFipeBrandByName, 
-  findFipeModelByName,
-  getAllFipeBrands,
-  getFipeModelsByBrand,
-  type FipeBrand,
-  type FipeModel
-} from './fipe';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { buildSearchKey, extractModelBase, normalizeBrandName, toAsciiUpper } from './fipe-normalization';
 
 // Lista de palavras que são peças de veículos (não marcas/modelos)
 const PARTS_WORDS = new Set([
@@ -114,166 +108,356 @@ export function separateBrandModel(combined: string): { brand: string | null; mo
   return { brand: null, model: null };
 }
 
-/**
- * Normaliza nome de marca (CHEVROLET -> Chevrolet, FIAT -> Fiat)
- */
-export function normalizeBrandName(brand: string): string {
-  if (!brand || typeof brand !== 'string') return brand;
-  
-  const trimmed = brand.trim();
-  
-  // Se já está normalizado (primeira letra maiúscula, resto minúscula), retorna
-  if (/^[A-Z][a-z]+(\s+[A-Z][a-z]+)*$/.test(trimmed)) {
-    return trimmed;
-  }
-  
-  // Se está tudo em maiúscula, normaliza
-  if (/^[A-Z\s]+$/.test(trimmed)) {
-    return trimmed
-      .toLowerCase()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
-  
-  // Se está tudo em minúscula, normaliza
-  if (/^[a-z\s]+$/.test(trimmed)) {
-    return trimmed
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  }
-  
-  // Caso misto, tenta normalizar palavra por palavra
-  return trimmed
-    .split(' ')
-    .map(word => {
-      if (word.length === 0) return word;
-      if (word.length === 1) return word.toUpperCase();
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    })
-    .join(' ');
+type VehicleTypeSlug = 'carros' | 'motos' | 'caminhoes';
+
+interface VehicleTypeRow {
+  id: string;
+  slug: VehicleTypeSlug;
 }
 
-/**
- * Valida e normaliza marca usando API FIPE
- */
+interface BrandRow {
+  id: string;
+  name: string;
+  name_upper: string;
+  search_name: string;
+  fipe_code: string;
+  vehicle_type_id: string;
+}
+
+interface ModelRow {
+  id: string;
+  name: string;
+  name_upper: string;
+  base_name: string;
+  base_name_upper: string;
+  base_search_name: string;
+  fipe_code: string;
+}
+
+interface ModelRecord extends ModelRow {
+  name_search: string;
+}
+
+interface LocalFipeBrand {
+  codigo: string;
+  nome: string;
+}
+
+interface LocalFipeModel {
+  codigo: string;
+  nome: string;
+}
+
+const BRAND_ALIASES: Record<string, string> = {
+  VW: 'VOLKSWAGEN',
+  VWVOLKSWAGEN: 'VOLKSWAGEN',
+  VOLKSWAGENVW: 'VOLKSWAGEN',
+  GM: 'CHEVROLET',
+  GENERALMOTORS: 'CHEVROLET',
+  CHEVROLETGM: 'CHEVROLET',
+  MB: 'MERCEDESBENZ',
+  MERCEDES: 'MERCEDESBENZ',
+  MERCEDESBENZ: 'MERCEDESBENZ',
+  BMWMOTORS: 'BMW',
+  FCA: 'FIAT',
+  FIATCHRYSLER: 'FIAT',
+  PSA: 'PEUGEOT',
+  PSAPEUGEOT: 'PEUGEOT'
+};
+
+let supabaseClient: SupabaseClient | null = null;
+
+const vehicleTypeIdCache = new Map<VehicleTypeSlug, string>();
+const brandCache = new Map<VehicleTypeSlug, Map<string, BrandRow>>();
+const brandListCache = new Map<VehicleTypeSlug, BrandRow[]>();
+const modelCache = new Map<string, Map<string, ModelRecord>>();
+
+function getSupabaseClient(): SupabaseClient {
+  if (supabaseClient) {
+    return supabaseClient;
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error('Supabase credentials are required for FIPE normalization');
+  }
+
+  supabaseClient = createClient(url, key);
+  return supabaseClient;
+}
+
+async function ensureVehicleTypeId(vehicleType: VehicleTypeSlug): Promise<string> {
+  const cached = vehicleTypeIdCache.get(vehicleType);
+  if (cached) {
+    return cached;
+  }
+
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('fipe_vehicle_types')
+    .select('id, slug')
+    .eq('slug', vehicleType)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(`Tipo de veículo FIPE não encontrado: ${vehicleType}`);
+  }
+
+  vehicleTypeIdCache.set(vehicleType, data.id);
+  return data.id;
+}
+
+async function getBrandMap(vehicleType: VehicleTypeSlug): Promise<Map<string, BrandRow>> {
+  const cached = brandCache.get(vehicleType);
+  if (cached) {
+    return cached;
+  }
+
+  const client = getSupabaseClient();
+  const vehicleTypeId = await ensureVehicleTypeId(vehicleType);
+
+  const { data, error } = await client
+    .from('fipe_brands')
+    .select('id, name, name_upper, search_name, fipe_code, vehicle_type_id')
+    .eq('vehicle_type_id', vehicleTypeId);
+
+  if (error || !data) {
+    throw new Error(`Não foi possível carregar marcas FIPE (${vehicleType}): ${error?.message ?? 'sem dados'}`);
+  }
+
+  const map = new Map<string, BrandRow>();
+  data.forEach((row) => {
+    map.set(row.search_name, row);
+  });
+
+  brandCache.set(vehicleType, map);
+  brandListCache.set(vehicleType, data);
+  return map;
+}
+
+async function getBrandList(vehicleType: VehicleTypeSlug): Promise<BrandRow[]> {
+  const cached = brandListCache.get(vehicleType);
+  if (cached) {
+    return cached;
+  }
+  await getBrandMap(vehicleType);
+  return brandListCache.get(vehicleType) ?? [];
+}
+
+function resolveBrandAlias(searchKey: string): string | undefined {
+  return BRAND_ALIASES[searchKey];
+}
+
+async function findBrandRecord(value: string, vehicleType: VehicleTypeSlug): Promise<BrandRow | null> {
+  const searchKey = buildSearchKey(value);
+  if (!searchKey) return null;
+
+  const map = await getBrandMap(vehicleType);
+
+  const aliasTarget = resolveBrandAlias(searchKey);
+  if (aliasTarget) {
+    const aliasRecord = map.get(aliasTarget);
+    if (aliasRecord) return aliasRecord;
+  }
+
+  const direct = map.get(searchKey);
+  if (direct) {
+    return direct;
+  }
+
+  const upperValue = toAsciiUpper(value);
+  const brands = await getBrandList(vehicleType);
+
+  for (const record of brands) {
+    if (upperValue === record.name_upper) {
+      return record;
+    }
+  }
+
+  for (const record of brands) {
+    if (searchKey.includes(record.search_name)) {
+      return record;
+    }
+    if (record.search_name.includes(searchKey) && searchKey.length >= 3) {
+      return record;
+    }
+  }
+
+  return null;
+}
+
+async function getModelMap(brandId: string): Promise<Map<string, ModelRecord>> {
+  const cached = modelCache.get(brandId);
+  if (cached) {
+    return cached;
+  }
+
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('fipe_models')
+    .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code')
+    .eq('brand_id', brandId);
+
+  if (error || !data) {
+    throw new Error(`Não foi possível carregar modelos FIPE (brand_id=${brandId}): ${error?.message ?? 'sem dados'}`);
+  }
+
+  const map = new Map<string, ModelRecord>();
+  data.forEach((row) => {
+    const record: ModelRecord = {
+      ...row,
+      name_search: buildSearchKey(row.name)
+    };
+    map.set(record.base_search_name, record);
+  });
+
+  modelCache.set(brandId, map);
+  return map;
+}
+
+async function findModelRecord(
+  brandId: string,
+  searchKeys: string[]
+): Promise<ModelRecord | null> {
+  const keys = Array.from(new Set(searchKeys.filter((key) => key && key.length > 0)));
+  if (keys.length === 0) {
+    return null;
+  }
+
+  const map = await getModelMap(brandId);
+
+  for (const key of keys) {
+    const direct = map.get(key);
+    if (direct) {
+      return direct;
+    }
+  }
+
+  for (const key of keys) {
+    for (const record of map.values()) {
+      if (key === record.name_search) {
+        return record;
+      }
+      if (key.length >= 3 && (key.includes(record.base_search_name) || record.base_search_name.includes(key))) {
+        return record;
+      }
+      if (key.length >= 3 && (key.includes(record.name_search) || record.name_search.includes(key))) {
+        return record;
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function validateAndNormalizeBrand(
   brand: string,
-  vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
-): Promise<{ isValid: boolean; normalized: string | null; fipeBrand: FipeBrand | null }> {
+  vehicleType: VehicleTypeSlug = 'carros'
+): Promise<{ isValid: boolean; normalized: string | null; fipeBrand: LocalFipeBrand | null; brandRecord: BrandRow | null }> {
   if (!brand || typeof brand !== 'string') {
-    return { isValid: false, normalized: null, fipeBrand: null };
+    return { isValid: false, normalized: null, fipeBrand: null, brandRecord: null };
   }
 
   const trimmed = brand.trim();
-  
-  // Verificar se é apenas números
-  if (isOnlyNumbers(trimmed)) {
-    return { isValid: false, normalized: null, fipeBrand: null };
+  if (!trimmed || isOnlyNumbers(trimmed) || isPart(trimmed) || isInvalidBrandWord(trimmed)) {
+    return { isValid: false, normalized: null, fipeBrand: null, brandRecord: null };
   }
-  
-  // Verificar se é uma peça
-  if (isPart(trimmed)) {
-    return { isValid: false, normalized: null, fipeBrand: null };
+
+  try {
+    const record = await findBrandRecord(trimmed, vehicleType);
+    if (record) {
+      return {
+        isValid: true,
+        normalized: record.name_upper,
+        brandRecord: record,
+        fipeBrand: {
+          codigo: record.fipe_code,
+          nome: record.name
+        }
+      };
+    }
+  } catch (error) {
+    console.warn('[validateAndNormalizeBrand] erro ao buscar marca FIPE:', error);
   }
-  
-  // Verificar se é palavra inválida
-  if (isInvalidBrandWord(trimmed)) {
-    return { isValid: false, normalized: null, fipeBrand: null };
-  }
-  
-  // Tentar encontrar na FIPE
-  const fipeBrand = await findFipeBrandByName(trimmed, vehicleType);
-  
-  if (fipeBrand) {
-    return {
-      isValid: true,
-      normalized: fipeBrand.nome,
-      fipeBrand
-    };
-  }
-  
-  // Se não encontrou na FIPE, retorna normalizado mas inválido
+
+  const fallback = normalizeBrandName(trimmed);
   return {
     isValid: false,
-    normalized: normalizeBrandName(trimmed),
-    fipeBrand: null
+    normalized: fallback.upper,
+    fipeBrand: null,
+    brandRecord: null
   };
 }
 
-/**
- * Valida e normaliza modelo usando API FIPE
- */
 export async function validateAndNormalizeModel(
   brand: string,
   model: string,
-  vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
-): Promise<{ isValid: boolean; normalized: string | null; fipeModel: FipeModel | null }> {
+  vehicleType: VehicleTypeSlug = 'carros'
+): Promise<{ isValid: boolean; normalized: string | null; fipeModel: LocalFipeModel | null }> {
   if (!model || typeof model !== 'string') {
     return { isValid: false, normalized: null, fipeModel: null };
   }
 
   const trimmed = model.trim();
-  
-  // Verificar se é apenas números
-  if (isOnlyNumbers(trimmed)) {
+  if (!trimmed || isOnlyNumbers(trimmed) || isPart(trimmed)) {
     return { isValid: false, normalized: null, fipeModel: null };
   }
-  
-  // Verificar se é uma peça
-  if (isPart(trimmed)) {
-    return { isValid: false, normalized: null, fipeModel: null };
+
+  try {
+    const brandLookup = await validateAndNormalizeBrand(brand, vehicleType);
+    const brandRecord = brandLookup.brandRecord ?? (brandLookup.normalized ? await findBrandRecord(brandLookup.normalized, vehicleType) : null);
+    if (!brandRecord) {
+      return { isValid: false, normalized: toAsciiUpper(trimmed), fipeModel: null };
+    }
+
+    const base = extractModelBase(trimmed);
+    const searchKeys = [
+      base.baseSearchName,
+      buildSearchKey(trimmed),
+      buildSearchKey(base.baseNameUpper)
+    ];
+
+    const modelRecord = await findModelRecord(brandRecord.id, searchKeys);
+    if (modelRecord) {
+      return {
+        isValid: true,
+        normalized: modelRecord.base_name_upper,
+        fipeModel: {
+          codigo: modelRecord.fipe_code,
+          nome: modelRecord.base_name
+        }
+      };
+    }
+  } catch (error) {
+    console.warn('[validateAndNormalizeModel] erro ao buscar modelo FIPE:', error);
   }
-  
-  // Buscar marca na FIPE primeiro
-  const fipeBrand = await findFipeBrandByName(brand, vehicleType);
-  
-  if (!fipeBrand) {
-    // Se marca não é válida, não podemos validar modelo
-    return { isValid: false, normalized: trimmed, fipeModel: null };
-  }
-  
-  // Buscar modelo na FIPE
-  const fipeModel = await findFipeModelByName(fipeBrand.codigo, trimmed, vehicleType);
-  
-  if (fipeModel) {
-    return {
-      isValid: true,
-      normalized: fipeModel.nome,
-      fipeModel
-    };
-  }
-  
-  // Se não encontrou, retorna o modelo original mas inválido
+
   return {
     isValid: false,
-    normalized: trimmed,
+    normalized: toAsciiUpper(trimmed),
     fipeModel: null
   };
 }
 
-/**
- * Normaliza marca e modelo de um veículo
- * Tenta separar combinações, validar contra FIPE e normalizar
- */
 export async function normalizeVehicleBrandModel(
   brand: string | null | undefined,
   model: string | null | undefined,
-  vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
+  vehicleType: VehicleTypeSlug = 'carros'
 ): Promise<{
   brand: string | null;
   model: string | null;
+  variant?: string | null;
   isValid: boolean;
   wasSeparated: boolean;
   wasNormalized: boolean;
 }> {
-  let finalBrand = brand || null;
-  let finalModel = model || null;
+  let finalBrand = brand?.trim() || null;
+  let finalModel = model?.trim() || null;
   let wasSeparated = false;
   let wasNormalized = false;
-  
-  // Se temos apenas brand e ele parece ser uma combinação, tentar separar
+
   if (finalBrand && !finalModel) {
     const separated = separateBrandModel(finalBrand);
     if (separated.brand && separated.model) {
@@ -282,8 +466,7 @@ export async function normalizeVehicleBrandModel(
       wasSeparated = true;
     }
   }
-  
-  // Se ainda temos uma combinação no brand, tentar separar
+
   if (finalBrand && finalBrand.includes('/')) {
     const separated = separateBrandModel(finalBrand);
     if (separated.brand && separated.model) {
@@ -294,130 +477,115 @@ export async function normalizeVehicleBrandModel(
       wasSeparated = true;
     }
   }
-  
-  // Validar e normalizar marca
+
+  let brandRecord: BrandRow | null = null;
   if (finalBrand) {
-    const brandValidation = await validateAndNormalizeBrand(finalBrand, vehicleType);
-    if (brandValidation.isValid && brandValidation.normalized) {
-      if (finalBrand !== brandValidation.normalized) {
+    const validation = await validateAndNormalizeBrand(finalBrand, vehicleType);
+    brandRecord = validation.brandRecord ?? (validation.normalized ? await findBrandRecord(validation.normalized, vehicleType) : null);
+
+    if (validation.normalized && validation.normalized !== finalBrand.toUpperCase()) {
+      wasNormalized = true;
+    }
+
+    finalBrand = validation.normalized ?? (finalBrand ? toAsciiUpper(finalBrand) : null);
+  }
+
+  let variant: string | null = null;
+  let modelRecord: ModelRecord | null = null;
+
+  if (finalModel) {
+    const base = extractModelBase(finalModel);
+    variant = base.variantName || null;
+
+    if (brandRecord) {
+      const searchKeys = [
+        base.baseSearchName,
+        buildSearchKey(finalModel),
+        buildSearchKey(base.baseNameUpper)
+      ];
+      modelRecord = await findModelRecord(brandRecord.id, searchKeys);
+    }
+
+    if (modelRecord) {
+      if (modelRecord.base_name_upper !== toAsciiUpper(finalModel)) {
         wasNormalized = true;
       }
-      finalBrand = brandValidation.normalized;
-    } else if (brandValidation.normalized) {
-      // Mesmo inválido, usa o normalizado
-      if (finalBrand !== brandValidation.normalized) {
-        wasNormalized = true;
-      }
-      finalBrand = brandValidation.normalized;
+      finalModel = modelRecord.base_name_upper;
     } else {
-      // Se não conseguiu normalizar e é inválido, retorna null
-      finalBrand = null;
+      const fallback = base.baseNameUpper || toAsciiUpper(finalModel);
+      if (fallback !== toAsciiUpper(finalModel)) {
+        wasNormalized = true;
+      }
+      finalModel = fallback;
     }
   }
-  
-  // Validar e normalizar modelo (só se temos marca válida)
-  if (finalModel && finalBrand) {
-    const modelValidation = await validateAndNormalizeModel(finalBrand, finalModel, vehicleType);
-    if (modelValidation.normalized) {
-      if (finalModel !== modelValidation.normalized) {
-        wasNormalized = true;
-      }
-      finalModel = modelValidation.normalized;
-    } else {
-      // Se não conseguiu validar, mantém o modelo original
-      // (pode ser uma versão específica não na FIPE)
-    }
-  }
-  
-  const isValid = finalBrand !== null && finalBrand !== null;
-  
+
+  const isValid = Boolean(brandRecord && modelRecord);
+
   return {
     brand: finalBrand,
     model: finalModel,
+    variant,
     isValid,
     wasSeparated,
     wasNormalized
   };
 }
 
-/**
- * Filtra lista de marcas removendo valores inválidos
- */
 export async function filterValidBrands(
   brands: string[],
-  vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
+  vehicleType: VehicleTypeSlug = 'carros'
 ): Promise<string[]> {
   const validBrands = new Set<string>();
-  
-  for (const brand of brands) {
-    if (!brand || typeof brand !== 'string') continue;
-    
-    const trimmed = brand.trim();
-    if (trimmed.length === 0) continue;
-    
-    // Verificar se é apenas números
-    if (isOnlyNumbers(trimmed)) continue;
-    
-    // Verificar se é uma peça
-    if (isPart(trimmed)) continue;
-    
-    // Verificar se é palavra inválida
-    if (isInvalidBrandWord(trimmed)) continue;
-    
-    // Tentar validar na FIPE
+
+  for (const candidate of brands) {
+    if (!candidate || typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+    if (isOnlyNumbers(trimmed) || isPart(trimmed) || isInvalidBrandWord(trimmed)) continue;
+
     const validation = await validateAndNormalizeBrand(trimmed, vehicleType);
-    if (validation.isValid && validation.normalized) {
-      validBrands.add(validation.normalized);
-    } else if (validation.normalized) {
-      // Mesmo inválido, adiciona o normalizado (pode ser marca não na FIPE mas válida)
+    if (validation.normalized) {
       validBrands.add(validation.normalized);
     }
   }
-  
+
   return Array.from(validBrands).sort();
 }
 
-/**
- * Filtra lista de modelos removendo valores inválidos
- */
 export async function filterValidModels(
   brand: string,
   models: string[],
-  vehicleType: 'carros' | 'motos' | 'caminhoes' = 'carros'
+  vehicleType: VehicleTypeSlug = 'carros'
 ): Promise<string[]> {
   const validModels = new Set<string>();
-  
-  // Buscar marca na FIPE
-  const fipeBrand = await findFipeBrandByName(brand, vehicleType);
-  if (!fipeBrand) {
-    // Se marca não é válida, retorna lista vazia
+  const brandRecord = await findBrandRecord(brand, vehicleType);
+  if (!brandRecord) {
     return [];
   }
-  
-  for (const model of models) {
-    if (!model || typeof model !== 'string') continue;
-    
-    const trimmed = model.trim();
-    if (trimmed.length === 0) continue;
-    
-    // Verificar se é apenas números
-    if (isOnlyNumbers(trimmed)) continue;
-    
-    // Verificar se é uma peça
-    if (isPart(trimmed)) continue;
-    
-    // Tentar validar na FIPE
-    const validation = await validateAndNormalizeModel(brand, trimmed, vehicleType);
-    if (validation.normalized) {
-      validModels.add(validation.normalized);
+
+  for (const candidate of models) {
+    if (!candidate || typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed || isOnlyNumbers(trimmed) || isPart(trimmed)) continue;
+
+    const base = extractModelBase(trimmed);
+    const searchKeys = [
+      base.baseSearchName,
+      buildSearchKey(trimmed),
+      buildSearchKey(base.baseNameUpper)
+    ];
+    const record = await findModelRecord(brandRecord.id, searchKeys);
+
+    if (record) {
+      validModels.add(record.base_name_upper);
+    } else if (base.baseNameUpper) {
+      validModels.add(base.baseNameUpper);
     } else {
-      // Mesmo não validado, adiciona se não for claramente inválido
-      if (!isOnlyNumbers(trimmed) && !isPart(trimmed)) {
-        validModels.add(trimmed);
-      }
+      validModels.add(toAsciiUpper(trimmed));
     }
   }
-  
+
   return Array.from(validModels).sort();
 }
 

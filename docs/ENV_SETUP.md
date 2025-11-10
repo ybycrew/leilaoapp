@@ -46,6 +46,24 @@ STRIPE_PRICE_MONTHLY=price_1SH8KmF9OeA0H1YRmZLPGYC2
 CRON_SECRET=your-random-secret-for-cron-jobs
 
 # ------------------------------------------
+# FIPE API (Opcional - Sincronização Local)
+# ------------------------------------------
+# URL base da API FIPE (padrão: https://fipe.parallelum.com.br/api/v2)
+# FIPE_API_URL=https://fipe.parallelum.com.br/api/v2
+# Token de acesso, caso a API exija autenticação
+# FIPE_API_TOKEN=seu-token-ilimitado
+# Cabeçalho usado para enviar o token (padrão: X-Subscription-Token)
+# FIPE_API_TOKEN_HEADER=X-Subscription-Token
+# Prefixo aplicado ao token (padrão: vazio)
+# FIPE_API_TOKEN_PREFIX=
+# Nome do parâmetro de query para enviar o token (use apenas se a API exigir na URL)
+# FIPE_API_TOKEN_QUERY=token
+# Timeout personalizado em ms (padrão: 15000)
+# FIPE_API_TIMEOUT_MS=20000
+# User-Agent personalizado para requisições
+# FIPE_API_USER_AGENT=ybybid-fipe-sync/1.0
+
+# ------------------------------------------
 # REDIS (Opcional - Cache)
 # ------------------------------------------
 REDIS_URL=redis://localhost:6379

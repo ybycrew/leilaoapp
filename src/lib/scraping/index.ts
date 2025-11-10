@@ -310,6 +310,7 @@ async function processVehicle(
   
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
+  let normalizedVariant: string | null = null;
   
   try {
     const normalizationResult = await normalizeVehicleBrandModel(
@@ -320,6 +321,7 @@ async function processVehicle(
     
     normalizedBrand = normalizationResult.brand;
     normalizedModel = normalizationResult.model;
+    normalizedVariant = normalizationResult.variant ?? null;
     
     if (normalizationResult.wasSeparated || normalizationResult.wasNormalized) {
       console.log(`[${auctioneerName}] Marca/Modelo normalizado:`, {
@@ -351,6 +353,9 @@ async function processVehicle(
     // Dados do veículo (português conforme schema) - usando valores normalizados
     marca: normalizedBrand,
     modelo: normalizedModel,
+    modelo_original: vehicleData.model || null,
+    versao: normalizedVariant,
+    version: normalizedVariant,
     ano: vehicleData.year_model || vehicleData.year_manufacture || null,
     ano_modelo: vehicleData.year_model || null,
     tipo_veiculo: normalizeVehicleType(vehicleData.vehicle_type),
@@ -458,6 +463,9 @@ async function processVehicle(
       const vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
+      delete vehicleToSaveMinimal.version;
+      delete vehicleToSaveMinimal.versao;
+      delete vehicleToSaveMinimal.modelo_original;
       
       const retryResult = await supabase
         .from('vehicles')
@@ -501,6 +509,9 @@ async function processVehicle(
       const vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
+      delete vehicleToSaveMinimal.version;
+      delete vehicleToSaveMinimal.versao;
+      delete vehicleToSaveMinimal.modelo_original;
       
       const retryResult = await supabase
         .from('vehicles')

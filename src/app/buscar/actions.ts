@@ -1,13 +1,7 @@
 ﻿'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { 
-  filterValidBrands, 
-  isOnlyNumbers, 
-  isPart, 
-  isInvalidBrandWord,
-  separateBrandModel 
-} from '@/lib/vehicle-normalization';
+import { buildSearchKey, toAsciiUpper } from '@/lib/fipe-normalization';
 
 export interface SearchFilters {
   q?: string;
@@ -145,100 +139,44 @@ export async function getFilterOptions() {
     
     console.log(`[getFilterOptions] Total de veículos na tabela: ${totalCount}`);
 
-    // Buscar marcas (coluna: brand)
+    // Buscar marcas a partir das tabelas de referência FIPE
     const { data: brandsData, error: brandsError } = await supabase
-      .from('vehicles')
-      .select('brand')
-      .not('brand', 'is', null);
+      .from('fipe_brands')
+      .select('name_upper')
+      .order('name_upper');
 
+    let brands: string[] = [];
     if (brandsError) {
-      console.error('[getFilterOptions] Erro ao buscar marcas:', brandsError);
-    } else {
-      console.log(`[getFilterOptions] Marcas encontradas (raw):`, brandsData?.length || 0);
-      if (brandsData && brandsData.length > 0) {
-        console.log(`[getFilterOptions] Primeiras 5 marcas:`, brandsData.slice(0, 5).map(v => v.brand));
-      }
+      console.error('[getFilterOptions] Erro ao buscar marcas FIPE:', brandsError);
+    } else if (brandsData) {
+      const brandSet = new Set<string>();
+      brandsData.forEach((row: any) => {
+        if (row?.name_upper) {
+          brandSet.add(row.name_upper);
+        }
+      });
+      brands = Array.from(brandSet);
     }
 
-    // Filtrar marcas brutas removendo valores inválidos básicos
-    const rawBrands = Array.from(
-      new Set(
-        brandsData
-          ?.map(v => v.brand)
-          .filter((brand): brand is string => {
-            if (!brand || typeof brand !== 'string') return false;
-            const trimmed = brand.trim();
-            if (trimmed.length === 0) return false;
-            
-            // Remover apenas números
-            if (isOnlyNumbers(trimmed)) return false;
-            
-            // Remover peças
-            if (isPart(trimmed)) return false;
-            
-            // Remover palavras inválidas
-            if (isInvalidBrandWord(trimmed)) return false;
-            
-            return true;
-          }) || []
-      )
-    );
+    // Buscar um subconjunto inicial de modelos base FIPE (lista completa por marca é carregada sob demanda)
+    const { data: modelsSnapshot, error: modelsError } = await supabase
+      .from('fipe_models')
+      .select('base_name_upper')
+      .order('base_name_upper')
+      .limit(200);
 
-    // Separar combinações como "CHEVROLET/CORSA"
-    const separatedBrands = new Set<string>();
-    for (const brand of rawBrands) {
-      const separated = separateBrandModel(brand);
-      if (separated.brand) {
-        separatedBrands.add(separated.brand);
-      } else {
-        separatedBrands.add(brand);
-      }
-    }
-
-    // Filtrar e normalizar marcas usando API FIPE (assíncrono, mas vamos fazer de forma otimizada)
-    // Por performance, vamos fazer validação básica primeiro e depois validar contra FIPE
-    const brands = await filterValidBrands(Array.from(separatedBrands), 'carros');
-
-    console.log(`[getFilterOptions] Marcas únicas após filtro:`, brands.length);
-    console.log(`[getFilterOptions] Marcas filtradas (primeiras 10):`, brands.slice(0, 10));
-
-    // Buscar modelos (coluna: model)
-    const { data: modelsData, error: modelsError } = await supabase
-      .from('vehicles')
-      .select('model')
-      .not('model', 'is', null);
-
+    let models: string[] = [];
     if (modelsError) {
-      console.error('[getFilterOptions] Erro ao buscar modelos:', modelsError);
-    } else {
-      console.log(`[getFilterOptions] Modelos encontrados (raw):`, modelsData?.length || 0);
+      console.error('[getFilterOptions] Erro ao buscar modelos FIPE:', modelsError);
+    } else if (modelsSnapshot) {
+      const modelSet = new Set<string>();
+      modelsSnapshot.forEach((row: any) => {
+        if (row?.base_name_upper) {
+          modelSet.add(row.base_name_upper);
+        }
+      });
+      models = Array.from(modelSet);
     }
-
-    // Filtrar modelos brutos removendo valores inválidos básicos
-    const rawModels = Array.from(
-      new Set(
-        modelsData
-          ?.map(v => v.model)
-          .filter((model): model is string => {
-            if (!model || typeof model !== 'string') return false;
-            const trimmed = model.trim();
-            if (trimmed.length === 0) return false;
-            
-            // Remover apenas números
-            if (isOnlyNumbers(trimmed)) return false;
-            
-            // Remover peças
-            if (isPart(trimmed)) return false;
-            
-            return true;
-          }) || []
-      )
-    );
-
-    // Por performance, não vamos validar todos os modelos contra FIPE aqui
-    // (seria muito lento). Apenas filtramos valores claramente inválidos.
-    // A validação completa será feita quando o usuário selecionar uma marca.
-    const models = rawModels.sort();
 
     // Buscar estados (coluna: state)
     const { data: statesData, error: statesError } = await supabase
@@ -436,26 +374,73 @@ export async function getModelsByBrand(brand: string) {
   const supabase = await createClient();
 
   try {
-    const { data, error } = await supabase
-      .from('vehicles')
-      .select('model')
-      .eq('brand', brand)
-      .not('model', 'is', null);
+    const brandIds = new Set<string>();
+    const searchKey = buildSearchKey(brand);
+    const brandUpper = toAsciiUpper(brand);
 
-    if (error) {
-      console.error('[getModelsByBrand] Erro:', error);
+    const { data: searchMatches, error: searchError } = await supabase
+      .from('fipe_brands')
+      .select('id')
+      .eq('search_name', searchKey);
+
+    if (searchError) {
+      console.warn('[getModelsByBrand] Erro ao buscar marca por search_name:', searchError);
+    } else {
+      searchMatches?.forEach((row) => brandIds.add(row.id));
+    }
+
+    if (brandIds.size === 0) {
+      const { data: upperMatches, error: upperError } = await supabase
+        .from('fipe_brands')
+        .select('id')
+        .eq('name_upper', brandUpper);
+
+      if (upperError) {
+        console.warn('[getModelsByBrand] Erro ao buscar marca por name_upper:', upperError);
+      } else {
+        upperMatches?.forEach((row) => brandIds.add(row.id));
+      }
+    }
+
+    if (brandIds.size === 0) {
+      const { data: fuzzyMatches, error: fuzzyError } = await supabase
+        .from('fipe_brands')
+        .select('id')
+        .ilike('name_upper', `%${brandUpper}%`);
+
+      if (fuzzyError) {
+        console.warn('[getModelsByBrand] Erro ao buscar marca (fuzzy):', fuzzyError);
+      } else {
+        fuzzyMatches?.forEach((row) => brandIds.add(row.id));
+      }
+    }
+
+    if (brandIds.size === 0) {
       return [];
     }
 
-    const models = Array.from(
-      new Set(
-        data
-          ?.map(v => (v as any).model)
-          .filter((model): model is string => Boolean(model && model.trim() !== '')) || []
-      )
-    ).sort();
+    const ids = Array.from(brandIds);
 
-    return models;
+    const { data: modelsData, error: modelError } = await supabase
+      .from('fipe_models')
+      .select('base_name_upper')
+      .in('brand_id', ids)
+      .order('base_name_upper')
+      .limit(5000);
+
+    if (modelError) {
+      console.error('[getModelsByBrand] Erro ao buscar modelos FIPE:', modelError);
+      return [];
+    }
+
+    const modelSet = new Set<string>();
+    modelsData?.forEach((row: any) => {
+      if (row?.base_name_upper) {
+        modelSet.add(row.base_name_upper);
+      }
+    });
+
+    return Array.from(modelSet).sort();
   } catch (error) {
     console.error('[getModelsByBrand] Erro:', error);
     return [];
