@@ -165,17 +165,15 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
     const batchSize = 1000;
     let offset = 0;
     let remaining = limit ?? Infinity;
-    let batchIndex = 0;
+    let hasMore = true;
 
-    while (remaining > 0) {
+    while (remaining > 0 && hasMore) {
       const rangeStart = offset;
       const desiredEnd = offset + batchSize - 1;
-      const rangeEnd = limit ? Math.min(desiredEnd, (limit - 1)) : desiredEnd;
-      const expectedBatchSize = rangeEnd >= rangeStart ? rangeEnd - rangeStart + 1 : 0;
-
-      if (expectedBatchSize <= 0) {
-        break;
-      }
+      const rangeEnd = limit
+        ? Math.min(desiredEnd, offset + remaining - 1)
+        : desiredEnd;
+      const expectedBatchSize = Math.max(rangeEnd - rangeStart + 1, 0);
 
       let query = supabase
         .from('vehicles')
@@ -195,14 +193,13 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
       }
 
       if (!vehicles || vehicles.length === 0) {
-        if (batchIndex === 0) {
+        if (stats.total === 0) {
           console.log('ℹ️  Nenhum veículo encontrado para normalizar');
         }
         break;
       }
 
       stats.total += vehicles.length;
-      batchIndex++;
 
       // Processar cada veículo
       for (let i = 0; i < vehicles.length; i++) {
@@ -214,6 +211,7 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
         }
 
         if (remaining <= 0) {
+          hasMore = false;
           break;
         }
 
@@ -345,7 +343,7 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       if (vehicles.length < expectedBatchSize) {
-        break;
+        hasMore = false;
       }
 
       offset += batchSize;
