@@ -170,10 +170,12 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
     while (remaining > 0 && hasMore) {
       const rangeStart = offset;
       const desiredEnd = offset + batchSize - 1;
-      const rangeEnd = limit
-        ? Math.min(desiredEnd, offset + remaining - 1)
-        : desiredEnd;
+      const rangeEnd = limit ? Math.min(desiredEnd, offset + remaining - 1) : desiredEnd;
       const expectedBatchSize = Math.max(rangeEnd - rangeStart + 1, 0);
+
+      if (expectedBatchSize <= 0) {
+        break;
+      }
 
       let query = supabase
         .from('vehicles')
@@ -201,8 +203,7 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
 
       stats.total += vehicles.length;
 
-      // Processar cada veículo
-      for (let i = 0; i < vehicles.length; i++) {
+      for (let i = 0; i < vehicles.length && remaining > 0; i++) {
         const vehicle = vehicles[i] as any;
         stats.processed++;
 
@@ -210,143 +211,115 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
           console.log(`   Processando... ${stats.processed}/${limit ?? (totalCount || '???')}`);
         }
 
-        if (remaining <= 0) {
-          hasMore = false;
-          break;
-        }
-
         remaining--;
 
         try {
-      stats.processed++;
+          const vehicleType = inferVehicleTypeForFipe(vehicle, vehicleTableInfo);
+          const { originalBrand, originalModel } = resolveCurrentBrandModel(vehicle, vehicleTableInfo);
 
-      if (stats.processed % 10 === 0) {
-        console.log(`   Processando... ${stats.processed}/${stats.total}`);
-      }
+          const result = await normalizeVehicleBrandModel(
+            originalBrand ?? undefined,
+            originalModel ?? undefined,
+            vehicleType
+          );
 
-      try {
-        // Determinar tipo de veículo para validação FIPE
-        const vehicleType = inferVehicleTypeForFipe(vehicle, vehicleTableInfo);
-        const { originalBrand, originalModel } = resolveCurrentBrandModel(
-          vehicle,
-          vehicleTableInfo
-        );
+          const normalizedBrand = result.brand ?? null;
+          const normalizedModel = result.model ?? null;
+          const normalizedVariant = result.variant ?? null;
 
-        // Normalizar marca e modelo
-        const result = await normalizeVehicleBrandModel(
-          originalBrand ?? undefined,
-          originalModel ?? undefined,
-          vehicleType
-        );
+          const currentMarca = getColumnValue(vehicle, vehicleTableInfo, 'marca');
+          const currentModelo = getColumnValue(vehicle, vehicleTableInfo, 'modelo');
+          const currentBrandEn = getColumnValue(vehicle, vehicleTableInfo, 'brand');
+          const currentModelEn = getColumnValue(vehicle, vehicleTableInfo, 'model');
+          const currentVersao = getColumnValue(vehicle, vehicleTableInfo, 'versao');
+          const currentVersionEn = getColumnValue(vehicle, vehicleTableInfo, 'version');
+          const currentModeloOriginal = getColumnValue(vehicle, vehicleTableInfo, 'modelo_original');
 
-        // Verificar se houve mudanças
-        const normalizedBrand = result.brand ?? null;
-        const normalizedModel = result.model ?? null;
-        const normalizedVariant = result.variant ?? null;
+          const updateData: Record<string, any> = {};
+          const assign = (column: string, newValue: any, currentValue: any) => {
+            if (!hasVehicleColumn(vehicleTableInfo, column)) {
+              return;
+            }
+            const current = currentValue ?? null;
+            const next = newValue ?? null;
+            if (current === next) {
+              return;
+            }
+            updateData[column] = next;
+          };
 
-        const currentMarca = getColumnValue(vehicle, vehicleTableInfo, 'marca');
-        const currentModelo = getColumnValue(vehicle, vehicleTableInfo, 'modelo');
-        const currentBrandEn = getColumnValue(vehicle, vehicleTableInfo, 'brand');
-        const currentModelEn = getColumnValue(vehicle, vehicleTableInfo, 'model');
-        const currentVersao = getColumnValue(vehicle, vehicleTableInfo, 'versao');
-        const currentVersionEn = getColumnValue(vehicle, vehicleTableInfo, 'version');
-        const currentModeloOriginal = getColumnValue(vehicle, vehicleTableInfo, 'modelo_original');
+          assign('marca', normalizedBrand, currentMarca);
+          assign('modelo', normalizedModel, currentModelo);
+          assign('modelo_original', originalModel ?? null, currentModeloOriginal);
+          assign('versao', normalizedVariant, currentVersao);
+          assign('brand', normalizedBrand, currentBrandEn);
+          assign('model', normalizedModel, currentModelEn);
+          assign('version', normalizedVariant, currentVersionEn);
 
-        const brandChanged =
-          (hasVehicleColumn(vehicleTableInfo, 'marca') && currentMarca !== normalizedBrand) ||
-          (hasVehicleColumn(vehicleTableInfo, 'brand') && currentBrandEn !== normalizedBrand);
-        const modelChanged =
-          (hasVehicleColumn(vehicleTableInfo, 'modelo') && currentModelo !== normalizedModel) ||
-          (hasVehicleColumn(vehicleTableInfo, 'model') && currentModelEn !== normalizedModel);
+          const hasChanges = Object.keys(updateData).length > 0;
 
-        const updateData: Record<string, any> = {};
-        const assign = (column: string, newValue: any, currentValue: any) => {
-          if (!hasVehicleColumn(vehicleTableInfo, column)) {
-            return;
+          if (result.wasSeparated) {
+            stats.separated++;
           }
-          const current = currentValue ?? null;
-          const next = newValue ?? null;
-          if (current === next) {
-            return;
+
+          if (result.wasNormalized) {
+            stats.normalized++;
           }
-          updateData[column] = next;
-        };
 
-        assign('marca', normalizedBrand, currentMarca);
-        assign('modelo', normalizedModel, currentModelo);
-        assign('modelo_original', originalModel ?? null, currentModeloOriginal);
-        assign('versao', normalizedVariant, currentVersao);
-        assign('brand', normalizedBrand, currentBrandEn);
-        assign('model', normalizedModel, currentModelEn);
-        assign('version', normalizedVariant, currentVersionEn);
+          if (!result.isValid) {
+            stats.invalid++;
+          }
 
-        const hasChanges = Object.keys(updateData).length > 0;
+          if (hasChanges && !dryRun) {
+            const { error: updateError } = await supabase
+              .from('vehicles')
+              .update(updateData)
+              .eq('id', vehicle.id);
 
-        if (result.wasSeparated) {
-          stats.separated++;
-        }
+            if (updateError) {
+              console.error(`   ❌ Erro ao atualizar veículo ${vehicle.id}:`, updateError.message);
+              stats.errors++;
+            } else {
+              stats.updated++;
 
-        if (result.wasNormalized) {
-          stats.normalized++;
-        }
-
-        if (!result.isValid) {
-          stats.invalid++;
-        }
-
-        // Se houve mudanças, atualizar no banco
-        if (hasChanges && !dryRun) {
-          const { error: updateError } = await supabase
-            .from('vehicles')
-            .update(updateData)
-            .eq('id', vehicle.id);
-
-          if (updateError) {
-            console.error(`   ❌ Erro ao atualizar veículo ${vehicle.id}:`, updateError.message);
-            stats.errors++;
-          } else {
+              if (stats.updated % 5 === 0) {
+                console.log(`   ✅ ${stats.updated} veículos atualizados`);
+              }
+            }
+          } else if (hasChanges && dryRun) {
             stats.updated++;
-            
-            if (stats.updated % 5 === 0) {
-              console.log(`   ✅ ${stats.updated} veículos atualizados`);
+
+            if (stats.updated <= 10) {
+              console.log(`   📝 [DRY RUN] Veículo ${vehicle.id}:`);
+              if (hasVehicleColumn(vehicleTableInfo, 'marca')) {
+                console.log(`      Marca (PT): "${currentMarca}" → "${normalizedBrand}"`);
+              }
+              if (hasVehicleColumn(vehicleTableInfo, 'brand')) {
+                console.log(`      Brand (EN): "${currentBrandEn}" → "${normalizedBrand}"`);
+              }
+              if (hasVehicleColumn(vehicleTableInfo, 'modelo') || hasVehicleColumn(vehicleTableInfo, 'model')) {
+                console.log(`      Modelo: "${currentModelo ?? currentModelEn}" → "${normalizedModel}"`);
+              }
+              if (result.wasSeparated) {
+                console.log(`      ⚠️  Combinação separada`);
+              }
             }
           }
-        } else if (hasChanges && dryRun) {
-          // Em dry-run, apenas contar como atualizado
-          stats.updated++;
-          
-          if (stats.updated <= 10) {
-            console.log(`   📝 [DRY RUN] Veículo ${vehicle.id}:`);
-            if (hasVehicleColumn(vehicleTableInfo, 'marca')) {
-              console.log(`      Marca (PT): "${currentMarca}" → "${normalizedBrand}"`);
-            }
-            if (hasVehicleColumn(vehicleTableInfo, 'brand')) {
-              console.log(`      Brand (EN): "${currentBrandEn}" → "${normalizedBrand}"`);
-            }
-            if (hasVehicleColumn(vehicleTableInfo, 'modelo') || hasVehicleColumn(vehicleTableInfo, 'model')) {
-              console.log(
-                `      Modelo: "${currentModelo ?? currentModelEn}" → "${normalizedModel}"`
-              );
-            }
-            if (result.wasSeparated) {
-              console.log(`      ⚠️  Combinação separada`);
-            }
-          }
+        } catch (error: any) {
+          console.error(`   ❌ Erro ao processar veículo ${vehicle.id}:`, error.message);
+          stats.errors++;
         }
-      } catch (error: any) {
-        console.error(`   ❌ Erro ao processar veículo ${vehicle.id}:`, error.message);
-        stats.errors++;
+
+        if (i < vehicles.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
       }
 
-      // Pequeno delay para não sobrecarregar a API FIPE
-      if (i < vehicles.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      if (vehicles.length < expectedBatchSize) {
+      if (vehicles.length < expectedBatchSize || remaining <= 0) {
         hasMore = false;
+      } else {
+        offset += batchSize;
       }
-
-      offset += batchSize;
     }
 
     // Relatório final
