@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { normalizeVehicleBrandModel } from '../lib/vehicle-normalization';
+import { getVehicleTableInfo, hasVehicleColumn, type VehicleTableInfo } from '../lib/scraping/vehicle-table-info';
 
 // Configuração do Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,6 +34,83 @@ interface NormalizationStats {
   errors: number;
 }
 
+type VehicleTypeSlug = 'carros' | 'motos' | 'caminhoes';
+
+function buildSelectColumns(info: VehicleTableInfo): string {
+  const columns: string[] = ['id'];
+  const maybeAdd = (column: string) => {
+    if (hasVehicleColumn(info, column)) {
+      columns.push(column);
+    }
+  };
+
+  maybeAdd('marca');
+  maybeAdd('modelo');
+  maybeAdd('modelo_original');
+  maybeAdd('versao');
+  maybeAdd('tipo_veiculo');
+  maybeAdd('brand');
+  maybeAdd('model');
+  maybeAdd('version');
+  maybeAdd('vehicle_type');
+
+  return columns.join(', ');
+}
+
+function getColumnValue<T = any>(vehicle: any, info: VehicleTableInfo, column: string): T | null {
+  if (!hasVehicleColumn(info, column)) {
+    return null;
+  }
+  const value = vehicle[column];
+  return value === undefined ? null : (value as T | null);
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function resolveCurrentBrandModel(vehicle: any, info: VehicleTableInfo) {
+  const brandPt = getColumnValue<string>(vehicle, info, 'marca');
+  const brandEn = getColumnValue<string>(vehicle, info, 'brand');
+  const modelPt = getColumnValue<string>(vehicle, info, 'modelo');
+  const modelEn = getColumnValue<string>(vehicle, info, 'model');
+
+  return {
+    currentBrand: brandEn ?? brandPt,
+    currentModel: modelEn ?? modelPt,
+    originalBrand: firstNonEmpty(brandEn, brandPt),
+    originalModel: firstNonEmpty(modelEn, modelPt),
+  };
+}
+
+function inferVehicleTypeForFipe(vehicle: any, info: VehicleTableInfo): VehicleTypeSlug {
+  const rawType =
+    getColumnValue<string>(vehicle, info, 'tipo_veiculo') ??
+    getColumnValue<string>(vehicle, info, 'vehicle_type');
+
+  if (typeof rawType === 'string') {
+    const normalized = rawType.toLowerCase();
+    if (normalized.includes('moto') || normalized.includes('motocic')) {
+      return 'motos';
+    }
+    if (
+      normalized.includes('caminhao') ||
+      normalized.includes('caminhão') ||
+      normalized.includes('truck') ||
+      normalized.includes('caminhonete')
+    ) {
+      return 'caminhoes';
+    }
+  }
+
+  return 'carros';
+}
+
 async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
   console.log('🚀 Iniciando normalização de veículos...');
   console.log(`   Modo: ${dryRun ? 'DRY RUN (não salvará alterações)' : 'PRODUÇÃO (salvará alterações)'}`);
@@ -52,12 +130,19 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
   };
 
   try {
+    const vehicleTableInfo = await getVehicleTableInfo(supabase);
+    const selectColumns = buildSelectColumns(vehicleTableInfo);
     // Buscar todos os veículos (ou limitado)
     let query = supabase
       .from('vehicles')
-      .select('id, marca, modelo, tipo_veiculo')
-      .not('marca', 'is', null)
+      .select(selectColumns)
       .order('created_at', { ascending: false });
+
+    if (hasVehicleColumn(vehicleTableInfo, 'marca')) {
+      query = query.not('marca', 'is', null);
+    } else if (hasVehicleColumn(vehicleTableInfo, 'brand')) {
+      query = query.not('brand', 'is', null);
+    }
 
     if (limit) {
       query = query.limit(limit);
@@ -81,7 +166,7 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
 
     // Processar cada veículo
     for (let i = 0; i < vehicles.length; i++) {
-      const vehicle = vehicles[i];
+      const vehicle = vehicles[i] as any;
       stats.processed++;
 
       if (stats.processed % 10 === 0) {
@@ -90,20 +175,61 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
 
       try {
         // Determinar tipo de veículo para validação FIPE
-        const vehicleType = vehicle.tipo_veiculo === 'moto' ? 'motos' :
-                           vehicle.tipo_veiculo === 'caminhao' ? 'caminhoes' : 'carros';
+        const vehicleType = inferVehicleTypeForFipe(vehicle, vehicleTableInfo);
+        const { originalBrand, originalModel } = resolveCurrentBrandModel(
+          vehicle,
+          vehicleTableInfo
+        );
 
         // Normalizar marca e modelo
         const result = await normalizeVehicleBrandModel(
-          vehicle.marca,
-          vehicle.modelo,
-          vehicleType as 'carros' | 'motos' | 'caminhoes'
+          originalBrand ?? undefined,
+          originalModel ?? undefined,
+          vehicleType
         );
 
         // Verificar se houve mudanças
-        const brandChanged = vehicle.marca !== result.brand;
-        const modelChanged = vehicle.modelo !== result.model;
-        const hasChanges = brandChanged || modelChanged;
+        const normalizedBrand = result.brand ?? null;
+        const normalizedModel = result.model ?? null;
+        const normalizedVariant = result.variant ?? null;
+
+        const currentMarca = getColumnValue(vehicle, vehicleTableInfo, 'marca');
+        const currentModelo = getColumnValue(vehicle, vehicleTableInfo, 'modelo');
+        const currentBrandEn = getColumnValue(vehicle, vehicleTableInfo, 'brand');
+        const currentModelEn = getColumnValue(vehicle, vehicleTableInfo, 'model');
+        const currentVersao = getColumnValue(vehicle, vehicleTableInfo, 'versao');
+        const currentVersionEn = getColumnValue(vehicle, vehicleTableInfo, 'version');
+        const currentModeloOriginal = getColumnValue(vehicle, vehicleTableInfo, 'modelo_original');
+
+        const brandChanged =
+          (hasVehicleColumn(vehicleTableInfo, 'marca') && currentMarca !== normalizedBrand) ||
+          (hasVehicleColumn(vehicleTableInfo, 'brand') && currentBrandEn !== normalizedBrand);
+        const modelChanged =
+          (hasVehicleColumn(vehicleTableInfo, 'modelo') && currentModelo !== normalizedModel) ||
+          (hasVehicleColumn(vehicleTableInfo, 'model') && currentModelEn !== normalizedModel);
+
+        const updateData: Record<string, any> = {};
+        const assign = (column: string, newValue: any, currentValue: any) => {
+          if (!hasVehicleColumn(vehicleTableInfo, column)) {
+            return;
+          }
+          const current = currentValue ?? null;
+          const next = newValue ?? null;
+          if (current === next) {
+            return;
+          }
+          updateData[column] = next;
+        };
+
+        assign('marca', normalizedBrand, currentMarca);
+        assign('modelo', normalizedModel, currentModelo);
+        assign('modelo_original', originalModel ?? null, currentModeloOriginal);
+        assign('versao', normalizedVariant, currentVersao);
+        assign('brand', normalizedBrand, currentBrandEn);
+        assign('model', normalizedModel, currentModelEn);
+        assign('version', normalizedVariant, currentVersionEn);
+
+        const hasChanges = Object.keys(updateData).length > 0;
 
         if (result.wasSeparated) {
           stats.separated++;
@@ -119,10 +245,6 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
 
         // Se houve mudanças, atualizar no banco
         if (hasChanges && !dryRun) {
-          const updateData: any = {};
-          if (brandChanged) updateData.marca = result.brand;
-          if (modelChanged) updateData.modelo = result.model;
-
           const { error: updateError } = await supabase
             .from('vehicles')
             .update(updateData)
@@ -144,9 +266,16 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
           
           if (stats.updated <= 10) {
             console.log(`   📝 [DRY RUN] Veículo ${vehicle.id}:`);
-            console.log(`      Marca: "${vehicle.marca}" → "${result.brand}"`);
-            if (modelChanged) {
-              console.log(`      Modelo: "${vehicle.modelo}" → "${result.model}"`);
+            if (hasVehicleColumn(vehicleTableInfo, 'marca')) {
+              console.log(`      Marca (PT): "${currentMarca}" → "${normalizedBrand}"`);
+            }
+            if (hasVehicleColumn(vehicleTableInfo, 'brand')) {
+              console.log(`      Brand (EN): "${currentBrandEn}" → "${normalizedBrand}"`);
+            }
+            if (hasVehicleColumn(vehicleTableInfo, 'modelo') || hasVehicleColumn(vehicleTableInfo, 'model')) {
+              console.log(
+                `      Modelo: "${currentModelo ?? currentModelEn}" → "${normalizedModel}"`
+              );
             }
             if (result.wasSeparated) {
               console.log(`      ⚠️  Combinação separada`);

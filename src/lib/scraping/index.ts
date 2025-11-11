@@ -7,6 +7,7 @@ import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { normalizeVehicleBrandModel } from '../vehicle-normalization';
 import { calculateDealScore } from './utils';
+import { getVehicleTableInfo, hasVehicleColumn } from './vehicle-table-info';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -307,7 +308,7 @@ async function processVehicle(
   const vehicleType = normalizeVehicleType(vehicleData.vehicle_type);
   const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
                             vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
-  
+
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
   let normalizedVariant: string | null = null;
@@ -338,102 +339,149 @@ async function processVehicle(
     normalizedModel = vehicleData.model || null;
   }
 
-  // 8. Preparar dados para salvar - MAPEAMENTO CORRETO PARA PORTUGUÊS
-  // Nota: Alguns campos podem não existir na tabela, então tentamos incluí-los
-  // Se falhar no insert, podemos removê-los e tentar novamente
-  const vehicleToSave: any = {
-    // Campos obrigatórios do schema (tentar incluir mesmo se não existir)
-    titulo: vehicleData.title,
-    
-    // Campos do leiloeiro (podem não existir em todas as versões do schema)
-    // Tentamos incluí-los e, se falhar, removemos no catch
-    leiloeiro: auctioneerName,
-    leiloeiro_url: leiloeiroUrl,
-    
-    // Dados do veículo (português conforme schema) - usando valores normalizados
-    marca: normalizedBrand,
-    modelo: normalizedModel,
-    modelo_original: vehicleData.model || null,
-    versao: normalizedVariant,
-    version: normalizedVariant,
-    ano: vehicleData.year_model || vehicleData.year_manufacture || null,
-    ano_modelo: vehicleData.year_model || null,
-    tipo_veiculo: normalizeVehicleType(vehicleData.vehicle_type),
-    cor: vehicleData.color || null,
-    combustivel: vehicleData.fuel_type || null,
-    cambio: vehicleData.transmission || null,
-    km: vehicleData.mileage || null,
-    
-    // Localização
-    estado: vehicleData.state || 'SP',
-    cidade: vehicleData.city || 'São Paulo',
-    
-    // Preços
-    preco_inicial: vehicleData.minimum_bid || vehicleData.current_bid || 0,
-    preco_atual: vehicleData.current_bid || 0,
-    
-    // Leilão
-    tipo_leilao: normalizeAuctionType(vehicleData.auction_type),
-    aceita_financiamento: vehicleData.has_financing || false,
-    data_leilao: vehicleData.auction_date?.toISOString() || null,
-    
-    // FIPE e Score
-    fipe_preco: fipePrice || null,
-    fipe_codigo: fipeCode || null,
-    deal_score: dealScore,
-    
-    // Descrição e imagens
-    descricao: vehicleData.title, // Pode ser melhorado depois com scraping de detalhes
-    imagens: vehicleData.images && vehicleData.images.length > 0 ? vehicleData.images : [],
-    
-    // Campo para UPSERT (evitar duplicatas)
-    external_id: vehicleData.external_id || null,
+  // 8. Preparar dados para salvar com suporte a múltiplos esquemas
+  const vehicleTableInfo = await getVehicleTableInfo(supabase);
+  const vehicleToSave: Record<string, any> = {};
+
+  const assign = (column: string, value: any) => {
+    if (!hasVehicleColumn(vehicleTableInfo, column)) {
+      return;
+    }
+    if (value === undefined) {
+      return;
+    }
+    vehicleToSave[column] = value;
   };
+
+  const englishVehicleType = vehicleType ? `${vehicleType.charAt(0).toUpperCase()}${vehicleType.slice(1)}` : null;
+  const normalizedAuctionType = normalizeAuctionType(vehicleData.auction_type);
+  const englishAuctionType = normalizedAuctionType
+    ? `${normalizedAuctionType.charAt(0).toUpperCase()}${normalizedAuctionType.slice(1)}`
+    : null;
+
+  const mileageValue = vehicleData.mileage ?? null;
+  const minimumBid = vehicleData.minimum_bid ?? vehicleData.current_bid ?? 0;
+  const currentBid = vehicleData.current_bid ?? 0;
+  const englishCurrentBid = vehicleData.current_bid ?? null;
+  const englishMinimumBid = vehicleData.minimum_bid ?? vehicleData.current_bid ?? null;
+  const fallbackState = vehicleData.state || 'SP';
+  const fallbackCity = vehicleData.city || 'São Paulo';
+  const thumbnailUrl = vehicleData.thumbnail_url || vehicleData.images?.[0] || null;
+  const imagesArray = vehicleData.images && vehicleData.images.length > 0 ? vehicleData.images : null;
+
+  // Campos comuns (Português)
+  assign('titulo', vehicleData.title);
+  assign('descricao', vehicleData.title);
+  assign('leiloeiro', auctioneerName);
+  assign('leiloeiro_url', leiloeiroUrl);
+  assign('marca', normalizedBrand);
+  assign('modelo', normalizedModel);
+  assign('modelo_original', vehicleData.model || null);
+  assign('versao', normalizedVariant);
+  assign('ano', vehicleData.year_model || vehicleData.year_manufacture || null);
+  assign('ano_modelo', vehicleData.year_model || null);
+  assign('tipo_veiculo', vehicleType);
+  assign('cor', vehicleData.color || null);
+  assign('combustivel', vehicleData.fuel_type || null);
+  assign('cambio', vehicleData.transmission || null);
+  assign('km', mileageValue);
+  assign('estado', fallbackState);
+  assign('cidade', fallbackCity);
+  assign('preco_inicial', minimumBid);
+  assign('preco_atual', currentBid);
+  assign('tipo_leilao', normalizedAuctionType);
+  assign('aceita_financiamento', vehicleData.has_financing ?? false);
+  assign('data_leilao', vehicleData.auction_date ? vehicleData.auction_date.toISOString() : null);
+  assign('fipe_preco', fipePrice ?? null);
+  assign('fipe_codigo', fipeCode ?? null);
+  assign('deal_score', dealScore);
+  assign('imagens', imagesArray);
+
+  // Campos comuns (Inglês)
+  assign('title', vehicleData.title);
+  assign('description', vehicleData.title);
+  assign('brand', normalizedBrand);
+  assign('model', normalizedModel);
+  assign('version', normalizedVariant);
+  assign('year_model', vehicleData.year_model || null);
+  assign('year_manufacture', vehicleData.year_manufacture || vehicleData.year_model || null);
+  assign('vehicle_type', englishVehicleType);
+  assign('color', vehicleData.color || null);
+  assign('fuel_type', vehicleData.fuel_type || null);
+  assign('transmission', vehicleData.transmission || null);
+  assign('mileage', mileageValue);
+  assign('state', fallbackState);
+  assign('city', fallbackCity);
+  assign('current_bid', englishCurrentBid);
+  assign('minimum_bid', englishMinimumBid);
+  assign('auction_type', englishAuctionType);
+  assign('has_financing', vehicleData.has_financing ?? false);
+  assign('auction_date', vehicleData.auction_date ? vehicleData.auction_date.toISOString() : null);
+  assign('fipe_price', fipePrice ?? null);
+  assign('fipe_code', fipeCode ?? null);
+  assign('fipe_discount_percentage', fipeDiscountPercentage ?? null);
+  assign('deal_score', dealScore);
+  assign('original_url', vehicleData.original_url || null);
+  assign('thumbnail_url', thumbnailUrl);
+  assign('images', imagesArray);
+  assign('auctioneer_id', auctioneerId);
+
+  // Campos compartilhados
+  assign('external_id', vehicleData.external_id || null);
+  assign('lot_number', vehicleData.lot_number || null);
 
   // 8. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
   let existingVehicleId: string | null = null;
   let isUpdate = false;
   
   if (vehicleData.external_id) {
-    try {
-      // Tentar primeiro usando leiloeiro + external_id (se a coluna existir)
-      const { data: existing, error: queryError } = await supabase
-        .from('vehicles')
-        .select('id')
-        .eq('leiloeiro', auctioneerName)
-        .eq('external_id', vehicleData.external_id)
-        .maybeSingle();
-      
-      if (queryError) {
-        // Se falhar, pode ser que a coluna leiloeiro não exista
-        // Tentar apenas com external_id
-        console.warn(`[${auctioneerName}] Coluna leiloeiro não encontrada, usando apenas external_id:`, queryError.message);
-        const { data: existingAlt } = await supabase
+    const lookupStrategies = [];
+
+    if (hasVehicleColumn(vehicleTableInfo, 'auctioneer_id')) {
+      lookupStrategies.push(
+        supabase
           .from('vehicles')
           .select('id')
+          .eq('auctioneer_id', auctioneerId)
           .eq('external_id', vehicleData.external_id)
-          .maybeSingle();
-        
-        if (existingAlt) {
-          existingVehicleId = existingAlt.id;
-          isUpdate = true;
-        }
-      } else if (existing) {
-        existingVehicleId = existing.id;
-        isUpdate = true;
-      }
-    } catch (err: any) {
-      // Se houver qualquer erro, tentar apenas com external_id
-      console.warn(`[${auctioneerName}] Erro ao verificar veículo existente, usando apenas external_id:`, err.message);
-      const { data: existingAlt } = await supabase
+          .maybeSingle()
+      );
+    }
+
+    if (hasVehicleColumn(vehicleTableInfo, 'leiloeiro')) {
+      lookupStrategies.push(
+        supabase
+          .from('vehicles')
+          .select('id')
+          .eq('leiloeiro', auctioneerName)
+          .eq('external_id', vehicleData.external_id)
+          .maybeSingle()
+      );
+    }
+
+    // Fallback: buscar somente por external_id
+    lookupStrategies.push(
+      supabase
         .from('vehicles')
         .select('id')
         .eq('external_id', vehicleData.external_id)
-        .maybeSingle();
-      
-      if (existingAlt) {
-        existingVehicleId = existingAlt.id;
-        isUpdate = true;
+        .maybeSingle()
+    );
+
+    for (const strategy of lookupStrategies) {
+      try {
+        const { data, error } = await strategy;
+        if (error) {
+          console.warn(`[${auctioneerName}] Erro ao verificar veículo existente:`, error.message ?? error);
+          continue;
+        }
+        if (data) {
+          existingVehicleId = data.id;
+          isUpdate = true;
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`[${auctioneerName}] Exceção ao verificar veículo existente:`, err.message ?? err);
       }
     }
   }
@@ -466,6 +514,16 @@ async function processVehicle(
       delete vehicleToSaveMinimal.version;
       delete vehicleToSaveMinimal.versao;
       delete vehicleToSaveMinimal.modelo_original;
+      delete vehicleToSaveMinimal.title;
+      delete vehicleToSaveMinimal.description;
+      delete vehicleToSaveMinimal.brand;
+      delete vehicleToSaveMinimal.model;
+      delete vehicleToSaveMinimal.auctioneer_id;
+      delete vehicleToSaveMinimal.vehicle_type;
+      delete vehicleToSaveMinimal.auction_type;
+      delete vehicleToSaveMinimal.fipe_discount_percentage;
+      delete vehicleToSaveMinimal.images;
+      delete vehicleToSaveMinimal.thumbnail_url;
       
       const retryResult = await supabase
         .from('vehicles')
@@ -512,6 +570,16 @@ async function processVehicle(
       delete vehicleToSaveMinimal.version;
       delete vehicleToSaveMinimal.versao;
       delete vehicleToSaveMinimal.modelo_original;
+      delete vehicleToSaveMinimal.title;
+      delete vehicleToSaveMinimal.description;
+      delete vehicleToSaveMinimal.brand;
+      delete vehicleToSaveMinimal.model;
+      delete vehicleToSaveMinimal.auctioneer_id;
+      delete vehicleToSaveMinimal.vehicle_type;
+      delete vehicleToSaveMinimal.auction_type;
+      delete vehicleToSaveMinimal.fipe_discount_percentage;
+      delete vehicleToSaveMinimal.images;
+      delete vehicleToSaveMinimal.thumbnail_url;
       
       const retryResult = await supabase
         .from('vehicles')
