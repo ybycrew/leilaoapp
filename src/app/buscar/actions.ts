@@ -85,13 +85,64 @@ export async function searchVehicles(filters: SearchFilters = {}) {
     });
 
     if (error) {
-      console.error('Erro ao buscar veÃ­culos:', error);
+      console.error('Erro ao buscar veículos:', error);
       return { vehicles: [], total: 0, error: error.message };
     }
 
+    const vehicles = (data ?? []).map((item: any) => {
+      const imagens: string[] =
+        item.imagens && Array.isArray(item.imagens) && item.imagens.length > 0
+          ? item.imagens
+          : item.images && Array.isArray(item.images) && item.images.length > 0
+          ? item.images
+          : item.thumbnail_url
+          ? [item.thumbnail_url]
+          : [];
+
+      if (!item.imagens || item.imagens.length === 0) {
+        item.imagens = imagens;
+      }
+
+      if (!item.titulo && item.title) {
+        item.titulo = item.title;
+      }
+      if (!item.marca && item.brand) {
+        item.marca = item.brand;
+      }
+      if (!item.modelo && item.model) {
+        item.modelo = item.model;
+      }
+      if (item.km === undefined && item.mileage !== undefined) {
+        item.km = item.mileage;
+      }
+      if (!item.combustivel && item.fuel_type) {
+        item.combustivel = item.fuel_type;
+      }
+      if (!item.cambio && item.transmission) {
+        item.cambio = item.transmission;
+      }
+      if (!item.estado && item.state) {
+        item.estado = item.state;
+      }
+      if (!item.cidade && item.city) {
+        item.cidade = item.city;
+      }
+      if (!item.preco_atual && item.current_bid !== undefined) {
+        item.preco_atual = item.current_bid;
+      }
+      if (!item.preco_inicial && item.minimum_bid !== undefined) {
+        item.preco_inicial = item.minimum_bid;
+      }
+      if (!item.data_leilao && item.auction_date) {
+        item.data_leilao = item.auction_date;
+      }
+
+      return item;
+    });
+
     return { 
-      vehicles: data as Vehicle[], 
-      total: data?.length || 0,
+      vehicles: vehicles as Vehicle[], 
+      total: vehicles.length,
       error: null 
     };
   } catch (error: any) {
@@ -99,7 +150,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
     return { 
       vehicles: [], 
       total: 0, 
-      error: error.message || 'Erro ao buscar veÃ­culos' 
+      error: error.message || 'Erro ao buscar veículos' 
     };
   }
 }

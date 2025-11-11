@@ -132,41 +132,94 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
   try {
     const vehicleTableInfo = await getVehicleTableInfo(supabase);
     const selectColumns = buildSelectColumns(vehicleTableInfo);
-    // Buscar todos os veículos (ou limitado)
-    let query = supabase
-      .from('vehicles')
-      .select(selectColumns)
-      .order('created_at', { ascending: false });
 
-    if (hasVehicleColumn(vehicleTableInfo, 'marca')) {
-      query = query.not('marca', 'is', null);
-    } else if (hasVehicleColumn(vehicleTableInfo, 'brand')) {
-      query = query.not('brand', 'is', null);
+    const baseFilterColumn = hasVehicleColumn(vehicleTableInfo, 'marca')
+      ? 'marca'
+      : hasVehicleColumn(vehicleTableInfo, 'brand')
+      ? 'brand'
+      : null;
+
+    let totalCount = 0;
+    if (baseFilterColumn) {
+      const { count, error: countError } = await supabase
+        .from('vehicles')
+        .select('id', { count: 'exact', head: true })
+        .not(baseFilterColumn, 'is', null);
+
+      if (countError) {
+        console.warn('⚠️  Não foi possível obter contagem total:', countError.message);
+      } else if (typeof count === 'number') {
+        totalCount = count;
+      }
     }
 
-    if (limit) {
-      query = query.limit(limit);
+    const effectiveTotal = limit ? Math.min(limit, totalCount || limit) : totalCount;
+    if (effectiveTotal > 0) {
+      console.log(`📊 Total de veículos encontrados: ${effectiveTotal}`);
+    } else {
+      console.log('📊 Total de veículos encontrados: desconhecido (processando em lotes)');
     }
 
-    const { data: vehicles, error: fetchError } = await query;
-
-    if (fetchError) {
-      console.error('❌ Erro ao buscar veículos:', fetchError);
-      return;
-    }
-
-    if (!vehicles || vehicles.length === 0) {
-      console.log('ℹ️  Nenhum veículo encontrado para normalizar');
-      return;
-    }
-
-    stats.total = vehicles.length;
-    console.log(`📊 Total de veículos encontrados: ${stats.total}`);
     console.log('');
 
-    // Processar cada veículo
-    for (let i = 0; i < vehicles.length; i++) {
-      const vehicle = vehicles[i] as any;
+    const batchSize = 1000;
+    let offset = 0;
+    let remaining = limit ?? Infinity;
+    let batchIndex = 0;
+
+    while (remaining > 0) {
+      const rangeStart = offset;
+      const desiredEnd = offset + batchSize - 1;
+      const rangeEnd = limit ? Math.min(desiredEnd, (limit - 1)) : desiredEnd;
+      const expectedBatchSize = rangeEnd >= rangeStart ? rangeEnd - rangeStart + 1 : 0;
+
+      if (expectedBatchSize <= 0) {
+        break;
+      }
+
+      let query = supabase
+        .from('vehicles')
+        .select(selectColumns)
+        .order('created_at', { ascending: false })
+        .range(rangeStart, rangeEnd);
+
+      if (baseFilterColumn) {
+        query = query.not(baseFilterColumn, 'is', null);
+      }
+
+      const { data: vehicles, error: fetchError } = await query;
+
+      if (fetchError) {
+        console.error('❌ Erro ao buscar veículos:', fetchError);
+        break;
+      }
+
+      if (!vehicles || vehicles.length === 0) {
+        if (batchIndex === 0) {
+          console.log('ℹ️  Nenhum veículo encontrado para normalizar');
+        }
+        break;
+      }
+
+      stats.total += vehicles.length;
+      batchIndex++;
+
+      // Processar cada veículo
+      for (let i = 0; i < vehicles.length; i++) {
+        const vehicle = vehicles[i] as any;
+        stats.processed++;
+
+        if (stats.processed % 10 === 0) {
+          console.log(`   Processando... ${stats.processed}/${limit ?? (totalCount || '???')}`);
+        }
+
+        if (remaining <= 0) {
+          break;
+        }
+
+        remaining--;
+
+        try {
       stats.processed++;
 
       if (stats.processed % 10 === 0) {
@@ -291,6 +344,11 @@ async function normalizeVehicles(dryRun: boolean = false, limit?: number) {
       if (i < vehicles.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
+      if (vehicles.length < expectedBatchSize) {
+        break;
+      }
+
+      offset += batchSize;
     }
 
     // Relatório final
