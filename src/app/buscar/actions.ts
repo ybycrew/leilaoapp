@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { buildSearchKey, toAsciiUpper } from '@/lib/fipe-normalization';
+import { filterValidStates, filterValidCities, isValidBrazilianState, isValidCity } from '@/lib/utils';
 
 export interface SearchFilters {
   q?: string;
@@ -52,13 +53,37 @@ export interface Vehicle {
   thumbnail_url: string | null;
 }
 
+/**
+ * Mapeia tipo de veículo do filtro para valor normalizado no banco
+ */
+function normalizeVehicleTypeForFilter(vehicleType: string): string {
+  const normalized = vehicleType.toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    'carro': 'Carro',
+    'moto': 'Moto',
+    'caminhao': 'Caminhão',
+    'caminhão': 'Caminhão',
+    'van': 'Van',
+    'outros': 'Ônibus',
+  };
+  return mapping[normalized] || vehicleType;
+}
+
 export async function searchVehicles(filters: SearchFilters = {}) {
   const supabase = await createClient();
 
   try {
+    // Mapear tipos de veículo para valores normalizados
+    const normalizedVehicleTypes = filters.vehicleType && filters.vehicleType.length > 0
+      ? filters.vehicleType.map(normalizeVehicleTypeForFilter)
+      : null;
+
+    // Normalizar estado para maiúscula (UF)
+    const normalizedState = filters.state ? filters.state.trim().toUpperCase() : null;
+
     const { data, error } = await supabase.rpc('search_vehicles', {
       p_search_text: filters.q || null,
-      p_states: filters.state ? [filters.state] : null,
+      p_states: normalizedState ? [normalizedState] : null,
       p_cities: filters.city ? [filters.city] : null,
       p_brands: filters.brand && filters.brand.length > 0 ? filters.brand : null,
       p_models: filters.model && filters.model.length > 0 ? filters.model : null,
@@ -66,7 +91,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       p_max_year: filters.maxYear || null,
       p_min_price: filters.minPrice || null,
       p_max_price: filters.maxPrice || null,
-      p_vehicle_types: filters.vehicleType && filters.vehicleType.length > 0 ? filters.vehicleType : null,
+      p_vehicle_types: normalizedVehicleTypes,
       p_fuel_types: filters.fuelType && filters.fuelType.length > 0 ? filters.fuelType : null,
       p_transmissions: filters.transmission && filters.transmission.length > 0 ? filters.transmission : null,
       p_min_mileage: filters.minMileage || null,
@@ -229,7 +254,7 @@ export async function getFilterOptions() {
       models = Array.from(modelSet);
     }
 
-    // Buscar estados (coluna: state)
+    // Buscar estados (coluna: state) - com validação
     const { data: statesData, error: statesError } = await supabase
       .from('vehicles')
       .select('state')
@@ -241,15 +266,12 @@ export async function getFilterOptions() {
       console.log(`[getFilterOptions] Estados encontrados (raw):`, statesData?.length || 0);
     }
 
-    const states = Array.from(
-      new Set(
-        statesData
-          ?.map(v => v.state)
-          .filter((state): state is string => Boolean(state && state.trim() !== '')) || []
-      )
-    ).sort();
+    // Filtrar apenas estados válidos
+    const states = filterValidStates(
+      statesData?.map(v => v.state) || []
+    );
 
-    // Buscar cidades por estado (colunas: city, state)
+    // Buscar cidades por estado (colunas: city, state) - com validação
     const { data: citiesData, error: citiesError } = await supabase
       .from('vehicles')
       .select('city, state')
@@ -261,16 +283,21 @@ export async function getFilterOptions() {
 
     const citiesByState: Record<string, string[]> = {};
     citiesData?.forEach(v => {
-      if (v.city && v.city.trim() !== '' && v.state && v.state.trim() !== '') {
-        if (!citiesByState[v.state]) {
-          citiesByState[v.state] = [];
+      // Validar estado e cidade antes de adicionar
+      if (isValidBrazilianState(v.state) && isValidCity(v.city)) {
+        const stateKey = v.state!.trim().toUpperCase();
+        const cityName = v.city!.trim();
+        
+        if (!citiesByState[stateKey]) {
+          citiesByState[stateKey] = [];
         }
-        if (!citiesByState[v.state].includes(v.city)) {
-          citiesByState[v.state].push(v.city);
+        if (!citiesByState[stateKey].includes(cityName)) {
+          citiesByState[stateKey].push(cityName);
         }
       }
     });
 
+    // Ordenar cidades de cada estado
     Object.keys(citiesByState).forEach(state => {
       citiesByState[state].sort();
     });
@@ -386,10 +413,49 @@ export async function getFilterOptions() {
       )
     ).sort();
 
+    // Buscar tipos de veículo (coluna: vehicle_type ou tipo_veiculo)
+    let vehicleTypes: string[] = [];
+    try {
+      // Tentar primeiro com vehicle_type (inglês)
+      const { data: vehicleTypesData, error: vehicleTypesError } = await supabase
+        .from('vehicles')
+        .select('vehicle_type')
+        .not('vehicle_type', 'is', null);
+
+      if (vehicleTypesError) {
+        // Se falhar, tentar com tipo_veiculo (português)
+        const { data: tipoVeiculoData, error: tipoVeiculoError } = await supabase
+          .from('vehicles')
+          .select('tipo_veiculo')
+          .not('tipo_veiculo', 'is', null);
+        
+        if (!tipoVeiculoError && tipoVeiculoData) {
+          vehicleTypes = Array.from(
+            new Set(
+              tipoVeiculoData
+                ?.map(v => (v as any).tipo_veiculo)
+                .filter((type): type is string => Boolean(type && type.trim() !== '')) || []
+            )
+          ).sort();
+        }
+      } else if (vehicleTypesData) {
+        vehicleTypes = Array.from(
+          new Set(
+            vehicleTypesData
+              ?.map(v => (v as any).vehicle_type)
+              .filter((type): type is string => Boolean(type && type.trim() !== '')) || []
+          )
+        ).sort();
+      }
+    } catch (err) {
+      console.warn('[getFilterOptions] Erro ao buscar tipos de veículo:', err);
+    }
+
     console.log('Filter options loaded:', {
       brands: brands.length,
       models: models.length,
       states: states.length,
+      vehicleTypes: vehicleTypes.length,
       fuels: fuels.length,
       transmissions: transmissions.length,
       colors: colors.length,
@@ -405,6 +471,7 @@ export async function getFilterOptions() {
       fuels,
       transmissions,
       colors,
+      vehicleTypes,
     };
   } catch (error) {
     console.error('Erro geral ao buscar opções de filtro:', error);
@@ -417,21 +484,118 @@ export async function getFilterOptions() {
       fuels: [],
       transmissions: [],
       colors: [],
+      vehicleTypes: [],
     };
   }
 }
 
-export async function getModelsByBrand(brand: string) {
+/**
+ * Mapeia tipo de veículo do sistema para slug do FIPE
+ */
+function mapVehicleTypeToFipeSlug(vehicleType: string | null | undefined): string | null {
+  if (!vehicleType) return null;
+  const normalized = vehicleType.toLowerCase().trim();
+  
+  // Mapear tipos do sistema para slugs FIPE
+  if (normalized === 'carro' || normalized === 'car') {
+    return 'carros';
+  }
+  if (normalized === 'moto' || normalized === 'motorcycle') {
+    return 'motos';
+  }
+  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'truck') {
+    return 'caminhoes';
+  }
+  // Van e outros não têm correspondência direta na FIPE, retornar null
+  return null;
+}
+
+/**
+ * Busca marcas FIPE filtradas por tipo de veículo
+ */
+export async function getBrandsByVehicleType(vehicleType?: string | null) {
   const supabase = await createClient();
 
   try {
+    let brandsQuery = supabase
+      .from('fipe_brands')
+      .select('name_upper')
+      .order('name_upper');
+
+    // Se vehicleType fornecido, filtrar por vehicle_type_id
+    if (vehicleType) {
+      const fipeSlug = mapVehicleTypeToFipeSlug(vehicleType);
+      if (fipeSlug) {
+        const { data: vehicleTypeData, error: vehicleTypeError } = await supabase
+          .from('fipe_vehicle_types')
+          .select('id')
+          .eq('slug', fipeSlug)
+          .single();
+
+        if (!vehicleTypeError && vehicleTypeData) {
+          brandsQuery = brandsQuery.eq('vehicle_type_id', vehicleTypeData.id);
+        }
+      }
+    }
+
+    const { data: brandsData, error: brandsError } = await brandsQuery;
+
+    if (brandsError) {
+      console.error('[getBrandsByVehicleType] Erro ao buscar marcas:', brandsError);
+      return [];
+    }
+
+    const brandSet = new Set<string>();
+    brandsData?.forEach((row: any) => {
+      if (row?.name_upper) {
+        brandSet.add(row.name_upper);
+      }
+    });
+
+    return Array.from(brandSet).sort();
+  } catch (error) {
+    console.error('[getBrandsByVehicleType] Erro:', error);
+    return [];
+  }
+}
+
+export async function getModelsByBrand(brand: string, vehicleType?: string | null) {
+  const supabase = await createClient();
+
+  try {
+    // Se vehicleType fornecido, buscar vehicle_type_id correspondente
+    let vehicleTypeId: string | null = null;
+    if (vehicleType) {
+      const fipeSlug = mapVehicleTypeToFipeSlug(vehicleType);
+      if (fipeSlug) {
+        const { data: vehicleTypeData, error: vehicleTypeError } = await supabase
+          .from('fipe_vehicle_types')
+          .select('id')
+          .eq('slug', fipeSlug)
+          .single();
+
+        if (!vehicleTypeError && vehicleTypeData) {
+          vehicleTypeId = vehicleTypeData.id;
+        }
+      }
+    }
+
     const brandIds = new Set<string>();
     const searchKey = buildSearchKey(brand);
     const brandUpper = toAsciiUpper(brand);
 
-    const { data: searchMatches, error: searchError } = await supabase
+    // Construir query base
+    let brandsQuery = supabase
       .from('fipe_brands')
-      .select('id')
+      .select('id');
+
+    // Filtrar por vehicle_type_id se fornecido
+    if (vehicleTypeId) {
+      brandsQuery = brandsQuery.eq('vehicle_type_id', vehicleTypeId);
+    }
+
+    // Tentar busca exata por search_name
+    const { data: searchMatches, error: searchError } = await brandsQuery
       .eq('search_name', searchKey);
 
     if (searchError) {
@@ -440,10 +604,17 @@ export async function getModelsByBrand(brand: string) {
       searchMatches?.forEach((row) => brandIds.add(row.id));
     }
 
+    // Se não encontrou, tentar por name_upper
     if (brandIds.size === 0) {
-      const { data: upperMatches, error: upperError } = await supabase
+      let upperQuery = supabase
         .from('fipe_brands')
-        .select('id')
+        .select('id');
+      
+      if (vehicleTypeId) {
+        upperQuery = upperQuery.eq('vehicle_type_id', vehicleTypeId);
+      }
+
+      const { data: upperMatches, error: upperError } = await upperQuery
         .eq('name_upper', brandUpper);
 
       if (upperError) {
@@ -453,10 +624,17 @@ export async function getModelsByBrand(brand: string) {
       }
     }
 
+    // Se ainda não encontrou, tentar busca fuzzy
     if (brandIds.size === 0) {
-      const { data: fuzzyMatches, error: fuzzyError } = await supabase
+      let fuzzyQuery = supabase
         .from('fipe_brands')
-        .select('id')
+        .select('id');
+      
+      if (vehicleTypeId) {
+        fuzzyQuery = fuzzyQuery.eq('vehicle_type_id', vehicleTypeId);
+      }
+
+      const { data: fuzzyMatches, error: fuzzyError } = await fuzzyQuery
         .ilike('name_upper', `%${brandUpper}%`);
 
       if (fuzzyError) {

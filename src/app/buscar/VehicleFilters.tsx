@@ -27,7 +27,7 @@ import {
   X,
   Filter
 } from "lucide-react";
-import { getModelsByBrand } from './actions';
+import { getModelsByBrand, getBrandsByVehicleType } from './actions';
 
 interface FilterOptions {
   brands: string[];
@@ -38,6 +38,7 @@ interface FilterOptions {
   fuels: string[];
   transmissions: string[];
   colors: string[];
+  vehicleTypes?: string[];
 }
 
 interface VehicleFiltersProps {
@@ -80,22 +81,63 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [filters, setFilters] = useState(currentFilters || {});
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [filteredBrands, setFilteredBrands] = useState<string[]>(filterOptions.brands);
+  
+  // Estados locais para campos numéricos (evitar perda de foco)
+  const [localNumericValues, setLocalNumericValues] = useState({
+    minYear: currentFilters?.minYear || '',
+    maxYear: currentFilters?.maxYear || '',
+    minPrice: currentFilters?.minPrice || '',
+    maxPrice: currentFilters?.maxPrice || '',
+    maxMileage: currentFilters?.maxMileage || '',
+    minFipeDiscount: currentFilters?.minFipeDiscount || '',
+  });
 
   // Sincronizar com currentFilters quando mudarem
   useEffect(() => {
     if (currentFilters) {
       setFilters(currentFilters);
       setSelectedModels(currentFilters.model || []);
+      setLocalNumericValues({
+        minYear: currentFilters.minYear || '',
+        maxYear: currentFilters.maxYear || '',
+        minPrice: currentFilters.minPrice || '',
+        maxPrice: currentFilters.maxPrice || '',
+        maxMileage: currentFilters.maxMileage || '',
+        minFipeDiscount: currentFilters.minFipeDiscount || '',
+      });
     }
   }, [currentFilters]);
 
-  // Quando a marca muda, buscar modelos
+  // Quando o tipo de veículo muda, filtrar marcas
+  useEffect(() => {
+    const selectedVehicleTypes = filters.vehicleType || [];
+    if (selectedVehicleTypes.length === 1) {
+      // Se apenas um tipo selecionado, buscar marcas filtradas por tipo
+      getBrandsByVehicleType(selectedVehicleTypes[0])
+        .then(brands => {
+          setFilteredBrands(brands);
+        })
+        .catch(error => {
+          console.error('Erro ao buscar marcas por tipo:', error);
+          setFilteredBrands(filterOptions.brands);
+        });
+    } else {
+      // Se nenhum ou múltiplos tipos, mostrar todas as marcas
+      setFilteredBrands(filterOptions.brands);
+    }
+  }, [filters.vehicleType, filterOptions.brands]);
+
+  // Quando a marca muda, buscar modelos (considerando tipo de veículo)
   useEffect(() => {
     const selectedBrands = filters.brand || [];
+    const selectedVehicleTypes = filters.vehicleType || [];
+    const vehicleType = selectedVehicleTypes.length === 1 ? selectedVehicleTypes[0] : null;
+
     if (selectedBrands.length > 0) {
-      // Buscar modelos para todas as marcas selecionadas
+      // Buscar modelos para todas as marcas selecionadas, filtrando por tipo se aplicável
       Promise.all(
-        selectedBrands.map(brand => getModelsByBrand(brand))
+        selectedBrands.map(brand => getModelsByBrand(brand, vehicleType))
       ).then(modelArrays => {
         const allModels = new Set<string>();
         modelArrays.forEach(models => {
@@ -112,7 +154,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       setAvailableModels([]);
       setSelectedModels([]);
     }
-  }, [filters.brand]);
+  }, [filters.brand, filters.vehicleType]);
 
   const updateFilter = (key: string, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -351,14 +393,18 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       <SelectValue placeholder="Adicionar marca" />
                     </SelectTrigger>
                     <SelectContent>
-                      {!filterOptions || !filterOptions.brands ? (
-                        <SelectItem value="loading" disabled>Carregando marcas...</SelectItem>
-                      ) : filterOptions.brands.length > 0 ? (
-                        filterOptions.brands.map(brand => (
-                          <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                        ))
+                      {filteredBrands.length > 0 ? (
+                        filteredBrands
+                          .filter(brand => !(filters.brand || []).includes(brand))
+                          .map(brand => (
+                            <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                          ))
                       ) : (
-                        <SelectItem value="empty" disabled>Nenhuma marca disponível</SelectItem>
+                        <SelectItem value="empty" disabled>
+                          {filters.vehicleType && filters.vehicleType.length > 0 
+                            ? "Nenhuma marca disponível para este tipo" 
+                            : "Nenhuma marca disponível"}
+                        </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -432,10 +478,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="2020"
-                      value={filters.minYear || ''}
+                      value={localNumericValues.minYear}
                       onChange={(e) => {
                         const value = e.target.value.replace(/\D/g, '');
-                        updateFilter('minYear', value || undefined);
+                        setLocalNumericValues(prev => ({ ...prev, minYear: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('minYear', localNumericValues.minYear || undefined);
                       }}
                     />
                   </div>
@@ -447,10 +496,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       inputMode="numeric"
                       pattern="[0-9]*"
                       placeholder="2024"
-                      value={filters.maxYear || ''}
+                      value={localNumericValues.maxYear}
                       onChange={(e) => {
                         const value = e.target.value.replace(/\D/g, '');
-                        updateFilter('maxYear', value || undefined);
+                        setLocalNumericValues(prev => ({ ...prev, maxYear: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('maxYear', localNumericValues.maxYear || undefined);
                       }}
                     />
                   </div>
@@ -603,10 +655,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     inputMode="numeric"
                     pattern="[0-9]*"
                     placeholder="R$ 0"
-                    value={filters.minPrice || ''}
+                    value={localNumericValues.minPrice}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '');
-                      updateFilter('minPrice', value || undefined);
+                      setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('minPrice', localNumericValues.minPrice || undefined);
                     }}
                   />
                 </div>
@@ -618,10 +673,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     inputMode="numeric"
                     pattern="[0-9]*"
                     placeholder="R$ 500.000"
-                    value={filters.maxPrice || ''}
+                    value={localNumericValues.maxPrice}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '');
-                      updateFilter('maxPrice', value || undefined);
+                      setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
                     }}
                   />
                 </div>
@@ -635,10 +693,18 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <Label htmlFor="maxMileage">KM Máximo</Label>
                   <Input
                     id="maxMileage"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder="100.000"
-                    value={filters.maxMileage || ''}
-                    onChange={(e) => updateFilter('maxMileage', e.target.value)}
+                    value={localNumericValues.maxMileage}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
+                    }}
                   />
                 </div>
               </div>
@@ -668,10 +734,18 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <Label htmlFor="minFipeDiscount">Desconto FIPE Mínimo (%)</Label>
                   <Input
                     id="minFipeDiscount"
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     placeholder="20"
-                    value={filters.minFipeDiscount || ''}
-                    onChange={(e) => updateFilter('minFipeDiscount', e.target.value)}
+                    value={localNumericValues.minFipeDiscount}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setLocalNumericValues(prev => ({ ...prev, minFipeDiscount: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('minFipeDiscount', localNumericValues.minFipeDiscount || undefined);
+                    }}
                   />
                 </div>
               </div>
