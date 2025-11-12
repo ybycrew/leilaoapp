@@ -99,11 +99,13 @@ async function fetchColumnsViaInformationSchema(client: SupabaseClient): Promise
 
 async function probeColumn(client: SupabaseClient, column: string): Promise<boolean> {
   if (!columnProbeCache.has(column)) {
-    const probePromise = client
-      .from('vehicles')
-      .select(column)
-      .limit(1)
-      .then((result) => {
+    const probePromise = (async () => {
+      try {
+        const result = await client
+          .from('vehicles')
+          .select(column)
+          .limit(1);
+
         if (result.error) {
           const code = result.error.code;
           if (code === '42703') {
@@ -123,11 +125,11 @@ async function probeColumn(client: SupabaseClient, column: string): Promise<bool
         }
 
         return true;
-      })
-      .catch((error) => {
+      } catch (error) {
         console.warn(`[vehicle-table-info] Erro inesperado ao sondar coluna "${column}":`, error);
         return false;
-      });
+      }
+    })();
 
     columnProbeCache.set(column, probePromise);
   }
