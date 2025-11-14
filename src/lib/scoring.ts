@@ -4,9 +4,17 @@ export function calculateDealScore(vehicle: Vehicle): DealScore {
   let score = 50; // Base score
   let desconto_fipe = 0;
 
+  // Compatibilidade: usar campos em inglês ou português
+  const fipePrice = vehicle.fipe_price ?? vehicle.fipe_preco;
+  const currentPrice = vehicle.current_bid ?? vehicle.preco_atual ?? 0;
+  const year = vehicle.year_manufacture ?? vehicle.ano;
+  const mileage = vehicle.mileage ?? vehicle.km;
+  const auctionType = vehicle.auction_type ?? vehicle.tipo_leilao;
+  const hasFinancing = vehicle.has_financing ?? vehicle.accepts_financing ?? vehicle.aceita_financiamento ?? false;
+
   // 1. Desconto em relação à FIPE (peso: 40 pontos)
-  if (vehicle.fipe_preco && vehicle.fipe_preco > 0) {
-    desconto_fipe = ((vehicle.fipe_preco - vehicle.preco_atual) / vehicle.fipe_preco) * 100;
+  if (fipePrice && fipePrice > 0 && currentPrice > 0) {
+    desconto_fipe = ((fipePrice - currentPrice) / fipePrice) * 100;
     
     if (desconto_fipe >= 30) {
       score += 40;
@@ -22,43 +30,45 @@ export function calculateDealScore(vehicle: Vehicle): DealScore {
   }
 
   // 2. Ano do veículo (peso: 20 pontos)
-  const anoAtual = new Date().getFullYear();
-  const idadeVeiculo = anoAtual - vehicle.ano;
-  
-  if (idadeVeiculo <= 3) {
-    score += 20;
-  } else if (idadeVeiculo <= 5) {
-    score += 15;
-  } else if (idadeVeiculo <= 10) {
-    score += 10;
-  } else if (idadeVeiculo <= 15) {
-    score += 5;
+  if (year) {
+    const anoAtual = new Date().getFullYear();
+    const idadeVeiculo = anoAtual - year;
+    
+    if (idadeVeiculo <= 3) {
+      score += 20;
+    } else if (idadeVeiculo <= 5) {
+      score += 15;
+    } else if (idadeVeiculo <= 10) {
+      score += 10;
+    } else if (idadeVeiculo <= 15) {
+      score += 5;
+    }
   }
 
   // 3. Quilometragem (peso: 15 pontos)
-  if (vehicle.km) {
-    if (vehicle.km < 30000) {
+  if (mileage) {
+    if (mileage < 30000) {
       score += 15;
-    } else if (vehicle.km < 60000) {
+    } else if (mileage < 60000) {
       score += 10;
-    } else if (vehicle.km < 100000) {
+    } else if (mileage < 100000) {
       score += 5;
-    } else if (vehicle.km > 200000) {
+    } else if (mileage > 200000) {
       score -= 5;
     }
   }
 
   // 4. Tipo de leilão (peso: 15 pontos)
-  if (vehicle.tipo_leilao === 'online') {
+  if (auctionType === 'online' || auctionType === 'Online') {
     score += 15;
-  } else if (vehicle.tipo_leilao === 'hibrido') {
+  } else if (auctionType === 'hibrido' || auctionType === 'Híbrido' || auctionType === 'Hibrido') {
     score += 10;
-  } else {
+  } else if (auctionType) {
     score += 5;
   }
 
   // 5. Financiamento (peso: 10 pontos)
-  if (vehicle.aceita_financiamento) {
+  if (hasFinancing) {
     score += 10;
   }
 
