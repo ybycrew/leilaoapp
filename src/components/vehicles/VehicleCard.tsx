@@ -13,18 +13,24 @@ interface VehicleCardProps {
 }
 
 export function VehicleCard({ vehicle, onFavorite, isFavorited = false }: VehicleCardProps) {
-  const scoreColor = getScoreBadgeColor(vehicle.deal_score);
-  const scoreLabel = getScoreLabel(vehicle.deal_score);
+  const dealScore = vehicle.deal_score ?? 0;
+  const scoreColor = getScoreBadgeColor(dealScore);
+  const scoreLabel = getScoreLabel(dealScore);
   
-  const descontoFipe = vehicle.fipe_preco 
-    ? Math.round(((vehicle.fipe_preco - vehicle.preco_atual) / vehicle.fipe_preco) * 100)
+  // Usar fipe_price ou fipe_preco (compatibilidade)
+  const fipePrice = vehicle.fipe_price ?? vehicle.fipe_preco;
+  // Usar preco_atual ou current_bid (compatibilidade)
+  const currentPrice = vehicle.preco_atual ?? vehicle.current_bid ?? 0;
+  
+  const descontoFipe = fipePrice && fipePrice > 0
+    ? Math.round(((fipePrice - currentPrice) / fipePrice) * 100)
     : 0;
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group">
       <div className="relative h-48 bg-gray-200">
         <Badge className={`absolute top-2 right-2 ${scoreColor} text-white`}>
-          Score: {vehicle.deal_score}
+          Score: {dealScore}
         </Badge>
         {onFavorite && (
           <button
@@ -39,10 +45,10 @@ export function VehicleCard({ vehicle, onFavorite, isFavorited = false }: Vehicl
             />
           </button>
         )}
-        {vehicle.imagens && vehicle.imagens.length > 0 ? (
+        {(vehicle.imagens && vehicle.imagens.length > 0) || vehicle.thumbnail_url ? (
           <Image
-            src={vehicle.imagens[0]}
-            alt={vehicle.titulo}
+            src={(vehicle.imagens && vehicle.imagens.length > 0) ? vehicle.imagens[0] : (vehicle.thumbnail_url || '')}
+            alt={vehicle.title || vehicle.titulo || 'Veículo'}
             fill
             className="object-cover group-hover:scale-105 transition-transform duration-300"
           />
@@ -54,33 +60,34 @@ export function VehicleCard({ vehicle, onFavorite, isFavorited = false }: Vehicl
       </div>
 
       <CardContent className="p-4">
-        <h3 className="font-semibold mb-2 line-clamp-2">{vehicle.titulo}</h3>
+        <h3 className="font-semibold mb-2 line-clamp-2">{vehicle.title || vehicle.titulo || 'Veículo'}</h3>
         
         <div className="space-y-2 text-sm text-muted-foreground mb-4">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{vehicle.cidade}, {vehicle.estado}</span>
+            <span className="truncate">{vehicle.city || vehicle.cidade || ''}, {vehicle.state || vehicle.estado || ''}</span>
           </div>
           
-          {vehicle.data_leilao && (
+          {(vehicle.auction_date || vehicle.data_leilao) && (
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 flex-shrink-0" />
-              <span>Leilão: {new Date(vehicle.data_leilao).toLocaleDateString('pt-BR')}</span>
+              <span>Leilão: {new Date(vehicle.auction_date || vehicle.data_leilao || '').toLocaleDateString('pt-BR')}</span>
             </div>
           )}
           
-          {vehicle.km && (
+          {(vehicle.mileage || vehicle.km) && (
             <div className="flex items-center gap-2">
               <Gauge className="h-4 w-4 flex-shrink-0" />
-              <span>{vehicle.km.toLocaleString('pt-BR')} km</span>
+              <span>{(vehicle.mileage || vehicle.km || 0).toLocaleString('pt-BR')} km</span>
             </div>
           )}
           
-          {(vehicle.combustivel || vehicle.cambio) && (
+          {(vehicle.fuel_type || vehicle.combustivel || vehicle.transmission || vehicle.cambio) && (
             <div className="flex items-center gap-2">
               <Fuel className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">
-                {vehicle.combustivel} {vehicle.cambio && `• ${vehicle.cambio}`}
+                {vehicle.fuel_type || vehicle.combustivel || ''} 
+                {(vehicle.transmission || vehicle.cambio) && ` • ${vehicle.transmission || vehicle.cambio}`}
               </span>
             </div>
           )}
@@ -89,11 +96,11 @@ export function VehicleCard({ vehicle, onFavorite, isFavorited = false }: Vehicl
         <div className="flex items-center justify-between pt-4 border-t">
           <div>
             <p className="text-2xl font-bold text-primary">
-              {formatCurrency(vehicle.preco_atual)}
+              {formatCurrency(currentPrice)}
             </p>
-            {vehicle.fipe_preco && (
+            {fipePrice && (
               <p className="text-xs text-muted-foreground">
-                FIPE: {formatCurrency(vehicle.fipe_preco)} 
+                FIPE: {formatCurrency(fipePrice)} 
                 {descontoFipe > 0 && (
                   <span className="text-green-600 font-medium ml-1">
                     (-{descontoFipe}%)
@@ -106,11 +113,11 @@ export function VehicleCard({ vehicle, onFavorite, isFavorited = false }: Vehicl
           <Badge 
             variant="outline" 
             className={
-              vehicle.deal_score >= 80 
+              dealScore >= 80 
                 ? "bg-green-50 text-green-700 border-green-200" 
-                : vehicle.deal_score >= 65
+                : dealScore >= 65
                 ? "bg-blue-50 text-blue-700 border-blue-200"
-                : vehicle.deal_score >= 50
+                : dealScore >= 50
                 ? "bg-yellow-50 text-yellow-700 border-yellow-200"
                 : "bg-red-50 text-red-700 border-red-200"
             }

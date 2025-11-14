@@ -84,16 +84,18 @@ export function calculateDealScore(vehicle: Vehicle): DealScore {
   };
 }
 
-export function getScoreBadgeColor(score: number): string {
-  if (score >= 80) return 'bg-green-500';
-  if (score >= 65) return 'bg-blue-500';
-  if (score >= 50) return 'bg-yellow-500';
+export function getScoreBadgeColor(score: number | null | undefined): string {
+  const safeScore = score ?? 0;
+  if (safeScore >= 80) return 'bg-green-500';
+  if (safeScore >= 65) return 'bg-blue-500';
+  if (safeScore >= 50) return 'bg-yellow-500';
   return 'bg-red-500';
 }
 
-export function getScoreLabel(score: number): string {
-  if (score >= 80) return 'Excelente Negócio';
-  if (score >= 65) return 'Bom Negócio';
-  if (score >= 50) return 'Preço Justo';
+export function getScoreLabel(score: number | null | undefined): string {
+  const safeScore = score ?? 0;
+  if (safeScore >= 80) return 'Excelente Negócio';
+  if (safeScore >= 65) return 'Bom Negócio';
+  if (safeScore >= 50) return 'Preço Justo';
   return 'Preço Alto';
 }
