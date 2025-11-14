@@ -73,41 +73,122 @@ export async function searchVehicles(filters: SearchFilters = {}) {
   const supabase = await createClient();
 
   try {
-    // Mapear tipos de veículo para valores normalizados
-    const normalizedVehicleTypes = filters.vehicleType && filters.vehicleType.length > 0
-      ? filters.vehicleType.map(normalizeVehicleTypeForFilter)
-      : null;
-
     // Normalizar estado para maiúscula (UF)
     const normalizedState = filters.state ? filters.state.trim().toUpperCase() : null;
 
-    const { data, error } = await supabase.rpc('search_vehicles', {
-      p_search_text: filters.q || null,
-      p_states: normalizedState ? [normalizedState] : null,
-      p_cities: filters.city ? [filters.city] : null,
-      p_brands: filters.brand && filters.brand.length > 0 ? filters.brand : null,
-      p_models: filters.model && filters.model.length > 0 ? filters.model : null,
-      p_min_year: filters.minYear || null,
-      p_max_year: filters.maxYear || null,
-      p_min_price: filters.minPrice || null,
-      p_max_price: filters.maxPrice || null,
-      p_vehicle_types: normalizedVehicleTypes,
-      p_fuel_types: filters.fuelType && filters.fuelType.length > 0 ? filters.fuelType : null,
-      p_transmissions: filters.transmission && filters.transmission.length > 0 ? filters.transmission : null,
-      p_min_mileage: filters.minMileage || null,
-      p_max_mileage: filters.maxMileage || null,
-      p_auction_types: filters.auctionType && filters.auctionType.length > 0 ? filters.auctionType : null,
-      p_has_financing: filters.hasFinancing !== undefined ? filters.hasFinancing : null,
-      p_conditions: null,
-      p_sort_by: filters.orderBy === 'deal_score' ? 'deal_score' : 
-                 filters.orderBy === 'price_asc' ? 'price_asc' :
-                 filters.orderBy === 'price_desc' ? 'price_desc' :
-                 filters.orderBy === 'date_asc' ? 'date_asc' :
-                 filters.orderBy === 'date_desc' ? 'date_desc' : 'auction_date',
-      p_sort_order: filters.orderBy === 'price_desc' || filters.orderBy === 'date_desc' ? 'desc' : 'asc',
-      p_limit: filters.limit || 50,
-      p_offset: filters.offset || 0,
-    });
+    // Construir query usando a view vehicles_with_auctioneer diretamente
+    let query = supabase
+      .from('vehicles_with_auctioneer')
+      .select('*', { count: 'exact' });
+
+    // Aplicar filtros - usando colunas em inglês da view
+    if (filters.q) {
+      query = query.or(`title.ilike.%${filters.q}%,model.ilike.%${filters.q}%,brand.ilike.%${filters.q}%`);
+    }
+
+    if (normalizedState) {
+      query = query.eq('state', normalizedState);
+    }
+
+    if (filters.city) {
+      query = query.eq('city', filters.city);
+    }
+
+    if (filters.brand && filters.brand.length > 0) {
+      query = query.in('brand', filters.brand);
+    }
+
+    if (filters.model && filters.model.length > 0) {
+      query = query.in('model', filters.model);
+    }
+
+    if (filters.vehicleType && filters.vehicleType.length > 0) {
+      const normalizedTypes = filters.vehicleType.map(normalizeVehicleTypeForFilter);
+      query = query.in('vehicle_type', normalizedTypes);
+    }
+
+    if (filters.minYear) {
+      query = query.gte('year_manufacture', filters.minYear);
+    }
+
+    if (filters.maxYear) {
+      query = query.lte('year_manufacture', filters.maxYear);
+    }
+
+    if (filters.minPrice) {
+      query = query.gte('current_bid', filters.minPrice);
+    }
+
+    if (filters.maxPrice) {
+      query = query.lte('current_bid', filters.maxPrice);
+    }
+
+    if (filters.fuelType && filters.fuelType.length > 0) {
+      query = query.in('fuel_type', filters.fuelType);
+    }
+
+    if (filters.transmission && filters.transmission.length > 0) {
+      query = query.in('transmission', filters.transmission);
+    }
+
+    if (filters.color && filters.color.length > 0) {
+      query = query.in('color', filters.color);
+    }
+
+    if (filters.minMileage) {
+      query = query.gte('mileage', filters.minMileage);
+    }
+
+    if (filters.maxMileage) {
+      query = query.lte('mileage', filters.maxMileage);
+    }
+
+    if (filters.auctionType && filters.auctionType.length > 0) {
+      query = query.in('auction_type', filters.auctionType);
+    }
+
+    if (filters.hasFinancing !== undefined) {
+      query = query.eq('has_financing', filters.hasFinancing);
+    }
+
+    if (filters.licensePlateEnd) {
+      query = query.ilike('license_plate', `%${filters.licensePlateEnd}`);
+    }
+
+    if (filters.minDealScore) {
+      query = query.gte('deal_score', filters.minDealScore);
+    }
+
+    if (filters.auctioneer && filters.auctioneer.length > 0) {
+      query = query.in('auctioneer_name', filters.auctioneer);
+    }
+
+    // Ordenação
+    switch (filters.orderBy) {
+      case 'price_asc':
+        query = query.order('current_bid', { ascending: true });
+        break;
+      case 'price_desc':
+        query = query.order('current_bid', { ascending: false });
+        break;
+      case 'date_asc':
+        query = query.order('auction_date', { ascending: true });
+        break;
+      case 'date_desc':
+        query = query.order('auction_date', { ascending: false });
+        break;
+      case 'deal_score':
+      default:
+        query = query.order('deal_score', { ascending: false, nullsLast: true });
+        break;
+    }
+
+    // Paginação
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Erro ao buscar veículos:', error);
@@ -167,7 +248,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     return { 
       vehicles: vehicles as Vehicle[], 
-      total: vehicles.length,
+      total: count || 0,
       error: null 
     };
   } catch (error: any) {
