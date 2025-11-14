@@ -185,11 +185,11 @@ export async function getVehicleStats() {
 
   try {
     const { count } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('*', { count: 'exact', head: true });
 
     const { data: brands } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('brand')
       .not('brand', 'is', null);
 
@@ -208,12 +208,12 @@ export async function getFilterOptions() {
   const supabase = await createClient();
 
   try {
-    // DIAGNÓSTICO: Verificar quantos veículos existem na tabela
+    // DIAGNÓSTICO: Verificar quantos veículos existem na view
     const { count: totalCount } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('*', { count: 'exact', head: true });
     
-    console.log(`[getFilterOptions] Total de veículos na tabela: ${totalCount}`);
+    console.log(`[getFilterOptions] Total de veículos na view: ${totalCount}`);
 
     // Buscar marcas a partir das tabelas de referência FIPE
     const { data: brandsData, error: brandsError } = await supabase
@@ -256,7 +256,7 @@ export async function getFilterOptions() {
 
     // Buscar estados (coluna: state) - com validação
     const { data: statesData, error: statesError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('state')
       .not('state', 'is', null);
 
@@ -273,7 +273,7 @@ export async function getFilterOptions() {
 
     // Buscar cidades por estado (colunas: city, state) - com validação
     const { data: citiesData, error: citiesError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('city, state')
       .not('city', 'is', null);
 
@@ -302,36 +302,19 @@ export async function getFilterOptions() {
       citiesByState[state].sort();
     });
 
-    // Buscar leiloeiros (coluna: auctioneer ou leiloeiro - tentar ambos)
+    // Buscar leiloeiros da view (coluna: auctioneer_name)
     let auctioneers: string[] = [];
     try {
-      // Tentar primeiro com auctioneer (inglês)
       const { data: auctioneersData, error: auctioneersError } = await supabase
-        .from('vehicles')
-        .select('auctioneer')
-        .not('auctioneer', 'is', null);
+        .from('vehicles_with_auctioneer')
+        .select('auctioneer_name')
+        .not('auctioneer_name', 'is', null);
 
-      if (auctioneersError) {
-        // Se falhar, tentar com leiloeiro (português)
-        const { data: leiloeiroData, error: leiloeiroError } = await supabase
-          .from('vehicles')
-          .select('leiloeiro')
-          .not('leiloeiro', 'is', null);
-        
-        if (!leiloeiroError && leiloeiroData) {
-          auctioneers = Array.from(
-            new Set(
-              leiloeiroData
-                ?.map(v => (v as any).leiloeiro)
-                .filter((leiloeiro): leiloeiro is string => Boolean(leiloeiro && leiloeiro.trim() !== '')) || []
-            )
-          ).sort();
-        }
-      } else if (auctioneersData) {
+      if (!auctioneersError && auctioneersData) {
         auctioneers = Array.from(
           new Set(
             auctioneersData
-              ?.map(v => (v as any).auctioneer)
+              ?.map(v => (v as any).auctioneer_name)
               .filter((auctioneer): auctioneer is string => Boolean(auctioneer && auctioneer.trim() !== '')) || []
           )
         ).sort();
@@ -340,31 +323,15 @@ export async function getFilterOptions() {
       console.warn('[getFilterOptions] Erro ao buscar leiloeiros:', err);
     }
 
-    // Buscar combustíveis (coluna: fuel_type ou fuel)
+    // Buscar combustíveis (coluna: fuel_type)
     let fuels: string[] = [];
     try {
       const { data: fuelData, error: fuelError } = await supabase
-        .from('vehicles')
+        .from('vehicles_with_auctioneer')
         .select('fuel_type')
         .not('fuel_type', 'is', null);
 
-      if (fuelError) {
-        // Tentar com fuel (sem _type)
-        const { data: fuelDataAlt, error: fuelErrorAlt } = await supabase
-          .from('vehicles')
-          .select('fuel')
-          .not('fuel', 'is', null);
-        
-        if (!fuelErrorAlt && fuelDataAlt) {
-          fuels = Array.from(
-            new Set(
-              fuelDataAlt
-                ?.map(v => (v as any).fuel)
-                .filter((fuel): fuel is string => Boolean(fuel && fuel.trim() !== '')) || []
-            )
-          ).sort();
-        }
-      } else if (fuelData) {
+      if (!fuelError && fuelData) {
         fuels = Array.from(
           new Set(
             fuelData
@@ -379,7 +346,7 @@ export async function getFilterOptions() {
 
     // Buscar transmissões (coluna: transmission)
     const { data: transmissionData, error: transmissionError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('transmission')
       .not('transmission', 'is', null);
 
@@ -397,7 +364,7 @@ export async function getFilterOptions() {
 
     // Buscar cores (coluna: color)
     const { data: colorsData, error: colorsError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('color')
       .not('color', 'is', null);
 
@@ -413,32 +380,15 @@ export async function getFilterOptions() {
       )
     ).sort();
 
-    // Buscar tipos de veículo (coluna: vehicle_type ou tipo_veiculo)
+    // Buscar tipos de veículo (coluna: vehicle_type)
     let vehicleTypes: string[] = [];
     try {
-      // Tentar primeiro com vehicle_type (inglês)
       const { data: vehicleTypesData, error: vehicleTypesError } = await supabase
-        .from('vehicles')
+        .from('vehicles_with_auctioneer')
         .select('vehicle_type')
         .not('vehicle_type', 'is', null);
 
-      if (vehicleTypesError) {
-        // Se falhar, tentar com tipo_veiculo (português)
-        const { data: tipoVeiculoData, error: tipoVeiculoError } = await supabase
-          .from('vehicles')
-          .select('tipo_veiculo')
-          .not('tipo_veiculo', 'is', null);
-        
-        if (!tipoVeiculoError && tipoVeiculoData) {
-          vehicleTypes = Array.from(
-            new Set(
-              tipoVeiculoData
-                ?.map(v => (v as any).tipo_veiculo)
-                .filter((type): type is string => Boolean(type && type.trim() !== '')) || []
-            )
-          ).sort();
-        }
-      } else if (vehicleTypesData) {
+      if (!vehicleTypesError && vehicleTypesData) {
         vehicleTypes = Array.from(
           new Set(
             vehicleTypesData

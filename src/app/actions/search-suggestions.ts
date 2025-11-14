@@ -19,23 +19,21 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
   const searchQuery = query.toLowerCase();
 
   try {
-    // Buscar marcas que correspondem
+    // Buscar marcas que correspondem (usando view que já filtra veículos ativos)
     const { data: brands, error: brandsError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('brand')
-      .ilike('brand', `%${searchQuery}%`)
-      .eq('is_active', true);
+      .ilike('brand', `%${searchQuery}%`);
 
     if (brandsError) {
       console.error('Erro ao buscar marcas:', brandsError);
     }
 
-    // Buscar modelos que correspondem
+    // Buscar modelos que correspondem (usando view que já filtra veículos ativos)
     const { data: models, error: modelsError } = await supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('brand, model')
-      .or(`brand.ilike.%${searchQuery}%,model.ilike.%${searchQuery}%`)
-      .eq('is_active', true);
+      .or(`brand.ilike.%${searchQuery}%,model.ilike.%${searchQuery}%`);
 
     if (modelsError) {
       console.error('Erro ao buscar modelos:', modelsError);

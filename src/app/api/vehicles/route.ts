@@ -6,17 +6,22 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     
-    // Parse filters from query params
+    // Parse filters from query params (support both old Portuguese and new English names for backward compatibility)
     const filters = {
-      estado: searchParams.get('estado'),
-      cidade: searchParams.get('cidade'),
-      tipo_veiculo: searchParams.get('tipo_veiculo'),
-      marca: searchParams.get('marca'),
-      ano_min: searchParams.get('ano_min'),
-      ano_max: searchParams.get('ano_max'),
-      preco_min: searchParams.get('preco_min'),
-      preco_max: searchParams.get('preco_max'),
-      search: searchParams.get('search'),
+      state: searchParams.get('state') || searchParams.get('estado'),
+      city: searchParams.get('city') || searchParams.get('cidade'),
+      vehicle_type: searchParams.get('vehicle_type') || searchParams.get('vehicleType') || searchParams.get('tipo_veiculo'),
+      brand: searchParams.get('brand') || searchParams.get('marca'),
+      model: searchParams.get('model'),
+      year_min: searchParams.get('year_min') || searchParams.get('minYear') || searchParams.get('ano_min'),
+      year_max: searchParams.get('year_max') || searchParams.get('maxYear') || searchParams.get('ano_max'),
+      price_min: searchParams.get('price_min') || searchParams.get('minPrice') || searchParams.get('preco_min'),
+      price_max: searchParams.get('price_max') || searchParams.get('maxPrice') || searchParams.get('preco_max'),
+      fuel_type: searchParams.get('fuel_type') || searchParams.get('fuelType'),
+      mileage: searchParams.get('mileage') || searchParams.get('maxMileage'),
+      color: searchParams.get('color'),
+      license_plate: searchParams.get('license_plate') || searchParams.get('licensePlateEnd'),
+      search: searchParams.get('search') || searchParams.get('q'),
       page: parseInt(searchParams.get('page') || '1'),
       limit: parseInt(searchParams.get('limit') || '20'),
     };
@@ -30,41 +35,56 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    // Get from database
+    // Get from database - using vehicles_with_auctioneer view
     const supabase = await createClient();
     
     let query = supabase
-      .from('vehicles')
+      .from('vehicles_with_auctioneer')
       .select('*', { count: 'exact' })
       .order('deal_score', { ascending: false });
 
-    // Apply filters
-    if (filters.estado) {
-      query = query.eq('estado', filters.estado);
+    // Apply filters - using English column names
+    if (filters.state) {
+      query = query.eq('state', filters.state);
     }
-    if (filters.cidade) {
-      query = query.eq('cidade', filters.cidade);
+    if (filters.city) {
+      query = query.eq('city', filters.city);
     }
-    if (filters.tipo_veiculo) {
-      query = query.eq('tipo_veiculo', filters.tipo_veiculo);
+    if (filters.vehicle_type) {
+      query = query.eq('vehicle_type', filters.vehicle_type);
     }
-    if (filters.marca) {
-      query = query.ilike('marca', `%${filters.marca}%`);
+    if (filters.brand) {
+      query = query.ilike('brand', `%${filters.brand}%`);
     }
-    if (filters.ano_min) {
-      query = query.gte('ano', parseInt(filters.ano_min));
+    if (filters.model) {
+      query = query.ilike('model', `%${filters.model}%`);
     }
-    if (filters.ano_max) {
-      query = query.lte('ano', parseInt(filters.ano_max));
+    if (filters.year_min) {
+      query = query.gte('year_manufacture', parseInt(filters.year_min));
     }
-    if (filters.preco_min) {
-      query = query.gte('preco_atual', parseFloat(filters.preco_min));
+    if (filters.year_max) {
+      query = query.lte('year_manufacture', parseInt(filters.year_max));
     }
-    if (filters.preco_max) {
-      query = query.lte('preco_atual', parseFloat(filters.preco_max));
+    if (filters.price_min) {
+      query = query.gte('current_bid', parseFloat(filters.price_min));
+    }
+    if (filters.price_max) {
+      query = query.lte('current_bid', parseFloat(filters.price_max));
+    }
+    if (filters.fuel_type) {
+      query = query.eq('fuel_type', filters.fuel_type);
+    }
+    if (filters.mileage) {
+      query = query.lte('mileage', parseInt(filters.mileage));
+    }
+    if (filters.color) {
+      query = query.ilike('color', `%${filters.color}%`);
+    }
+    if (filters.license_plate) {
+      query = query.ilike('license_plate', `%${filters.license_plate}`);
     }
     if (filters.search) {
-      query = query.or(`titulo.ilike.%${filters.search}%,modelo.ilike.%${filters.search}%`);
+      query = query.or(`title.ilike.%${filters.search}%,model.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`);
     }
 
     // Pagination
