@@ -179,7 +179,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
         break;
       case 'deal_score':
       default:
-        query = query.order('deal_score', { ascending: false, nullsLast: true });
+        query = query.order('deal_score', { ascending: false, nullsFirst: false });
         break;
     }
 
