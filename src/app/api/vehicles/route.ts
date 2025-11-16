@@ -83,6 +83,10 @@ export async function GET(request: NextRequest) {
     if (filters.license_plate) {
       query = query.ilike('license_plate', `%${filters.license_plate}`);
     }
+
+    // Apenas leilões futuros (evita itens vencidos)
+    query = query.gte('auction_date', new Date().toISOString());
+
     if (filters.search) {
       query = query.or(`title.ilike.%${filters.search}%,model.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`);
     }

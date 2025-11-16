@@ -94,6 +94,9 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       query = query.eq('city', filters.city);
     }
 
+    // Excluir leilões com data já passada: considerar apenas futuros
+    query = query.gte('auction_date', new Date().toISOString());
+
     if (filters.brand && filters.brand.length > 0) {
       query = query.in('brand', filters.brand);
     }
