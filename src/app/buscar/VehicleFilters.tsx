@@ -85,6 +85,8 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   
   // Controlar abertura do Select de marcas para não fechar ao atualizar a lista
   const [isBrandOpen, setIsBrandOpen] = useState(false);
+  // Buffer para aplicar atualizações de marcas somente quando o select estiver fechado
+  const [pendingBrandList, setPendingBrandList] = useState<string[] | null>(null);
   
   // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
@@ -134,18 +136,39 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       // Se apenas um tipo selecionado, buscar marcas filtradas por tipo
       getBrandsByVehicleType(selectedVehicleTypes[0])
         .then(brands => {
-          // Atualizar lista sem alterar estado de abertura do Select
-          setFilteredBrands(brands);
+          if (isBrandOpen) {
+            // Evitar re-render da lista enquanto o dropdown está aberto
+            setPendingBrandList(brands);
+          } else {
+            setFilteredBrands(brands);
+          }
         })
         .catch(error => {
           console.error('Erro ao buscar marcas por tipo:', error);
-          setFilteredBrands(filterOptions.brands);
+          if (isBrandOpen) {
+            setPendingBrandList(filterOptions.brands);
+          } else {
+            setFilteredBrands(filterOptions.brands);
+          }
         });
     } else {
       // Se nenhum ou múltiplos tipos, mostrar todas as marcas
-      setFilteredBrands(filterOptions.brands);
+      if (isBrandOpen) {
+        setPendingBrandList(filterOptions.brands);
+      } else {
+        setFilteredBrands(filterOptions.brands);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.vehicleType, filterOptions.brands]);
+
+  // Quando o select fechar, aplicar a lista pendente (se existir)
+  useEffect(() => {
+    if (!isBrandOpen && pendingBrandList) {
+      setFilteredBrands(pendingBrandList);
+      setPendingBrandList(null);
+    }
+  }, [isBrandOpen, pendingBrandList]);
 
   // Quando a marca muda, buscar modelos (considerando tipo de veículo)
   useEffect(() => {
