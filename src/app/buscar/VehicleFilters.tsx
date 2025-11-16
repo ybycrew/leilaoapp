@@ -83,6 +83,9 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [filteredBrands, setFilteredBrands] = useState<string[]>(filterOptions.brands);
   
+  // Controlar abertura do Select de marcas para não fechar ao atualizar a lista
+  const [isBrandOpen, setIsBrandOpen] = useState(false);
+  
   // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   
@@ -131,6 +134,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       // Se apenas um tipo selecionado, buscar marcas filtradas por tipo
       getBrandsByVehicleType(selectedVehicleTypes[0])
         .then(brands => {
+          // Atualizar lista sem alterar estado de abertura do Select
           setFilteredBrands(brands);
         })
         .catch(error => {
@@ -405,6 +409,8 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <div>
                     <Label htmlFor="brand">Marca</Label>
                     <Select
+                      open={isBrandOpen}
+                      onOpenChange={setIsBrandOpen}
                       value=""
                       onValueChange={(value) => {
                         if (value && !(filters.brand || []).includes(value)) {
