@@ -396,20 +396,22 @@ export async function getFilterOptions() {
       citiesByState[state].sort();
     });
 
-    // Buscar leiloeiros da view (coluna: auctioneer_name)
+    // Buscar leiloeiros ativos diretamente da tabela auctioneers (cobrir todos, independentes de haver veículos)
     let auctioneers: string[] = [];
     try {
       const { data: auctioneersData, error: auctioneersError } = await supabase
-        .from('vehicles_with_auctioneer')
-        .select('auctioneer_name')
-        .not('auctioneer_name', 'is', null);
+        .from('auctioneers')
+        .select('name, is_active')
+        .eq('is_active', true)
+        .order('name', { ascending: true })
+        .range(0, 5000);
 
       if (!auctioneersError && auctioneersData) {
         auctioneers = Array.from(
           new Set(
             auctioneersData
-              ?.map(v => (v as any).auctioneer_name)
-              .filter((auctioneer): auctioneer is string => Boolean(auctioneer && auctioneer.trim() !== '')) || []
+              ?.map(v => (v as any).name)
+              .filter((name): name is string => Boolean(name && name.trim() !== '')) || []
           )
         ).sort();
       }
