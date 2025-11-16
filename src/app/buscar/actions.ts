@@ -335,23 +335,31 @@ export async function getFilterOptions() {
       models = Array.from(modelSet);
     }
 
-    // Buscar estados (coluna: state) - com validação
-    const { data: statesData, error: statesError } = await supabase
-      .from('vehicles_with_auctioneer')
-      .select('state')
-      .not('state', 'is', null)
-      .order('state', { ascending: true })
-      .range(0, 50000);
+    // Buscar estados (coluna: state) - com validação e paginação em blocos para evitar truncamento
+    const stateRanges: Array<[number, number]> = [
+      [0, 9999],
+      [10000, 19999],
+      [20000, 29999],
+      [30000, 39999],
+      [40000, 49999],
+    ];
 
-    if (statesError) {
-      console.error('[getFilterOptions] Erro ao buscar estados:', statesError);
-    } else {
-      console.log(`[getFilterOptions] Estados encontrados (raw):`, statesData?.length || 0);
-    }
+    const statesChunks = await Promise.all(
+      stateRanges.map(async ([from, to]) => {
+        const { data } = await supabase
+          .from('vehicles_with_auctioneer')
+          .select('state')
+          .not('state', 'is', null)
+          .range(from, to);
+        return data || [];
+      })
+    );
+
+    const statesData = statesChunks.flat();
 
     // Filtrar apenas estados válidos
     const states = filterValidStates(
-      statesData?.map(v => v.state) || []
+      statesData.map((v: any) => v.state)
     );
 
     // Buscar cidades por estado (colunas: city, state) - com validação
