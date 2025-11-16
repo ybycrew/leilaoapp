@@ -83,6 +83,9 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [filteredBrands, setFilteredBrands] = useState<string[]>(filterOptions.brands);
   
+  // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  
   // Estados locais para campos numéricos (evitar perda de foco)
   const [localNumericValues, setLocalNumericValues] = useState({
     minYear: currentFilters?.minYear || '',
@@ -107,7 +110,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   // Sincronizar com currentFilters quando mudarem
   useEffect(() => {
-    if (currentFilters) {
+    if (currentFilters && !hasUserInteracted) {
       setFilters(currentFilters);
       setSelectedModels(currentFilters.model || []);
       setLocalNumericValues({
@@ -119,7 +122,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         minFipeDiscount: currentFilters.minFipeDiscount || '',
       });
     }
-  }, [currentFilters]);
+  }, [currentFilters, hasUserInteracted]);
 
   // Quando o tipo de veículo muda, filtrar marcas
   useEffect(() => {
@@ -169,10 +172,12 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   }, [filters.brand, filters.vehicleType]);
 
   const updateFilter = (key: string, value: any) => {
+    setHasUserInteracted(true);
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
   const toggleArrayFilter = (key: string, value: string) => {
+    setHasUserInteracted(true);
     setFilters(prev => {
       const current = (prev[key as keyof typeof prev] as string[]) || [];
       const newArray = current.includes(value)
@@ -228,12 +233,16 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         params.set('hasFinancing', filters.hasFinancing.toString());
       }
 
+      // Após aplicar, liberamos sincronização com server-driven filters
+      setHasUserInteracted(false);
+
       router.push(`/buscar?${params.toString()}`);
       setIsOpen(false);
     });
   };
 
   const clearFilters = () => {
+    setHasUserInteracted(true);
     setFilters({
       q: undefined,
       state: undefined,
