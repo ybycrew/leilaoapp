@@ -302,65 +302,64 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            <form onSubmit={(e) => e.preventDefault()}>
-              {/* Localização */}
-              <FilterSection title="Localização" icon={MapPin}>
-                <div className="space-y-3">
+            {/* Localização */}
+            <FilterSection title="Localização" icon={MapPin}>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="state">Estado</Label>
+                  <Select
+                    value={filters.state || ''}
+                    onValueChange={(value) => {
+                      updateFilter('state', value === 'all' ? undefined : value);
+                      updateFilter('city', undefined); // Reset cidade ao mudar estado
+                    }}
+                  >
+                    <SelectTrigger id="state">
+                      <SelectValue placeholder="Selecione o estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {!filterOptions || !filterOptions.states ? (
+                        <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
+                      ) : filterOptions.states.length > 0 ? (
+                        filterOptions.states.map(state => (
+                          <SelectItem key={state} value={state}>{state}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="empty" disabled>Nenhum estado disponível</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {filters.state && filterOptions.citiesByState[filters.state] && (
                   <div>
-                    <Label htmlFor="state">Estado</Label>
+                    <Label htmlFor="city">Cidade</Label>
                     <Select
-                      value={filters.state || ''}
-                      onValueChange={(value) => {
-                        updateFilter('state', value === 'all' ? undefined : value);
-                        updateFilter('city', undefined); // Reset cidade ao mudar estado
-                      }}
+                      value={filters.city || ''}
+                      onValueChange={(value) => updateFilter('city', value === 'all' ? undefined : value)}
                     >
-                      <SelectTrigger id="state">
-                        <SelectValue placeholder="Selecione o estado" />
+                      <SelectTrigger id="city">
+                        <SelectValue placeholder="Selecione a cidade" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        {!filterOptions || !filterOptions.states ? (
-                          <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
-                        ) : filterOptions.states.length > 0 ? (
-                          filterOptions.states.map(state => (
-                            <SelectItem key={state} value={state}>{state}</SelectItem>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {filterOptions.citiesByState[filters.state] && filterOptions.citiesByState[filters.state].length > 0 ? (
+                          filterOptions.citiesByState[filters.state].map(city => (
+                            <SelectItem key={city} value={city}>{city}</SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="empty" disabled>Nenhum estado disponível</SelectItem>
+                          <SelectItem value="loading" disabled>Nenhuma cidade disponível</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
-                  {filters.state && filterOptions.citiesByState[filters.state] && (
-                    <div>
-                      <Label htmlFor="city">Cidade</Label>
-                      <Select
-                        value={filters.city || ''}
-                        onValueChange={(value) => updateFilter('city', value === 'all' ? undefined : value)}
-                      >
-                        <SelectTrigger id="city">
-                          <SelectValue placeholder="Selecione a cidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todas</SelectItem>
-                          {filterOptions.citiesByState[filters.state] && filterOptions.citiesByState[filters.state].length > 0 ? (
-                            filterOptions.citiesByState[filters.state].map(city => (
-                              <SelectItem key={city} value={city}>{city}</SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="loading" disabled>Nenhuma cidade disponível</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              </FilterSection>
+                )}
+              </div>
+            </FilterSection>
 
-              {/* Veículo */}
-              <FilterSection title="Veículo" icon={Car}>
-                <div className="space-y-3">
+            {/* Veículo */}
+            <FilterSection title="Veículo" icon={Car}>
+              <div className="space-y-3">
                   <div>
                     <Label>Tipo de Veículo</Label>
                     <div className="space-y-2 mt-2">
@@ -515,7 +514,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </div>
                   </div>
                 </div>
-              </FilterSection>
+            </FilterSection>
 
               {/* Especificações - FASE 1 */}
               <FilterSection title="Especificações" icon={Settings}>
@@ -651,81 +650,81 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                 </div>
               </FilterSection>
 
-              {/* Preço */}
-              <FilterSection title="Preço" icon={TrendingUp}>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="minPrice">Mínimo</Label>
-                    <Input
-                      id="minPrice"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="R$ 0"
-                      value={localNumericValues.minPrice}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
-                      }}
-                      onBlur={() => {
-                        updateFilter('minPrice', localNumericValues.minPrice || undefined);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="maxPrice">Máximo</Label>
-                    <Input
-                      id="maxPrice"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="R$ 500.000"
-                      value={localNumericValues.maxPrice}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
-                      }}
-                      onBlur={() => {
-                        updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                      autoComplete="off"
-                    />
-                  </div>
+            {/* Preço */}
+            <FilterSection title="Preço" icon={TrendingUp}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="minPrice">Mínimo</Label>
+                  <Input
+                    id="minPrice"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="R$ 0"
+                    value={localNumericValues.minPrice}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('minPrice', localNumericValues.minPrice || undefined);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    autoComplete="off"
+                  />
                 </div>
-              </FilterSection>
-
-              {/* Quilometragem */}
-              <FilterSection title="Quilometragem" icon={Car}>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="maxMileage">KM Máximo</Label>
-                    <Input
-                      id="maxMileage"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="100.000"
-                      value={localNumericValues.maxMileage}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
-                      }}
-                      onBlur={() => {
-                        updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                      autoComplete="off"
-                    />
-                  </div>
+                <div>
+                  <Label htmlFor="maxPrice">Máximo</Label>
+                  <Input
+                    id="maxPrice"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="R$ 500.000"
+                    value={localNumericValues.maxPrice}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    autoComplete="off"
+                  />
                 </div>
-              </FilterSection>
+              </div>
+            </FilterSection>
 
-              {/* Oportunidade */}
-              <FilterSection title="Oportunidade" icon={TrendingUp}>
-                <div className="space-y-4">
+            {/* Quilometragem */}
+            <FilterSection title="Quilometragem" icon={Car}>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="maxMileage">KM Máximo</Label>
+                  <Input
+                    id="maxMileage"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="100.000"
+                    value={localNumericValues.maxMileage}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
+                    }}
+                    onBlur={() => {
+                      updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </FilterSection>
+
+            {/* Oportunidade */}
+            <FilterSection title="Oportunidade" icon={TrendingUp}>
+              <div className="space-y-4">
                   <div>
                     <Label>Deal Score Mínimo: {filters.minDealScore || 0}</Label>
                     <Slider
@@ -764,75 +763,74 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     />
                   </div>
                 </div>
-              </FilterSection>
+            </FilterSection>
 
-              {/* FASE 3: Cor */}
-              <FilterSection title="Cor" icon={Palette}>
-                <div>
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && !(filters.color || []).includes(value)) {
-                        updateFilter('color', [...(filters.color || []), value]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Adicionar cor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filterOptions.colors && filterOptions.colors.length > 0 ? (
-                        filterOptions.colors.slice(0, 20).map(color => (
-                          <SelectItem key={color} value={color}>{color}</SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {(filters.color || []).length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {filters.color?.map(color => (
-                        <Badge key={color} variant="secondary" className="flex items-center gap-1">
-                          {color}
-                          <X
-                            className="h-3 w-3 cursor-pointer"
-                            onClick={() => {
-                              updateFilter('color', filters.color?.filter(c => c !== color));
-                            }}
-                          />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </FilterSection>
-
-              {/* FASE 3: Placa Final */}
+            {/* FASE 3: Cor */}
+            <FilterSection title="Cor" icon={Palette}>
               <div>
-                <Label htmlFor="licensePlateEnd">Placa Final</Label>
-                <Input
-                  id="licensePlateEnd"
-                  type="text"
-                  placeholder="Ex: 0"
-                  maxLength={1}
-                  value={filters.licensePlateEnd || ''}
-                  onChange={(e) => updateFilter('licensePlateEnd', e.target.value.replace(/\D/g, ''))}
-                />
-              </div>
-
-              {/* Botões */}
-              <div className="flex gap-2 pt-4">
-                <Button
-                  onClick={applyFilters}
-                  disabled={isPending}
-                  className="flex-1"
-                  type="button"
+                <Select
+                  value=""
+                  onValueChange={(value) => {
+                    if (value && !(filters.color || []).includes(value)) {
+                      updateFilter('color', [...(filters.color || []), value]);
+                    }
+                  }}
                 >
-                  {isPending ? 'Aplicando...' : 'Aplicar Filtros'}
-                </Button>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Adicionar cor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filterOptions.colors && filterOptions.colors.length > 0 ? (
+                      filterOptions.colors.slice(0, 20).map(color => (
+                        <SelectItem key={color} value={color}>{color}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                {(filters.color || []).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {filters.color?.map(color => (
+                      <Badge key={color} variant="secondary" className="flex items-center gap-1">
+                        {color}
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                          onClick={() => {
+                            updateFilter('color', filters.color?.filter(c => c !== color));
+                          }}
+                        />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-            </form>
+            </FilterSection>
+
+            {/* FASE 3: Placa Final */}
+            <div>
+              <Label htmlFor="licensePlateEnd">Placa Final</Label>
+              <Input
+                id="licensePlateEnd"
+                type="text"
+                placeholder="Ex: 0"
+                maxLength={1}
+                value={filters.licensePlateEnd || ''}
+                onChange={(e) => updateFilter('licensePlateEnd', e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+
+            {/* Botões */}
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={applyFilters}
+                disabled={isPending}
+                className="flex-1"
+                type="button"
+              >
+                {isPending ? 'Aplicando...' : 'Aplicar Filtros'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
