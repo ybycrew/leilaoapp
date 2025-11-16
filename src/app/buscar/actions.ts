@@ -339,7 +339,9 @@ export async function getFilterOptions() {
     const { data: statesData, error: statesError } = await supabase
       .from('vehicles_with_auctioneer')
       .select('state')
-      .not('state', 'is', null);
+      .not('state', 'is', null)
+      .order('state', { ascending: true })
+      .range(0, 50000);
 
     if (statesError) {
       console.error('[getFilterOptions] Erro ao buscar estados:', statesError);
@@ -356,7 +358,10 @@ export async function getFilterOptions() {
     const { data: citiesData, error: citiesError } = await supabase
       .from('vehicles_with_auctioneer')
       .select('city, state')
-      .not('city', 'is', null);
+      .not('city', 'is', null)
+      .order('state', { ascending: true })
+      .order('city', { ascending: true })
+      .range(0, 50000);
 
     if (citiesError) {
       console.error('[getFilterOptions] Erro ao buscar cidades:', citiesError);
