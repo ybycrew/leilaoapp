@@ -93,6 +93,18 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     minFipeDiscount: currentFilters?.minFipeDiscount || '',
   });
 
+  // Manter foco ativo e caret após re-render
+  const [focusedInputId, setFocusedInputId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusedInputId) return;
+    const el = document.getElementById(focusedInputId) as HTMLInputElement | null;
+    if (el) {
+      const pos = el.value.length;
+      el.focus();
+      try { el.setSelectionRange(pos, pos); } catch {}
+    }
+  }, [localNumericValues, focusedInputId]);
+
   // Sincronizar com currentFilters quando mudarem
   useEffect(() => {
     if (currentFilters) {
@@ -482,13 +494,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                         placeholder="2020"
                         value={localNumericValues.minYear}
                         onChange={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           const value = e.target.value.replace(/\D/g, '');
                           setLocalNumericValues(prev => ({ ...prev, minYear: value }));
                         }}
+                        onFocus={() => setFocusedInputId('minYear')}
                         onBlur={() => {
                           updateFilter('minYear', localNumericValues.minYear || undefined);
+                          setFocusedInputId(null);
                         }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                         autoComplete="off"
                       />
                     </div>
@@ -502,13 +518,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                         placeholder="2024"
                         value={localNumericValues.maxYear}
                         onChange={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           const value = e.target.value.replace(/\D/g, '');
                           setLocalNumericValues(prev => ({ ...prev, maxYear: value }));
                         }}
+                        onFocus={() => setFocusedInputId('maxYear')}
                         onBlur={() => {
                           updateFilter('maxYear', localNumericValues.maxYear || undefined);
+                          setFocusedInputId(null);
                         }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                         autoComplete="off"
                       />
                     </div>
@@ -663,13 +683,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     placeholder="R$ 0"
                     value={localNumericValues.minPrice}
                     onChange={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       const value = e.target.value.replace(/\D/g, '');
                       setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
                     }}
+                    onFocus={() => setFocusedInputId('minPrice')}
                     onBlur={() => {
                       updateFilter('minPrice', localNumericValues.minPrice || undefined);
+                      setFocusedInputId(null);
                     }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                     autoComplete="off"
                   />
                 </div>
@@ -683,13 +707,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     placeholder="R$ 500.000"
                     value={localNumericValues.maxPrice}
                     onChange={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       const value = e.target.value.replace(/\D/g, '');
                       setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
                     }}
+                    onFocus={() => setFocusedInputId('maxPrice')}
                     onBlur={() => {
                       updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
+                      setFocusedInputId(null);
                     }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                     autoComplete="off"
                   />
                 </div>
@@ -709,13 +737,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     placeholder="100.000"
                     value={localNumericValues.maxMileage}
                     onChange={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       const value = e.target.value.replace(/\D/g, '');
                       setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
                     }}
+                    onFocus={() => setFocusedInputId('maxMileage')}
                     onBlur={() => {
                       updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
+                      setFocusedInputId(null);
                     }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                     autoComplete="off"
                   />
                 </div>
@@ -752,13 +784,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       placeholder="20"
                       value={localNumericValues.minFipeDiscount}
                       onChange={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         const value = e.target.value.replace(/\D/g, '');
                         setLocalNumericValues(prev => ({ ...prev, minFipeDiscount: value }));
                       }}
+                      onFocus={() => setFocusedInputId('minFipeDiscount')}
                       onBlur={() => {
                         updateFilter('minFipeDiscount', localNumericValues.minFipeDiscount || undefined);
+                        setFocusedInputId(null);
                       }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
                       autoComplete="off"
                     />
                   </div>
