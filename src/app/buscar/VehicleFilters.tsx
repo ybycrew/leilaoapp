@@ -271,6 +271,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
           className="w-full"
+          type="button"
         >
           <Filter className="h-4 w-4 mr-2" />
           Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
@@ -292,6 +293,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   size="sm"
                   onClick={clearFilters}
                   className="h-8 text-xs"
+                  type="button"
                 >
                   <X className="h-3 w-3 mr-1" />
                   Limpar
@@ -300,340 +302,503 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Localização */}
-            <FilterSection title="Localização" icon={MapPin}>
-              <div className="space-y-3">
-                <div>
-                  <Label htmlFor="state">Estado</Label>
-                  <Select
-                    value={filters.state || ''}
-                    onValueChange={(value) => {
-                      updateFilter('state', value === 'all' ? undefined : value);
-                      updateFilter('city', undefined); // Reset cidade ao mudar estado
-                    }}
-                  >
-                    <SelectTrigger id="state">
-                      <SelectValue placeholder="Selecione o estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {!filterOptions || !filterOptions.states ? (
-                        <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
-                      ) : filterOptions.states.length > 0 ? (
-                        filterOptions.states.map(state => (
-                          <SelectItem key={state} value={state}>{state}</SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="empty" disabled>Nenhum estado disponível</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {filters.state && filterOptions.citiesByState[filters.state] && (
+            <form onSubmit={(e) => e.preventDefault()}>
+              {/* Localização */}
+              <FilterSection title="Localização" icon={MapPin}>
+                <div className="space-y-3">
                   <div>
-                    <Label htmlFor="city">Cidade</Label>
+                    <Label htmlFor="state">Estado</Label>
                     <Select
-                      value={filters.city || ''}
-                      onValueChange={(value) => updateFilter('city', value === 'all' ? undefined : value)}
+                      value={filters.state || ''}
+                      onValueChange={(value) => {
+                        updateFilter('state', value === 'all' ? undefined : value);
+                        updateFilter('city', undefined); // Reset cidade ao mudar estado
+                      }}
                     >
-                      <SelectTrigger id="city">
-                        <SelectValue placeholder="Selecione a cidade" />
+                      <SelectTrigger id="state">
+                        <SelectValue placeholder="Selecione o estado" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        {filterOptions.citiesByState[filters.state] && filterOptions.citiesByState[filters.state].length > 0 ? (
-                          filterOptions.citiesByState[filters.state].map(city => (
-                            <SelectItem key={city} value={city}>{city}</SelectItem>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {!filterOptions || !filterOptions.states ? (
+                          <SelectItem value="loading" disabled>Carregando estados...</SelectItem>
+                        ) : filterOptions.states.length > 0 ? (
+                          filterOptions.states.map(state => (
+                            <SelectItem key={state} value={state}>{state}</SelectItem>
                           ))
                         ) : (
-                          <SelectItem value="loading" disabled>Nenhuma cidade disponível</SelectItem>
+                          <SelectItem value="empty" disabled>Nenhum estado disponível</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
-              </div>
-            </FilterSection>
-
-            {/* Veículo */}
-            <FilterSection title="Veículo" icon={Car}>
-              <div className="space-y-3">
-                <div>
-                  <Label>Tipo de Veículo</Label>
-                  <div className="space-y-2 mt-2">
-                    {VEHICLE_TYPES.map(type => (
-                      <div key={type} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`vehicle-${type}`}
-                          checked={(filters.vehicleType || []).includes(type)}
-                          onCheckedChange={() => toggleArrayFilter('vehicleType', type)}
-                        />
-                        <label
-                          htmlFor={`vehicle-${type}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize cursor-pointer"
-                        >
-                          {type}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="brand">Marca</Label>
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && !(filters.brand || []).includes(value)) {
-                        updateFilter('brand', [...(filters.brand || []), value]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger id="brand">
-                      <SelectValue placeholder="Adicionar marca" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredBrands.length > 0 ? (
-                        filteredBrands
-                          .filter(brand => !(filters.brand || []).includes(brand))
-                          .map(brand => (
-                            <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                          ))
-                      ) : (
-                        <SelectItem value="empty" disabled>
-                          {filters.vehicleType && filters.vehicleType.length > 0 
-                            ? "Nenhuma marca disponível para este tipo" 
-                            : "Nenhuma marca disponível"}
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {(filters.brand || []).length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {filters.brand?.map(brand => (
-                        <Badge key={brand} variant="secondary" className="flex items-center gap-1">
-                          {brand}
-                          <X
-                            className="h-3 w-3 cursor-pointer"
-                            onClick={() => {
-                              updateFilter('brand', filters.brand?.filter(b => b !== brand));
-                            }}
-                          />
-                        </Badge>
-                      ))}
+                  {filters.state && filterOptions.citiesByState[filters.state] && (
+                    <div>
+                      <Label htmlFor="city">Cidade</Label>
+                      <Select
+                        value={filters.city || ''}
+                        onValueChange={(value) => updateFilter('city', value === 'all' ? undefined : value)}
+                      >
+                        <SelectTrigger id="city">
+                          <SelectValue placeholder="Selecione a cidade" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas</SelectItem>
+                          {filterOptions.citiesByState[filters.state] && filterOptions.citiesByState[filters.state].length > 0 ? (
+                            filterOptions.citiesByState[filters.state].map(city => (
+                              <SelectItem key={city} value={city}>{city}</SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="loading" disabled>Nenhuma cidade disponível</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>
+              </FilterSection>
 
-                <div>
-                  <Label htmlFor="model">Modelo</Label>
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      if (value && !(filters.model || []).includes(value)) {
-                        updateFilter('model', [...(filters.model || []), value]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger id="model">
-                      <SelectValue placeholder={availableModels.length > 0 ? "Adicionar modelo" : "Selecione uma marca primeiro"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableModels.length > 0 ? (
-                        availableModels.map(model => (
-                          <SelectItem key={model} value={model}>{model}</SelectItem>
-                        ))
-                      ) : filterOptions.models && filterOptions.models.length > 0 ? (
-                        filterOptions.models.slice(0, 100).map(model => (
-                          <SelectItem key={model} value={model}>{model}</SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="loading" disabled>Nenhum modelo disponível</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {(filters.model || []).length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {filters.model?.map(model => (
-                        <Badge key={model} variant="secondary" className="flex items-center gap-1">
-                          {model}
-                          <X
-                            className="h-3 w-3 cursor-pointer"
-                            onClick={() => {
-                              updateFilter('model', filters.model?.filter(m => m !== model));
-                            }}
-                          />
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+              {/* Veículo */}
+              <FilterSection title="Veículo" icon={Car}>
+                <div className="space-y-3">
                   <div>
-                    <Label htmlFor="minYear">Ano Mínimo</Label>
-                    <Input
-                      id="minYear"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="2020"
-                      value={localNumericValues.minYear}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, minYear: value }));
-                      }}
-                      onBlur={() => {
-                        updateFilter('minYear', localNumericValues.minYear || undefined);
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="maxYear">Ano Máximo</Label>
-                    <Input
-                      id="maxYear"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="2024"
-                      value={localNumericValues.maxYear}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, maxYear: value }));
-                      }}
-                      onBlur={() => {
-                        updateFilter('maxYear', localNumericValues.maxYear || undefined);
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </FilterSection>
-
-            {/* Especificações - FASE 1 */}
-            <FilterSection title="Especificações" icon={Settings}>
-              <div className="space-y-3">
-                <div>
-                  <Label>Combustível</Label>
-                  <div className="space-y-2 mt-2">
-                    {filterOptions.fuels && filterOptions.fuels.length > 0 ? (
-                      filterOptions.fuels.slice(0, 10).map(fuel => (
-                        <div key={fuel} className="flex items-center space-x-2">
+                    <Label>Tipo de Veículo</Label>
+                    <div className="space-y-2 mt-2">
+                      {VEHICLE_TYPES.map(type => (
+                        <div key={type} className="flex items-center space-x-2">
                           <Checkbox
-                            id={`fuel-${fuel}`}
-                            checked={(filters.fuelType || []).includes(fuel)}
-                            onCheckedChange={() => toggleArrayFilter('fuelType', fuel)}
+                            id={`vehicle-${type}`}
+                            checked={(filters.vehicleType || []).includes(type)}
+                            onCheckedChange={() => toggleArrayFilter('vehicleType', type)}
                           />
                           <label
-                            htmlFor={`fuel-${fuel}`}
-                            className="text-sm font-medium leading-none cursor-pointer"
+                            htmlFor={`vehicle-${type}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize cursor-pointer"
                           >
-                            {fuel}
+                            {type}
                           </label>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Nenhum combustível disponível</p>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="brand">Marca</Label>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value && !(filters.brand || []).includes(value)) {
+                          updateFilter('brand', [...(filters.brand || []), value]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="brand">
+                        <SelectValue placeholder="Adicionar marca" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredBrands.length > 0 ? (
+                          filteredBrands
+                            .filter(brand => !(filters.brand || []).includes(brand))
+                            .map(brand => (
+                              <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                            ))
+                        ) : (
+                          <SelectItem value="empty" disabled>
+                            {filters.vehicleType && filters.vehicleType.length > 0 
+                              ? "Nenhuma marca disponível para este tipo" 
+                              : "Nenhuma marca disponível"}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {(filters.brand || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {filters.brand?.map(brand => (
+                          <Badge key={brand} variant="secondary" className="flex items-center gap-1">
+                            {brand}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={() => {
+                                updateFilter('brand', filters.brand?.filter(b => b !== brand));
+                              }}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="model">Modelo</Label>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value && !(filters.model || []).includes(value)) {
+                          updateFilter('model', [...(filters.model || []), value]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="model">
+                        <SelectValue placeholder={availableModels.length > 0 ? "Adicionar modelo" : "Selecione uma marca primeiro"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableModels.length > 0 ? (
+                          availableModels.map(model => (
+                            <SelectItem key={model} value={model}>{model}</SelectItem>
+                          ))
+                        ) : filterOptions.models && filterOptions.models.length > 0 ? (
+                          filterOptions.models.slice(0, 100).map(model => (
+                            <SelectItem key={model} value={model}>{model}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="loading" disabled>Nenhum modelo disponível</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {(filters.model || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {filters.model?.map(model => (
+                          <Badge key={model} variant="secondary" className="flex items-center gap-1">
+                            {model}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={() => {
+                                updateFilter('model', filters.model?.filter(m => m !== model));
+                              }}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="minYear">Ano Mínimo</Label>
+                      <Input
+                        id="minYear"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="2020"
+                        value={localNumericValues.minYear}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          setLocalNumericValues(prev => ({ ...prev, minYear: value }));
+                        }}
+                        onBlur={() => {
+                          updateFilter('minYear', localNumericValues.minYear || undefined);
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="maxYear">Ano Máximo</Label>
+                      <Input
+                        id="maxYear"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        placeholder="2024"
+                        value={localNumericValues.maxYear}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          setLocalNumericValues(prev => ({ ...prev, maxYear: value }));
+                        }}
+                        onBlur={() => {
+                          updateFilter('maxYear', localNumericValues.maxYear || undefined);
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </FilterSection>
+
+              {/* Especificações - FASE 1 */}
+              <FilterSection title="Especificações" icon={Settings}>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Combustível</Label>
+                    <div className="space-y-2 mt-2">
+                      {filterOptions.fuels && filterOptions.fuels.length > 0 ? (
+                        filterOptions.fuels.slice(0, 10).map(fuel => (
+                          <div key={fuel} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`fuel-${fuel}`}
+                              checked={(filters.fuelType || []).includes(fuel)}
+                              onCheckedChange={() => toggleArrayFilter('fuelType', fuel)}
+                            />
+                            <label
+                              htmlFor={`fuel-${fuel}`}
+                              className="text-sm font-medium leading-none cursor-pointer"
+                            >
+                              {fuel}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nenhum combustível disponível</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Câmbio</Label>
+                    <div className="space-y-2 mt-2">
+                      {filterOptions.transmissions && filterOptions.transmissions.length > 0 ? filterOptions.transmissions.slice(0, 5).map(transmission => (
+                        <div key={transmission} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`transmission-${transmission}`}
+                            checked={(filters.transmission || []).includes(transmission)}
+                            onCheckedChange={() => toggleArrayFilter('transmission', transmission)}
+                          />
+                          <label
+                            htmlFor={`transmission-${transmission}`}
+                            className="text-sm font-medium leading-none cursor-pointer"
+                          >
+                            {transmission}
+                          </label>
+                        </div>
+                      )) : (
+                        <p className="text-sm text-muted-foreground">Nenhum câmbio disponível</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </FilterSection>
+
+              {/* Leilão - FASE 1 */}
+              <FilterSection title="Leilão" icon={Gavel}>
+                <div className="space-y-3">
+                  <div>
+                    <Label>Tipo de Leilão</Label>
+                    <div className="space-y-2 mt-2">
+                      {AUCTION_TYPES.map(type => (
+                        <div key={type} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`auction-${type}`}
+                            checked={(filters.auctionType || []).includes(type)}
+                            onCheckedChange={() => toggleArrayFilter('auctionType', type)}
+                          />
+                          <label
+                            htmlFor={`auction-${type}`}
+                            className="text-sm font-medium leading-none cursor-pointer capitalize"
+                          >
+                            {type}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="financing"
+                      checked={filters.hasFinancing || false}
+                      onCheckedChange={(checked) => updateFilter('hasFinancing', checked)}
+                    />
+                    <label
+                      htmlFor="financing"
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      Aceita Financiamento
+                    </label>
+                  </div>
+
+                  {/* FASE 3: Leiloeiro */}
+                  <div>
+                    <Label htmlFor="auctioneer">Leiloeiro</Label>
+                    <Select
+                      value=""
+                      onValueChange={(value) => {
+                        if (value && !(filters.auctioneer || []).includes(value)) {
+                          updateFilter('auctioneer', [...(filters.auctioneer || []), value]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="auctioneer">
+                        <SelectValue placeholder="Adicionar leiloeiro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filterOptions.auctioneers && filterOptions.auctioneers.length > 0 ? (
+                          filterOptions.auctioneers.map(auctioneer => (
+                            <SelectItem key={auctioneer} value={auctioneer}>{auctioneer}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="loading" disabled>Carregando leiloeiros...</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {(filters.auctioneer || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {filters.auctioneer?.map(auctioneer => (
+                          <Badge key={auctioneer} variant="secondary" className="flex items-center gap-1">
+                            {auctioneer}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={() => {
+                                updateFilter('auctioneer', filters.auctioneer?.filter(a => a !== auctioneer));
+                              }}
+                            />
+                          </Badge>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
+              </FilterSection>
 
-                <div>
-                  <Label>Câmbio</Label>
-                  <div className="space-y-2 mt-2">
-                    {filterOptions.transmissions && filterOptions.transmissions.length > 0 ? filterOptions.transmissions.slice(0, 5).map(transmission => (
-                      <div key={transmission} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`transmission-${transmission}`}
-                          checked={(filters.transmission || []).includes(transmission)}
-                          onCheckedChange={() => toggleArrayFilter('transmission', transmission)}
-                        />
-                        <label
-                          htmlFor={`transmission-${transmission}`}
-                          className="text-sm font-medium leading-none cursor-pointer"
-                        >
-                          {transmission}
-                        </label>
-                      </div>
-                    )) : (
-                      <p className="text-sm text-muted-foreground">Nenhum câmbio disponível</p>
-                    )}
+              {/* Preço */}
+              <FilterSection title="Preço" icon={TrendingUp}>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="minPrice">Mínimo</Label>
+                    <Input
+                      id="minPrice"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="R$ 0"
+                      value={localNumericValues.minPrice}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('minPrice', localNumericValues.minPrice || undefined);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="maxPrice">Máximo</Label>
+                    <Input
+                      id="maxPrice"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="R$ 500.000"
+                      value={localNumericValues.maxPrice}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                      autoComplete="off"
+                    />
                   </div>
                 </div>
-              </div>
-            </FilterSection>
+              </FilterSection>
 
-            {/* Leilão - FASE 1 */}
-            <FilterSection title="Leilão" icon={Gavel}>
-              <div className="space-y-3">
-                <div>
-                  <Label>Tipo de Leilão</Label>
-                  <div className="space-y-2 mt-2">
-                    {AUCTION_TYPES.map(type => (
-                      <div key={type} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`auction-${type}`}
-                          checked={(filters.auctionType || []).includes(type)}
-                          onCheckedChange={() => toggleArrayFilter('auctionType', type)}
-                        />
-                        <label
-                          htmlFor={`auction-${type}`}
-                          className="text-sm font-medium leading-none cursor-pointer capitalize"
-                        >
-                          {type}
-                        </label>
-                      </div>
-                    ))}
+              {/* Quilometragem */}
+              <FilterSection title="Quilometragem" icon={Car}>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="maxMileage">KM Máximo</Label>
+                    <Input
+                      id="maxMileage"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="100.000"
+                      value={localNumericValues.maxMileage}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                      autoComplete="off"
+                    />
                   </div>
                 </div>
+              </FilterSection>
 
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="financing"
-                    checked={filters.hasFinancing || false}
-                    onCheckedChange={(checked) => updateFilter('hasFinancing', checked)}
-                  />
-                  <label
-                    htmlFor="financing"
-                    className="text-sm font-medium leading-none cursor-pointer"
-                  >
-                    Aceita Financiamento
-                  </label>
+              {/* Oportunidade */}
+              <FilterSection title="Oportunidade" icon={TrendingUp}>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Deal Score Mínimo: {filters.minDealScore || 0}</Label>
+                    <Slider
+                      value={[parseInt(filters.minDealScore || '0')]}
+                      onValueChange={([value]) => updateFilter('minDealScore', value.toString())}
+                      max={100}
+                      step={5}
+                      className="mt-2"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>0</span>
+                      <span>50</span>
+                      <span>70</span>
+                      <span>100</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="minFipeDiscount">Desconto FIPE Mínimo (%)</Label>
+                    <Input
+                      id="minFipeDiscount"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="20"
+                      value={localNumericValues.minFipeDiscount}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '');
+                        setLocalNumericValues(prev => ({ ...prev, minFipeDiscount: value }));
+                      }}
+                      onBlur={() => {
+                        updateFilter('minFipeDiscount', localNumericValues.minFipeDiscount || undefined);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
+              </FilterSection>
 
-                {/* FASE 3: Leiloeiro */}
+              {/* FASE 3: Cor */}
+              <FilterSection title="Cor" icon={Palette}>
                 <div>
-                  <Label htmlFor="auctioneer">Leiloeiro</Label>
                   <Select
                     value=""
                     onValueChange={(value) => {
-                      if (value && !(filters.auctioneer || []).includes(value)) {
-                        updateFilter('auctioneer', [...(filters.auctioneer || []), value]);
+                      if (value && !(filters.color || []).includes(value)) {
+                        updateFilter('color', [...(filters.color || []), value]);
                       }
                     }}
                   >
-                    <SelectTrigger id="auctioneer">
-                      <SelectValue placeholder="Adicionar leiloeiro" />
+                    <SelectTrigger>
+                      <SelectValue placeholder="Adicionar cor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {filterOptions.auctioneers && filterOptions.auctioneers.length > 0 ? (
-                        filterOptions.auctioneers.map(auctioneer => (
-                          <SelectItem key={auctioneer} value={auctioneer}>{auctioneer}</SelectItem>
+                      {filterOptions.colors && filterOptions.colors.length > 0 ? (
+                        filterOptions.colors.slice(0, 20).map(color => (
+                          <SelectItem key={color} value={color}>{color}</SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="loading" disabled>Carregando leiloeiros...</SelectItem>
+                        <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
-                  {(filters.auctioneer || []).length > 0 && (
+                  {(filters.color || []).length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {filters.auctioneer?.map(auctioneer => (
-                        <Badge key={auctioneer} variant="secondary" className="flex items-center gap-1">
-                          {auctioneer}
+                      {filters.color?.map(color => (
+                        <Badge key={color} variant="secondary" className="flex items-center gap-1">
+                          {color}
                           <X
                             className="h-3 w-3 cursor-pointer"
                             onClick={() => {
-                              updateFilter('auctioneer', filters.auctioneer?.filter(a => a !== auctioneer));
+                              updateFilter('color', filters.color?.filter(c => c !== color));
                             }}
                           />
                         </Badge>
@@ -641,181 +806,33 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </div>
                   )}
                 </div>
-              </div>
-            </FilterSection>
+              </FilterSection>
 
-            {/* Preço */}
-            <FilterSection title="Preço" icon={TrendingUp}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="minPrice">Mínimo</Label>
-                  <Input
-                    id="minPrice"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="R$ 0"
-                    value={localNumericValues.minPrice}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      setLocalNumericValues(prev => ({ ...prev, minPrice: value }));
-                    }}
-                    onBlur={() => {
-                      updateFilter('minPrice', localNumericValues.minPrice || undefined);
-                    }}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="maxPrice">Máximo</Label>
-                  <Input
-                    id="maxPrice"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="R$ 500.000"
-                    value={localNumericValues.maxPrice}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      setLocalNumericValues(prev => ({ ...prev, maxPrice: value }));
-                    }}
-                    onBlur={() => {
-                      updateFilter('maxPrice', localNumericValues.maxPrice || undefined);
-                    }}
-                  />
-                </div>
-              </div>
-            </FilterSection>
-
-            {/* FASE 2: Quilometragem */}
-            <FilterSection title="Quilometragem" icon={Car}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="maxMileage">KM Máximo</Label>
-                  <Input
-                    id="maxMileage"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="100.000"
-                    value={localNumericValues.maxMileage}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
-                    }}
-                    onBlur={() => {
-                      updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
-                    }}
-                  />
-                </div>
-              </div>
-            </FilterSection>
-
-            {/* FASE 2: Oportunidade */}
-            <FilterSection title="Oportunidade" icon={TrendingUp}>
-              <div className="space-y-4">
-                <div>
-                  <Label>Deal Score Mínimo: {filters.minDealScore || 0}</Label>
-                  <Slider
-                    value={[parseInt(filters.minDealScore || '0')]}
-                    onValueChange={([value]) => updateFilter('minDealScore', value.toString())}
-                    max={100}
-                    step={5}
-                    className="mt-2"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>0</span>
-                    <span>50</span>
-                    <span>70</span>
-                    <span>100</span>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="minFipeDiscount">Desconto FIPE Mínimo (%)</Label>
-                  <Input
-                    id="minFipeDiscount"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="20"
-                    value={localNumericValues.minFipeDiscount}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      setLocalNumericValues(prev => ({ ...prev, minFipeDiscount: value }));
-                    }}
-                    onBlur={() => {
-                      updateFilter('minFipeDiscount', localNumericValues.minFipeDiscount || undefined);
-                    }}
-                  />
-                </div>
-              </div>
-            </FilterSection>
-
-            {/* FASE 3: Cor */}
-            <FilterSection title="Cor" icon={Palette}>
+              {/* FASE 3: Placa Final */}
               <div>
-                <Select
-                  value=""
-                  onValueChange={(value) => {
-                    if (value && !(filters.color || []).includes(value)) {
-                      updateFilter('color', [...(filters.color || []), value]);
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Adicionar cor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filterOptions.colors && filterOptions.colors.length > 0 ? (
-                      filterOptions.colors.slice(0, 20).map(color => (
-                        <SelectItem key={color} value={color}>{color}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {(filters.color || []).length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {filters.color?.map(color => (
-                      <Badge key={color} variant="secondary" className="flex items-center gap-1">
-                        {color}
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                          onClick={() => {
-                            updateFilter('color', filters.color?.filter(c => c !== color));
-                          }}
-                        />
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <Label htmlFor="licensePlateEnd">Placa Final</Label>
+                <Input
+                  id="licensePlateEnd"
+                  type="text"
+                  placeholder="Ex: 0"
+                  maxLength={1}
+                  value={filters.licensePlateEnd || ''}
+                  onChange={(e) => updateFilter('licensePlateEnd', e.target.value.replace(/\D/g, ''))}
+                />
               </div>
-            </FilterSection>
 
-            {/* FASE 3: Placa Final */}
-            <div>
-              <Label htmlFor="licensePlateEnd">Placa Final</Label>
-              <Input
-                id="licensePlateEnd"
-                type="text"
-                placeholder="Ex: 0"
-                maxLength={1}
-                value={filters.licensePlateEnd || ''}
-                onChange={(e) => updateFilter('licensePlateEnd', e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-
-            {/* Botões */}
-            <div className="flex gap-2 pt-4">
-              <Button
-                onClick={applyFilters}
-                disabled={isPending}
-                className="flex-1"
-              >
-                {isPending ? 'Aplicando...' : 'Aplicar Filtros'}
-              </Button>
-            </div>
+              {/* Botões */}
+              <div className="flex gap-2 pt-4">
+                <Button
+                  onClick={applyFilters}
+                  disabled={isPending}
+                  className="flex-1"
+                  type="button"
+                >
+                  {isPending ? 'Aplicando...' : 'Aplicar Filtros'}
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </div>
