@@ -718,6 +718,11 @@ async function syncVehicleType(
             options.skipPrices = true;
             break;
           }
+          if (status === 429) {
+            console.warn('      ⚠️  Limite de requisições FIPE atingido (429). Desativando coleta de preços para este tipo e seguindo apenas com estrutura.');
+            options.skipPrices = true;
+            break;
+          }
           throw error;
         }
 

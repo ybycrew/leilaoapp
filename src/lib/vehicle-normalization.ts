@@ -589,3 +589,103 @@ export async function filterValidModels(
   return Array.from(validModels).sort();
 }
 
+/**
+ * Interface para resultado da busca de tipo na FIPE
+ */
+export interface FindVehicleTypeResult {
+  type: VehicleTypeSlug | null;
+  normalizedBrand: string | null;
+  normalizedModel: string | null;
+  isValid: boolean;
+}
+
+/**
+ * Mapeia tipo FIPE para valor da tabela vehicles
+ */
+export function mapFipeTypeToVehicleType(fipeType: VehicleTypeSlug): string {
+  switch (fipeType) {
+    case 'carros':
+      return 'carro';
+    case 'motos':
+      return 'moto';
+    case 'caminhoes':
+      return 'caminhao';
+    default:
+      return 'carro';
+  }
+}
+
+/**
+ * Busca marca+modelo na FIPE em ordem (carros → motos → caminhões)
+ * Retorna o primeiro tipo onde encontrar marca+modelo válidos
+ * Usa base_name para reconhecer modelos base (sem versão)
+ */
+export async function findVehicleTypeInFipe(
+  brand: string | null,
+  model: string | null
+): Promise<FindVehicleTypeResult> {
+  if (!brand || !model) {
+    return {
+      type: null,
+      normalizedBrand: null,
+      normalizedModel: null,
+      isValid: false,
+    };
+  }
+
+  const trimmedBrand = brand.trim();
+  const trimmedModel = model.trim();
+
+  if (!trimmedBrand || !trimmedModel) {
+    return {
+      type: null,
+      normalizedBrand: null,
+      normalizedModel: null,
+      isValid: false,
+    };
+  }
+
+  // Testa na ordem: carros → motos → caminhões
+  const typesToTest: VehicleTypeSlug[] = ['carros', 'motos', 'caminhoes'];
+
+  for (const fipeType of typesToTest) {
+    try {
+      // Valida e normaliza marca
+      const brandValidation = await validateAndNormalizeBrand(trimmedBrand, fipeType);
+      
+      if (!brandValidation.isValid || !brandValidation.brandRecord) {
+        continue; // Marca não encontrada neste tipo, tenta próximo
+      }
+
+      // Valida e normaliza modelo
+      const modelValidation = await validateAndNormalizeModel(
+        brandValidation.normalized || trimmedBrand,
+        trimmedModel,
+        fipeType
+      );
+
+      if (modelValidation.isValid && modelValidation.fipeModel) {
+        // Encontrou marca+modelo válidos neste tipo
+        // O modelo normalizado já vem em base_name_upper (sem versão)
+        return {
+          type: fipeType,
+          normalizedBrand: brandValidation.normalized,
+          normalizedModel: modelValidation.normalized,
+          isValid: true,
+        };
+      }
+    } catch (error) {
+      // Erro ao buscar neste tipo, continua para o próximo
+      continue;
+    }
+  }
+
+  // Não encontrou em nenhum tipo
+  return {
+    type: null,
+    normalizedBrand: null,
+    normalizedModel: null,
+    isValid: false,
+  };
+}
+

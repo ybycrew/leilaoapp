@@ -5,7 +5,7 @@ import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
-import { normalizeVehicleBrandModel } from '../vehicle-normalization';
+import { normalizeVehicleBrandModel, findVehicleTypeInFipe, mapFipeTypeToVehicleType } from '../vehicle-normalization';
 import { calculateDealScore } from './utils';
 import { getVehicleTableInfo, hasVehicleColumn } from './vehicle-table-info';
 import path from 'path';
@@ -304,42 +304,82 @@ async function processVehicle(
     return 'carro';
   };
 
-  // 7. Normalizar marca e modelo usando serviço de normalização
-  const vehicleType = normalizeVehicleType(vehicleData.vehicle_type);
-  const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
-                            vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
-
+  // 7. Validar e corrigir tipo de veículo usando FIPE como fonte de verdade
+  let vehicleType: 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' = normalizeVehicleType(vehicleData.vehicle_type);
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
   let normalizedVariant: string | null = null;
+  let typeCorrectedByFipe = false;
+
+  // Busca tipo correto na FIPE (apenas se tiver marca e modelo)
+  if (vehicleData.brand && vehicleData.model) {
+    try {
+      const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model);
+      
+      if (fipeResult.isValid && fipeResult.type) {
+        // Encontrou marca+modelo na FIPE, usa o tipo correto
+        const correctType = mapFipeTypeToVehicleType(fipeResult.type);
+        
+        if (correctType !== vehicleType && (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao')) {
+          vehicleType = correctType as 'carro' | 'moto' | 'caminhao';
+          typeCorrectedByFipe = true;
+          
+          // Usa marca/modelo normalizados da FIPE (já vêm normalizados e sem versão)
+          if (fipeResult.normalizedBrand) {
+            normalizedBrand = fipeResult.normalizedBrand;
+          }
+          if (fipeResult.normalizedModel) {
+            normalizedModel = fipeResult.normalizedModel;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE, usando tipo do scraping:`, error);
+    }
+  }
+
+  // 8. Normalizar marca e modelo usando serviço de normalização com o tipo correto (se necessário)
+  const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
+                            vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
   
   try {
+    // Sempre normaliza para garantir extração de variante e normalização completa
+    // Mas preserva marca/modelo já normalizados pela FIPE se vieram de lá
     const normalizationResult = await normalizeVehicleBrandModel(
-      vehicleData.brand,
-      vehicleData.model,
+      normalizedBrand || vehicleData.brand,
+      normalizedModel || vehicleData.model,
       vehicleTypeForFipe as 'carros' | 'motos' | 'caminhoes'
     );
     
-    normalizedBrand = normalizationResult.brand;
-    normalizedModel = normalizationResult.model;
+    // Atualiza marca/modelo apenas se não vieram da FIPE
+    // (a FIPE já retorna valores normalizados e corretos)
+    if (!typeCorrectedByFipe) {
+      normalizedBrand = normalizationResult.brand || normalizedBrand;
+      normalizedModel = normalizationResult.model || normalizedModel;
+    }
+    
+    // Sempre extrai variante (pode não vir da FIPE)
     normalizedVariant = normalizationResult.variant ?? null;
     
-    if (normalizationResult.wasSeparated || normalizationResult.wasNormalized) {
+    if (normalizationResult.wasSeparated || normalizationResult.wasNormalized || typeCorrectedByFipe) {
       console.log(`[${auctioneerName}] Marca/Modelo normalizado:`, {
-        original: { brand: vehicleData.brand, model: vehicleData.model },
-        normalized: { brand: normalizedBrand, model: normalizedModel },
+        original: { brand: vehicleData.brand, model: vehicleData.model, type: vehicleData.vehicle_type },
+        normalized: { brand: normalizedBrand, model: normalizedModel, type: vehicleType },
         wasSeparated: normalizationResult.wasSeparated,
-        wasNormalized: normalizationResult.wasNormalized
+        wasNormalized: normalizationResult.wasNormalized,
+        typeCorrectedByFipe: typeCorrectedByFipe
       });
     }
   } catch (error) {
     console.warn(`[${auctioneerName}] Erro ao normalizar marca/modelo, usando valores originais:`, error);
-    // Em caso de erro, usa os valores originais
-    normalizedBrand = vehicleData.brand || null;
-    normalizedModel = vehicleData.model || null;
+    // Em caso de erro, usa os valores originais se não vieram da FIPE
+    if (!typeCorrectedByFipe) {
+      normalizedBrand = vehicleData.brand || null;
+      normalizedModel = vehicleData.model || null;
+    }
   }
 
-  // 8. Preparar dados para salvar com suporte a múltiplos esquemas
+  // 9. Preparar dados para salvar com suporte a múltiplos esquemas
   const vehicleTableInfo = await getVehicleTableInfo(supabase);
   const vehicleToSave: Record<string, any> = {};
 
@@ -430,7 +470,7 @@ async function processVehicle(
   assign('external_id', vehicleData.external_id || null);
   assign('lot_number', vehicleData.lot_number || null);
 
-  // 8. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
+  // 10. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
   let existingVehicleId: string | null = null;
   let isUpdate = false;
   
@@ -486,7 +526,7 @@ async function processVehicle(
     }
   }
 
-  // 9. Inserir ou atualizar no banco
+  // 11. Inserir ou atualizar no banco
   let vehicleId: string;
   
   if (isUpdate && existingVehicleId) {
@@ -602,7 +642,7 @@ async function processVehicle(
     vehicleId = data.id;
   }
 
-  // 10. Salvar imagens em tabela separada (se existir a tabela vehicle_images)
+  // 12. Salvar imagens em tabela separada (se existir a tabela vehicle_images)
   try {
     if (vehicleData.images && vehicleData.images.length > 0) {
       await saveVehicleImages(vehicleId, vehicleData.images);
