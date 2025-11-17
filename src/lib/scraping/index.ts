@@ -311,6 +311,14 @@ async function processVehicle(
   let normalizedVariant: string | null = null;
   let typeCorrectedByFipe = false;
 
+  // Log tipo detectado pelo scraper
+  console.log(`[${auctioneerName}] Tipo detectado pelo scraper:`, {
+    original: vehicleData.vehicle_type,
+    normalized: vehicleType,
+    brand: vehicleData.brand,
+    model: vehicleData.model
+  });
+
   // Busca tipo correto na FIPE (apenas se tiver marca e modelo)
   if (vehicleData.brand && vehicleData.model) {
     try {
@@ -321,6 +329,13 @@ async function processVehicle(
         const correctType = mapFipeTypeToVehicleType(fipeResult.type);
         
         if (correctType !== vehicleType && (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao')) {
+          console.log(`[${auctioneerName}] Tipo corrigido pela FIPE:`, {
+            original: vehicleType,
+            correto: correctType,
+            brand: vehicleData.brand,
+            model: vehicleData.model
+          });
+          
           vehicleType = correctType as 'carro' | 'moto' | 'caminhao';
           typeCorrectedByFipe = true;
           
@@ -332,10 +347,24 @@ async function processVehicle(
             normalizedModel = fipeResult.normalizedModel;
           }
         }
+      } else {
+        console.log(`[${auctioneerName}] Tipo não encontrado na FIPE, usando tipo do scraping:`, {
+          type: vehicleType,
+          brand: vehicleData.brand,
+          model: vehicleData.model
+        });
       }
     } catch (error) {
       console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE, usando tipo do scraping:`, error);
     }
+  } else {
+    console.log(`[${auctioneerName}] Sem marca/modelo para validar na FIPE, usando tipo do scraping:`, vehicleType);
+  }
+  
+  // Garantir que sempre tenha um tipo válido
+  if (!vehicleType) {
+    vehicleType = 'carro';
+    console.warn(`[${auctioneerName}] Tipo não definido, usando padrão 'carro'`);
   }
 
   // 8. Normalizar marca e modelo usando serviço de normalização com o tipo correto (se necessário)
@@ -383,8 +412,9 @@ async function processVehicle(
   const vehicleTableInfo = await getVehicleTableInfo(supabase);
   const vehicleToSave: Record<string, any> = {};
 
-  const assign = (column: string, value: any) => {
-    if (!hasVehicleColumn(vehicleTableInfo, column)) {
+  const assign = (column: string, value: any, force: boolean = false) => {
+    // force=true garante que o campo sempre seja adicionado, mesmo se a coluna não for detectada
+    if (!force && !hasVehicleColumn(vehicleTableInfo, column)) {
       return;
     }
     if (value === undefined) {
@@ -420,7 +450,8 @@ async function processVehicle(
   assign('versao', normalizedVariant);
   assign('ano', vehicleData.year_model || vehicleData.year_manufacture || null);
   assign('ano_modelo', vehicleData.year_model || null);
-  assign('tipo_veiculo', vehicleType);
+  // tipo_veiculo é obrigatório no schema, sempre deve ser salvo mesmo se coluna não for detectada
+  assign('tipo_veiculo', vehicleType || 'carro', true);
   assign('cor', vehicleData.color || null);
   assign('combustivel', vehicleData.fuel_type || null);
   assign('cambio', vehicleData.transmission || null);
@@ -445,7 +476,10 @@ async function processVehicle(
   assign('version', normalizedVariant);
   assign('year_model', vehicleData.year_model || null);
   assign('year_manufacture', vehicleData.year_manufacture || vehicleData.year_model || null);
-  assign('vehicle_type', englishVehicleType);
+  // vehicle_type só é salvo se a coluna existir (não é obrigatória, pode não existir no schema antigo)
+  if (hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
+    assign('vehicle_type', englishVehicleType);
+  }
   assign('color', vehicleData.color || null);
   assign('fuel_type', vehicleData.fuel_type || null);
   assign('transmission', vehicleData.transmission || null);
@@ -532,6 +566,7 @@ async function processVehicle(
   if (isUpdate && existingVehicleId) {
     // Atualizar veículo existente
     let data, error;
+    let vehicleToSaveMinimal: Record<string, any> | null = null;
     
     const updateResult = await supabase
       .from('vehicles')
@@ -548,7 +583,8 @@ async function processVehicle(
       console.warn(`[${auctioneerName}] Tentando atualizar sem campos opcionais:`, error.message);
       
       // Remover campos que podem não existir
-      const vehicleToSaveMinimal = { ...vehicleToSave };
+      // IMPORTANTE: tipo_veiculo NUNCA deve ser removido (é obrigatório no schema)
+      vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
       delete vehicleToSaveMinimal.version;
@@ -559,11 +595,19 @@ async function processVehicle(
       delete vehicleToSaveMinimal.brand;
       delete vehicleToSaveMinimal.model;
       delete vehicleToSaveMinimal.auctioneer_id;
-      delete vehicleToSaveMinimal.vehicle_type;
+      // Só remove vehicle_type se a coluna não existir, tipo_veiculo sempre deve permanecer
+      if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
+        delete vehicleToSaveMinimal.vehicle_type;
+      }
       delete vehicleToSaveMinimal.auction_type;
       delete vehicleToSaveMinimal.fipe_discount_percentage;
       delete vehicleToSaveMinimal.images;
       delete vehicleToSaveMinimal.thumbnail_url;
+      
+      // Garantir que tipo_veiculo sempre esteja presente
+      if (!vehicleToSaveMinimal.tipo_veiculo) {
+        vehicleToSaveMinimal.tipo_veiculo = vehicleType || 'carro';
+      }
       
       const retryResult = await supabase
         .from('vehicles')
@@ -585,9 +629,18 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
+    const tipoSalvo = vehicleToSaveMinimal?.tipo_veiculo || vehicleToSave.tipo_veiculo;
+    console.log(`[${auctioneerName}] Veículo atualizado:`, {
+      id: vehicleId,
+      tipo_salvo: tipoSalvo,
+      marca: normalizedBrand,
+      modelo: normalizedModel,
+      tipo_correto_fipe: typeCorrectedByFipe
+    });
   } else {
     // Inserir novo veículo
     let data, error;
+    let vehicleToSaveMinimal: Record<string, any> | null = null;
     
     // Tentar inserir com todos os campos
     const insertResult = await supabase
@@ -604,7 +657,8 @@ async function processVehicle(
       console.warn(`[${auctioneerName}] Tentando inserir sem campos opcionais:`, error.message);
       
       // Remover campos que podem não existir
-      const vehicleToSaveMinimal = { ...vehicleToSave };
+      // IMPORTANTE: tipo_veiculo NUNCA deve ser removido (é obrigatório no schema)
+      vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
       delete vehicleToSaveMinimal.version;
@@ -615,11 +669,19 @@ async function processVehicle(
       delete vehicleToSaveMinimal.brand;
       delete vehicleToSaveMinimal.model;
       delete vehicleToSaveMinimal.auctioneer_id;
-      delete vehicleToSaveMinimal.vehicle_type;
+      // Só remove vehicle_type se a coluna não existir, tipo_veiculo sempre deve permanecer
+      if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
+        delete vehicleToSaveMinimal.vehicle_type;
+      }
       delete vehicleToSaveMinimal.auction_type;
       delete vehicleToSaveMinimal.fipe_discount_percentage;
       delete vehicleToSaveMinimal.images;
       delete vehicleToSaveMinimal.thumbnail_url;
+      
+      // Garantir que tipo_veiculo sempre esteja presente
+      if (!vehicleToSaveMinimal.tipo_veiculo) {
+        vehicleToSaveMinimal.tipo_veiculo = vehicleType || 'carro';
+      }
       
       const retryResult = await supabase
         .from('vehicles')
@@ -640,6 +702,14 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
+    const tipoSalvo = vehicleToSaveMinimal?.tipo_veiculo || vehicleToSave.tipo_veiculo;
+    console.log(`[${auctioneerName}] Veículo inserido:`, {
+      id: vehicleId,
+      tipo_salvo: tipoSalvo,
+      marca: normalizedBrand,
+      modelo: normalizedModel,
+      tipo_correto_fipe: typeCorrectedByFipe
+    });
   }
 
   // 12. Salvar imagens em tabela separada (se existir a tabela vehicle_images)

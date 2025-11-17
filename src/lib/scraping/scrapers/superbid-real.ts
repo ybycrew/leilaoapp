@@ -419,6 +419,7 @@ export class SuperbidRealScraper extends BaseScraper {
         images.push(rawVehicle.imageUrl);
       }
 
+      const detectedType = this.detectVehicleType(cleanTitle);
       const vehicle: VehicleData = {
         external_id: externalId,
         title: cleanTitle,
@@ -426,7 +427,7 @@ export class SuperbidRealScraper extends BaseScraper {
         model: model || 'Desconhecido',
         year_manufacture: year || undefined,
         year_model: year || undefined,
-        vehicle_type: this.detectVehicleType(cleanTitle),
+        vehicle_type: detectedType,
         color: color || undefined,
         mileage: rawVehicle.mileage || undefined,
         state: 'SP',
@@ -690,19 +691,26 @@ export class SuperbidRealScraper extends BaseScraper {
   }
 
   private detectVehicleType(title: string): string {
-    const titleLower = title.toLowerCase();
-    
-    if (titleLower.includes('moto') || titleLower.includes('motocicleta') || titleLower.includes('bike')) {
-      return 'Moto';
-    } else if (titleLower.includes('caminhão') || titleLower.includes('caminhao') || titleLower.includes('truck')) {
-      return 'Caminhão';
-    } else if (titleLower.includes('ônibus') || titleLower.includes('onibus') || titleLower.includes('bus')) {
-      return 'Ônibus';
-    } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgao')) {
-      return 'Van';
-    } else {
+    if (!title || typeof title !== 'string') {
+      console.warn('[Superbid] detectVehicleType: título inválido ou vazio');
       return 'Carro';
     }
+    
+    const titleLower = title.toLowerCase();
+    let detectedType = 'Carro';
+    
+    if (titleLower.includes('moto') || titleLower.includes('motocicleta') || titleLower.includes('bike')) {
+      detectedType = 'Moto';
+    } else if (titleLower.includes('caminhão') || titleLower.includes('caminhao') || titleLower.includes('truck')) {
+      detectedType = 'Caminhão';
+    } else if (titleLower.includes('ônibus') || titleLower.includes('onibus') || titleLower.includes('bus')) {
+      detectedType = 'Ônibus';
+    } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgao')) {
+      detectedType = 'Van';
+    }
+    
+    console.log(`[Superbid] Tipo detectado para "${title}": ${detectedType}`);
+    return detectedType;
   }
 
   private isRelevantVehicle(vehicle: VehicleData): boolean {
