@@ -616,15 +616,173 @@ export function mapFipeTypeToVehicleType(fipeType: VehicleTypeSlug): string {
 }
 
 /**
- * Busca marca+modelo na FIPE em ordem (carros → motos → caminhões)
- * Retorna o primeiro tipo onde encontrar marca+modelo válidos
+ * Mapeia vehicle_type_id para VehicleTypeSlug
+ * IDs conhecidos:
+ * - 924b2730-9671-48fb-9e20-a007cc9dd8d9 - carros
+ * - ba5c8969-a7df-4fbe-829e-12eac17b20cd - motos
+ * - ad355400-7d4b-49e5-913d-d6575cf93705 - caminhoes
+ */
+const VEHICLE_TYPE_ID_MAP: Record<string, VehicleTypeSlug> = {
+  '924b2730-9671-48fb-9e20-a007cc9dd8d9': 'carros',
+  'ba5c8969-a7df-4fbe-829e-12eac17b20cd': 'motos',
+  'ad355400-7d4b-49e5-913d-d6575cf93705': 'caminhoes',
+};
+
+async function mapVehicleTypeIdToSlug(vehicleTypeId: string): Promise<VehicleTypeSlug | null> {
+  // Primeiro tenta usar o mapa de IDs conhecidos
+  const mapped = VEHICLE_TYPE_ID_MAP[vehicleTypeId];
+  if (mapped) {
+    return mapped;
+  }
+
+  // Se não encontrar no mapa, busca na tabela fipe_vehicle_types
+  try {
+    const client = getSupabaseClient();
+    const { data, error } = await client
+      .from('fipe_vehicle_types')
+      .select('slug')
+      .eq('id', vehicleTypeId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.slug as VehicleTypeSlug;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Busca todas as marcas com o nome fornecido em TODOS os tipos de veículo
+ * Retorna array de BrandRow encontradas (pode haver múltiplas se a marca existe em vários tipos)
+ */
+async function findAllBrandsByName(brandName: string): Promise<BrandRow[]> {
+  if (!brandName || typeof brandName !== 'string') {
+    return [];
+  }
+
+  const trimmedBrand = brandName.trim();
+  if (!trimmedBrand) {
+    return [];
+  }
+
+  const searchKey = buildSearchKey(trimmedBrand);
+  if (!searchKey) {
+    return [];
+  }
+
+  const client = getSupabaseClient();
+
+  // Buscar todas as marcas com esse nome em TODOS os tipos (sem filtrar por vehicle_type_id)
+  // Primeiro tenta busca exata por search_name
+  let { data, error } = await client
+    .from('fipe_brands')
+    .select('id, name, name_upper, search_name, fipe_code, vehicle_type_id')
+    .eq('search_name', searchKey);
+
+  // Se não encontrou, tenta busca por name_upper
+  if ((!data || data.length === 0) && !error) {
+    const upperBrand = toAsciiUpper(trimmedBrand);
+    const { data: upperData, error: upperError } = await client
+      .from('fipe_brands')
+      .select('id, name, name_upper, search_name, fipe_code, vehicle_type_id')
+      .eq('name_upper', upperBrand);
+    
+    if (!upperError && upperData) {
+      data = upperData;
+      error = upperError;
+    }
+  }
+
+  // Se ainda não encontrou, tenta busca parcial por name_upper
+  if ((!data || data.length === 0) && !error) {
+    const upperBrand = toAsciiUpper(trimmedBrand);
+    const { data: partialData, error: partialError } = await client
+      .from('fipe_brands')
+      .select('id, name, name_upper, search_name, fipe_code, vehicle_type_id')
+      .ilike('name_upper', `%${upperBrand}%`);
+    
+    if (!partialError && partialData) {
+      data = partialData;
+      error = partialError;
+    }
+  }
+
+  if (error || !data || data.length === 0) {
+    return [];
+  }
+
+  // Filtrar marcas que realmente correspondem ao nome buscado
+  const upperBrand = toAsciiUpper(trimmedBrand);
+  const matchingBrands: BrandRow[] = [];
+
+  for (const row of data) {
+    // Busca exata por search_name
+    if (row.search_name === searchKey) {
+      matchingBrands.push(row);
+      continue;
+    }
+
+    // Busca exata por name_upper
+    if (row.name_upper === upperBrand) {
+      matchingBrands.push(row);
+      continue;
+    }
+
+    // Busca parcial - search_name contém ou é contido pelo searchKey
+    if (searchKey.length >= 3) {
+      if (row.search_name.includes(searchKey) || searchKey.includes(row.search_name)) {
+        matchingBrands.push(row);
+        continue;
+      }
+    }
+
+    // Busca parcial - name_upper contém o nome buscado
+    if (upperBrand.length >= 3 && row.name_upper.includes(upperBrand)) {
+      matchingBrands.push(row);
+      continue;
+    }
+  }
+
+  // Remover duplicatas (mesma marca em tipos diferentes)
+  const uniqueBrands = new Map<string, BrandRow>();
+  for (const brand of matchingBrands) {
+    const key = `${brand.search_name}-${brand.vehicle_type_id}`;
+    if (!uniqueBrands.has(key)) {
+      uniqueBrands.set(key, brand);
+    }
+  }
+
+  let finalBrands = Array.from(uniqueBrands.values());
+
+  // Se não encontrou nada exato, tenta com alias
+  const aliasTarget = resolveBrandAlias(searchKey);
+  if (aliasTarget && finalBrands.length === 0) {
+    const { data: aliasData, error: aliasError } = await client
+      .from('fipe_brands')
+      .select('id, name, name_upper, search_name, fipe_code, vehicle_type_id')
+      .ilike('search_name', `%${aliasTarget}%`);
+
+    if (!aliasError && aliasData) {
+      finalBrands = aliasData;
+    }
+  }
+
+  return finalBrands;
+}
+
+/**
+ * Busca tipo de veículo usando vehicle_type_id da tabela fipe_brands
+ * Nova estratégia: busca marca em TODOS os tipos, resolve casos ambíguos (ex: Honda) usando modelo
  * Usa base_name para reconhecer modelos base (sem versão)
  */
 export async function findVehicleTypeInFipe(
   brand: string | null,
   model: string | null
 ): Promise<FindVehicleTypeResult> {
-  if (!brand || !model) {
+  if (!brand) {
     return {
       type: null,
       normalizedBrand: null,
@@ -634,9 +792,7 @@ export async function findVehicleTypeInFipe(
   }
 
   const trimmedBrand = brand.trim();
-  const trimmedModel = model.trim();
-
-  if (!trimmedBrand || !trimmedModel) {
+  if (!trimmedBrand) {
     return {
       type: null,
       normalizedBrand: null,
@@ -645,47 +801,148 @@ export async function findVehicleTypeInFipe(
     };
   }
 
-  // Testa na ordem: carros → motos → caminhões
-  const typesToTest: VehicleTypeSlug[] = ['carros', 'motos', 'caminhoes'];
+  try {
+    // 1. Buscar TODAS as marcas com esse nome em TODOS os tipos (sem filtrar por vehicle_type_id)
+    const allBrands = await findAllBrandsByName(trimmedBrand);
 
-  for (const fipeType of typesToTest) {
-    try {
-      // Valida e normaliza marca
-      const brandValidation = await validateAndNormalizeBrand(trimmedBrand, fipeType);
-      
-      if (!brandValidation.isValid || !brandValidation.brandRecord) {
-        continue; // Marca não encontrada neste tipo, tenta próximo
-      }
+    if (allBrands.length === 0) {
+      // Marca não encontrada em nenhum tipo
+      return {
+        type: null,
+        normalizedBrand: null,
+        normalizedModel: null,
+        isValid: false,
+      };
+    }
 
-      // Valida e normaliza modelo
-      const modelValidation = await validateAndNormalizeModel(
-        brandValidation.normalized || trimmedBrand,
-        trimmedModel,
-        fipeType
-      );
+    // 2. Se encontrou apenas uma marca, usar o vehicle_type_id dessa marca
+    if (allBrands.length === 1) {
+      const brandRecord = allBrands[0];
+      const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
 
-      if (modelValidation.isValid && modelValidation.fipeModel) {
-        // Encontrou marca+modelo válidos neste tipo
-        // O modelo normalizado já vem em base_name_upper (sem versão)
+      if (!vehicleTypeSlug) {
         return {
-          type: fipeType,
-          normalizedBrand: brandValidation.normalized,
-          normalizedModel: modelValidation.normalized,
-          isValid: true,
+          type: null,
+          normalizedBrand: brandRecord.name_upper,
+          normalizedModel: null,
+          isValid: false,
         };
       }
-    } catch (error) {
-      // Erro ao buscar neste tipo, continua para o próximo
-      continue;
-    }
-  }
 
-  // Não encontrou em nenhum tipo
-  return {
-    type: null,
-    normalizedBrand: null,
-    normalizedModel: null,
-    isValid: false,
-  };
+      // Se tem modelo, validar e normalizar modelo para retornar normalizado
+      let normalizedModel: string | null = null;
+      if (model) {
+        const trimmedModel = model.trim();
+        if (trimmedModel) {
+          try {
+            const modelValidation = await validateAndNormalizeModel(
+              brandRecord.name_upper,
+              trimmedModel,
+              vehicleTypeSlug
+            );
+
+            if (modelValidation.isValid && modelValidation.normalized) {
+              normalizedModel = modelValidation.normalized;
+            } else {
+              // Mesmo sem validar modelo, marca é válida
+              normalizedModel = toAsciiUpper(trimmedModel);
+            }
+          } catch (error) {
+            // Erro ao validar modelo, mas marca é válida
+            normalizedModel = toAsciiUpper(trimmedModel);
+          }
+        }
+      }
+
+      return {
+        type: vehicleTypeSlug,
+        normalizedBrand: brandRecord.name_upper,
+        normalizedModel,
+        isValid: true,
+      };
+    }
+
+    // 3. Se encontrou múltiplas marcas (ex: Honda em carros e motos), usar modelo para determinar
+    if (!model) {
+      // Sem modelo, não pode determinar qual tipo usar
+      // Retorna a primeira marca encontrada como fallback
+      const brandRecord = allBrands[0];
+      const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+
+      return {
+        type: vehicleTypeSlug,
+        normalizedBrand: brandRecord.name_upper,
+        normalizedModel: null,
+        isValid: vehicleTypeSlug !== null,
+      };
+    }
+
+    const trimmedModel = model.trim();
+    if (!trimmedModel) {
+      // Modelo vazio, usa primeira marca como fallback
+      const brandRecord = allBrands[0];
+      const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+
+      return {
+        type: vehicleTypeSlug,
+        normalizedBrand: brandRecord.name_upper,
+        normalizedModel: null,
+        isValid: vehicleTypeSlug !== null,
+      };
+    }
+
+    // 4. Buscar modelo em cada marca encontrada para determinar qual é o correto
+    const modelBase = extractModelBase(trimmedModel);
+    const modelSearchKeys = [
+      modelBase.baseSearchName,
+      buildSearchKey(trimmedModel),
+      buildSearchKey(modelBase.baseNameUpper)
+    ];
+
+    for (const brandRecord of allBrands) {
+      try {
+        // Buscar modelo nesta marca
+        const modelRecord = await findModelRecord(brandRecord.id, modelSearchKeys);
+
+        if (modelRecord) {
+          // Encontrou modelo nesta marca, usa este tipo
+          const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+
+          if (vehicleTypeSlug) {
+            return {
+              type: vehicleTypeSlug,
+              normalizedBrand: brandRecord.name_upper,
+              normalizedModel: modelRecord.base_name_upper,
+              isValid: true,
+            };
+          }
+        }
+      } catch (error) {
+        // Erro ao buscar modelo nesta marca, continua para próxima
+        continue;
+      }
+    }
+
+    // 5. Modelo não encontrado em nenhuma das marcas
+    // Usa primeira marca como fallback
+    const brandRecord = allBrands[0];
+    const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+
+    return {
+      type: vehicleTypeSlug,
+      normalizedBrand: brandRecord.name_upper,
+      normalizedModel: modelBase.baseNameUpper || toAsciiUpper(trimmedModel),
+      isValid: vehicleTypeSlug !== null,
+    };
+
+  } catch (error) {
+    // Erro na busca
+    return {
+      type: null,
+      normalizedBrand: null,
+      normalizedModel: null,
+      isValid: false,
+    };
+  }
 }
 

@@ -4,8 +4,9 @@
  * Uso:
  *   npx tsx src/scripts/fix-vehicle-types-fipe.ts
  * 
- * Este script busca marca+modelo na FIPE em ordem (carros → motos → caminhões)
- * e atualiza o tipo_veiculo quando encontrar o veículo na FIPE.
+ * Nova estratégia: busca marca em TODOS os tipos usando vehicle_type_id da tabela fipe_brands.
+ * Resolve casos ambíguos (ex: Honda) usando modelo quando disponível.
+ * Atualiza tipo_veiculo baseado no vehicle_type_id da marca encontrada na FIPE.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -198,13 +199,14 @@ async function fixVehicleTypesWithFipe() {
         try {
           const { originalBrand, originalModel } = resolveCurrentBrandModel(vehicle, vehicleTableInfo);
 
-          if (!originalBrand || !originalModel) {
-            // Sem marca ou modelo, pula
+          if (!originalBrand) {
+            // Sem marca, pula (modelo é opcional na nova estratégia)
             continue;
           }
 
-          // Busca tipo na FIPE
-          const fipeResult = await findVehicleTypeInFipe(originalBrand, originalModel);
+          // Busca tipo na FIPE usando vehicle_type_id da tabela fipe_brands
+          // Nova estratégia: busca marca em TODOS os tipos, resolve casos ambíguos usando modelo
+          const fipeResult = await findVehicleTypeInFipe(originalBrand, originalModel || null);
 
           if (!fipeResult.isValid || !fipeResult.type) {
             // Não encontrado na FIPE

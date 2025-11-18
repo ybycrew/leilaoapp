@@ -319,25 +319,30 @@ async function processVehicle(
     model: vehicleData.model
   });
 
-  // Busca tipo correto na FIPE (apenas se tiver marca e modelo)
-  if (vehicleData.brand && vehicleData.model) {
+  // Busca tipo correto na FIPE usando vehicle_type_id da tabela fipe_brands
+  // Nova estratégia: busca marca em TODOS os tipos, resolve casos ambíguos (ex: Honda) usando modelo
+  if (vehicleData.brand) {
     try {
-      const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model);
+      const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model || null);
       
       if (fipeResult.isValid && fipeResult.type) {
-        // Encontrou marca+modelo na FIPE, usa o tipo correto
+        // Encontrou marca na FIPE, usa o tipo correto baseado em vehicle_type_id
         const correctType = mapFipeTypeToVehicleType(fipeResult.type);
         
-        if (correctType !== vehicleType && (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao')) {
-          console.log(`[${auctioneerName}] Tipo corrigido pela FIPE:`, {
-            original: vehicleType,
-            correto: correctType,
-            brand: vehicleData.brand,
-            model: vehicleData.model
-          });
+        // Sempre atualiza o tipo se encontrou na FIPE (mesmo se igual ao do scraping)
+        // Isso garante que o tipo está correto baseado na FIPE
+        if (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao') {
+          if (correctType !== vehicleType) {
+            console.log(`[${auctioneerName}] Tipo corrigido pela FIPE (vehicle_type_id):`, {
+              original: vehicleType,
+              correto: correctType,
+              brand: vehicleData.brand,
+              model: vehicleData.model || 'sem modelo'
+            });
+            typeCorrectedByFipe = true;
+          }
           
           vehicleType = correctType as 'carro' | 'moto' | 'caminhao';
-          typeCorrectedByFipe = true;
           
           // Usa marca/modelo normalizados da FIPE (já vêm normalizados e sem versão)
           if (fipeResult.normalizedBrand) {
@@ -348,17 +353,17 @@ async function processVehicle(
           }
         }
       } else {
-        console.log(`[${auctioneerName}] Tipo não encontrado na FIPE, usando tipo do scraping:`, {
+        console.log(`[${auctioneerName}] Tipo não encontrado na FIPE (vehicle_type_id), usando tipo do scraping:`, {
           type: vehicleType,
           brand: vehicleData.brand,
-          model: vehicleData.model
+          model: vehicleData.model || 'sem modelo'
         });
       }
     } catch (error) {
-      console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE, usando tipo do scraping:`, error);
+      console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE (vehicle_type_id), usando tipo do scraping:`, error);
     }
   } else {
-    console.log(`[${auctioneerName}] Sem marca/modelo para validar na FIPE, usando tipo do scraping:`, vehicleType);
+    console.log(`[${auctioneerName}] Sem marca para validar na FIPE, usando tipo do scraping:`, vehicleType);
   }
   
   // Garantir que sempre tenha um tipo válido
