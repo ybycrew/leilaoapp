@@ -11,7 +11,10 @@ import { extractBrandAndModel } from '../brands';
  * - Extração completa de dados (imagens, preços, datas, km)
  */
 export class SuperbidRealScraper extends BaseScraper {
-  private readonly baseUrl = 'https://www.superbid.net/categorias/carros-motos';
+  private readonly baseUrls = [
+    'https://www.superbid.net/categorias/carros-motos',
+    'https://www.superbid.net/categorias/caminhoes-onibus'
+  ];
   private readonly pageSize = 60;
 
   constructor() {
@@ -27,14 +30,54 @@ export class SuperbidRealScraper extends BaseScraper {
 
     try {
       console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid...`);
-      console.log(`[${this.auctioneerName}] URL base: ${this.baseUrl}`);
+      console.log(`[${this.auctioneerName}] Categorias a processar: ${this.baseUrls.length}`);
+
+      // Processar cada categoria
+      for (let i = 0; i < this.baseUrls.length; i++) {
+        const baseUrl = this.baseUrls[i];
+        const categoryName = baseUrl.includes('carros-motos') ? 'Carros e Motos' : 
+                           baseUrl.includes('caminhoes-onibus') ? 'Caminhões e Ônibus' : 
+                           'Categoria';
+        
+        console.log(`[${this.auctioneerName}] Processando categoria ${i + 1}/${this.baseUrls.length}: ${categoryName}`);
+        console.log(`[${this.auctioneerName}] URL base: ${baseUrl}`);
+
+        try {
+          const categoryVehicles = await this.scrapeCategory(baseUrl, seenIds, seenTitles);
+          vehicles.push(...categoryVehicles);
+          console.log(`[${this.auctioneerName}] Categoria ${categoryName} concluída. ${categoryVehicles.length} veículos coletados.`);
+        } catch (categoryError) {
+          console.error(`[${this.auctioneerName}] Erro ao processar categoria ${categoryName}:`, categoryError);
+          // Continuar com próxima categoria mesmo se uma falhar
+        }
+
+        // Delay entre categorias
+        if (i < this.baseUrls.length - 1) {
+          await this.randomDelay(3000, 5000);
+        }
+      }
+
+      console.log(`[${this.auctioneerName}] Scraping do Superbid concluído. Total de veículos: ${vehicles.length}`);
+      return vehicles;
+    } catch (error) {
+      console.error(`[${this.auctioneerName}] Erro geral no scraping do Superbid:`, error);
+      throw error;
+    }
+  }
+
+  private async scrapeCategory(baseUrl: string, seenIds: Set<string>, seenTitles: Set<string>): Promise<VehicleData[]> {
+    if (!this.page) throw new Error('Página não inicializada');
+
+    const vehicles: VehicleData[] = [];
+
+    try {
 
       let currentPage = 1;
       let duplicatePageCount = 0;
       const maxDuplicatePages = 2;
 
       while (currentPage <= 250) {
-        const pageUrl = `${this.baseUrl}?pageNumber=${currentPage}&pageSize=${this.pageSize}`;
+        const pageUrl = `${baseUrl}?pageNumber=${currentPage}&pageSize=${this.pageSize}`;
         console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
 
         try {
@@ -393,7 +436,7 @@ export class SuperbidRealScraper extends BaseScraper {
       // Processar veículos extraídos
       for (let i = 0; i < extractedVehicles.length; i++) {
         try {
-          const vehicle = this.processExtractedVehicle(extractedVehicles[i], i, pageNumber);
+          const vehicle = this.processExtractedVehicle(extractedVehicles[i], i, pageNumber, baseUrl);
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
           }
@@ -409,7 +452,7 @@ export class SuperbidRealScraper extends BaseScraper {
     return vehicles;
   }
 
-  private processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number): VehicleData | null {
+  private processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number, baseUrl?: string): VehicleData | null {
     try {
       const cleanTitle = rawVehicle.title.trim();
       if (!cleanTitle || cleanTitle.length < 5) {
@@ -453,7 +496,7 @@ export class SuperbidRealScraper extends BaseScraper {
         auction_date: auctionDate,
         auction_type: rawVehicle.auctionType || 'Online',
         condition: 'Usado',
-        original_url: rawVehicle.detailUrl || `${this.baseUrl}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
+        original_url: rawVehicle.detailUrl || `${baseUrl || this.baseUrls[0]}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
         thumbnail_url: rawVehicle.imageUrl || undefined,
         images: images.length > 0 ? images : undefined
       };
