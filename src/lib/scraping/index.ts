@@ -600,18 +600,26 @@ async function processVehicle(
       delete vehicleToSaveMinimal.brand;
       delete vehicleToSaveMinimal.model;
       delete vehicleToSaveMinimal.auctioneer_id;
-      // Só remove vehicle_type se a coluna não existir, tipo_veiculo sempre deve permanecer
+      // Só remove vehicle_type se a coluna não existir
       if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
         delete vehicleToSaveMinimal.vehicle_type;
       }
+      
+      // Só remove tipo_veiculo se a coluna não existir (verificar no schema cache)
+      if (!hasVehicleColumn(vehicleTableInfo, 'tipo_veiculo')) {
+        delete vehicleToSaveMinimal.tipo_veiculo;
+      }
+      
       delete vehicleToSaveMinimal.auction_type;
       delete vehicleToSaveMinimal.fipe_discount_percentage;
       delete vehicleToSaveMinimal.images;
       delete vehicleToSaveMinimal.thumbnail_url;
       
-      // Garantir que tipo_veiculo sempre esteja presente
-      if (!vehicleToSaveMinimal.tipo_veiculo) {
-        vehicleToSaveMinimal.tipo_veiculo = vehicleType || 'carro';
+      // Garantir que tipo_veiculo esteja presente APENAS se a coluna existir
+      if (hasVehicleColumn(vehicleTableInfo, 'tipo_veiculo')) {
+        if (!vehicleToSaveMinimal.tipo_veiculo) {
+          vehicleToSaveMinimal.tipo_veiculo = vehicleType || 'carro';
+        }
       }
       
       const retryResult = await supabase
