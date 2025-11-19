@@ -455,8 +455,6 @@ async function processVehicle(
   assign('versao', normalizedVariant);
   assign('ano', vehicleData.year_model || vehicleData.year_manufacture || null);
   assign('ano_modelo', vehicleData.year_model || null);
-  // tipo_veiculo é obrigatório no schema, sempre deve ser salvo mesmo se coluna não for detectada
-  assign('tipo_veiculo', vehicleType || 'carro', true);
   assign('cor', vehicleData.color || null);
   assign('combustivel', vehicleData.fuel_type || null);
   assign('cambio', vehicleData.transmission || null);
@@ -481,10 +479,8 @@ async function processVehicle(
   assign('version', normalizedVariant);
   assign('year_model', vehicleData.year_model || null);
   assign('year_manufacture', vehicleData.year_manufacture || vehicleData.year_model || null);
-  // vehicle_type só é salvo se a coluna existir (não é obrigatória, pode não existir no schema antigo)
-  if (hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
-    assign('vehicle_type', englishVehicleType);
-  }
+  // vehicle_type é obrigatório no schema, sempre deve ser salvo mesmo se coluna não for detectada
+  assign('vehicle_type', englishVehicleType || 'Carro', true);
   assign('color', vehicleData.color || null);
   assign('fuel_type', vehicleData.fuel_type || null);
   assign('transmission', vehicleData.transmission || null);
@@ -588,7 +584,7 @@ async function processVehicle(
       console.warn(`[${auctioneerName}] Tentando atualizar sem campos opcionais:`, error.message);
       
       // Remover campos que podem não existir
-      // IMPORTANTE: tipo_veiculo NUNCA deve ser removido (é obrigatório no schema)
+      // IMPORTANTE: vehicle_type NUNCA deve ser removido (é obrigatório no schema)
       vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
@@ -600,13 +596,13 @@ async function processVehicle(
       delete vehicleToSaveMinimal.brand;
       delete vehicleToSaveMinimal.model;
       delete vehicleToSaveMinimal.auctioneer_id;
-      // Só remove vehicle_type se a coluna não existir
+      // Só remove vehicle_type se a coluna não existir (verificar no schema cache)
       if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
         delete vehicleToSaveMinimal.vehicle_type;
       }
       
-      // Só remove tipo_veiculo se a coluna não existir (verificar no schema cache)
-      if (!hasVehicleColumn(vehicleTableInfo, 'tipo_veiculo')) {
+      // Remover tipo_veiculo se existir (não é a coluna correta, é vehicle_type)
+      if (vehicleToSaveMinimal.tipo_veiculo) {
         delete vehicleToSaveMinimal.tipo_veiculo;
       }
       
@@ -615,10 +611,11 @@ async function processVehicle(
       delete vehicleToSaveMinimal.images;
       delete vehicleToSaveMinimal.thumbnail_url;
       
-      // Garantir que tipo_veiculo esteja presente APENAS se a coluna existir
-      if (hasVehicleColumn(vehicleTableInfo, 'tipo_veiculo')) {
-        if (!vehicleToSaveMinimal.tipo_veiculo) {
-          vehicleToSaveMinimal.tipo_veiculo = vehicleType || 'carro';
+      // Garantir que vehicle_type esteja presente APENAS se a coluna existir
+      if (hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
+        if (!vehicleToSaveMinimal.vehicle_type) {
+          const englishType = vehicleType ? `${vehicleType.charAt(0).toUpperCase()}${vehicleType.slice(1)}` : 'Carro';
+          vehicleToSaveMinimal.vehicle_type = englishType;
         }
       }
       
@@ -642,7 +639,7 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
-    const tipoSalvo = vehicleToSaveMinimal?.tipo_veiculo || vehicleToSave.tipo_veiculo;
+    const tipoSalvo = vehicleToSaveMinimal?.vehicle_type || vehicleToSave.vehicle_type;
     console.log(`[${auctioneerName}] Veículo atualizado:`, {
       id: vehicleId,
       tipo_salvo: tipoSalvo,
@@ -670,7 +667,7 @@ async function processVehicle(
       console.warn(`[${auctioneerName}] Tentando inserir sem campos opcionais:`, error.message);
       
       // Remover campos que podem não existir
-      // IMPORTANTE: tipo_veiculo NUNCA deve ser removido (é obrigatório no schema)
+      // IMPORTANTE: vehicle_type NUNCA deve ser removido (é obrigatório no schema)
       vehicleToSaveMinimal = { ...vehicleToSave };
       delete vehicleToSaveMinimal.leiloeiro;
       delete vehicleToSaveMinimal.leiloeiro_url;
@@ -715,7 +712,7 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
-    const tipoSalvo = vehicleToSaveMinimal?.tipo_veiculo || vehicleToSave.tipo_veiculo;
+    const tipoSalvo = vehicleToSaveMinimal?.vehicle_type || vehicleToSave.vehicle_type;
     console.log(`[${auctioneerName}] Veículo inserido:`, {
       id: vehicleId,
       tipo_salvo: tipoSalvo,
