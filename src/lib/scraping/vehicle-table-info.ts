@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { isValidVehicleColumn, REQUIRED_VEHICLE_COLUMNS, OPTIONAL_VEHICLE_COLUMNS } from '@/lib/supabase/types';
 
 interface VehicleTableInfo {
   columns: Set<string>;
@@ -14,64 +15,15 @@ type ColumnProbeResult = {
 let cachedInfo: VehicleTableInfo | null = null;
 const columnProbeCache = new Map<string, Promise<boolean>>();
 
+// Colunas reais do schema (apenas inglês)
 const PROBE_COLUMNS = [
-  // English schema
-  'title',
-  'description',
-  'brand',
-  'model',
-  'version',
-  'year_model',
-  'year_manufacture',
-  'vehicle_type',
-  'color',
-  'fuel_type',
-  'transmission',
-  'mileage',
-  'state',
-  'city',
-  'current_bid',
-  'minimum_bid',
-  'auction_type',
-  'has_financing',
-  'auction_date',
-  'fipe_price',
-  'fipe_code',
-  'fipe_discount_percentage',
-  'deal_score',
-  'original_url',
-  'thumbnail_url',
-  'images',
-  'auctioneer_id',
-  'external_id',
-  'lot_number',
-  // Portuguese schema
-  'titulo',
-  'descricao',
-  'marca',
-  'modelo',
-  'modelo_original',
-  'versao',
-  'ano',
-  'ano_modelo',
-  'tipo_veiculo',
-  'cor',
-  'combustivel',
-  'cambio',
-  'km',
-  'estado',
-  'cidade',
-  'preco_inicial',
-  'preco_atual',
-  'tipo_leilao',
-  'aceita_financiamento',
-  'data_leilao',
-  'fipe_preco',
-  'fipe_codigo',
-  'imagens',
-  'leiloeiro',
-  'leiloeiro_url',
-];
+  ...REQUIRED_VEHICLE_COLUMNS,
+  ...OPTIONAL_VEHICLE_COLUMNS,
+  'id', // PK
+  // Campos legados que ainda existem no banco (nullable)
+  'leiloeiro', // Existe mas é legado
+  'aceita_financiamento', // Existe mas é legado
+] as string[];
 
 async function fetchColumnsViaInformationSchema(client: SupabaseClient): Promise<Set<string> | null> {
   try {
@@ -167,8 +119,8 @@ export async function getVehicleTableInfo(client: SupabaseClient): Promise<Vehic
 
   const info: VehicleTableInfo = {
     columns,
-    hasPortugueseColumns: ['marca', 'modelo', 'titulo'].some((column) => columns.has(column)),
-    hasEnglishColumns: ['brand', 'model', 'title'].some((column) => columns.has(column)),
+    hasPortugueseColumns: false, // Schema real usa apenas inglês
+    hasEnglishColumns: ['brand', 'model', 'title', 'vehicle_type'].some((column) => columns.has(column)),
   };
 
   cachedInfo = info;
@@ -176,6 +128,11 @@ export async function getVehicleTableInfo(client: SupabaseClient): Promise<Vehic
 }
 
 export function hasVehicleColumn(info: VehicleTableInfo, column: string): boolean {
+  // Usar validação de tipos gerados se disponível
+  if (isValidVehicleColumn(column)) {
+    return true;
+  }
+  // Fallback para verificação manual
   return info.columns.has(column);
 }
 

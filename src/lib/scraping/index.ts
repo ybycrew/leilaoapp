@@ -444,66 +444,48 @@ async function processVehicle(
   const thumbnailUrl = vehicleData.thumbnail_url || vehicleData.images?.[0] || null;
   const imagesArray = vehicleData.images && vehicleData.images.length > 0 ? vehicleData.images : null;
 
-  // Campos comuns (Português)
-  assign('titulo', vehicleData.title);
-  assign('descricao', vehicleData.title);
-  assign('leiloeiro', auctioneerName);
-  assign('leiloeiro_url', leiloeiroUrl);
-  assign('marca', normalizedBrand);
-  assign('modelo', normalizedModel);
-  assign('modelo_original', vehicleData.model || null);
-  assign('versao', normalizedVariant);
-  assign('ano', vehicleData.year_model || vehicleData.year_manufacture || null);
-  assign('ano_modelo', vehicleData.year_model || null);
-  assign('cor', vehicleData.color || null);
-  assign('combustivel', vehicleData.fuel_type || null);
-  assign('cambio', vehicleData.transmission || null);
-  assign('km', mileageValue);
-  assign('estado', fallbackState);
-  assign('cidade', fallbackCity);
-  assign('preco_inicial', minimumBid);
-  assign('preco_atual', currentBid);
-  assign('tipo_leilao', normalizedAuctionType);
-  assign('aceita_financiamento', vehicleData.has_financing ?? false);
-  assign('data_leilao', vehicleData.auction_date ? vehicleData.auction_date.toISOString() : null);
-  assign('fipe_preco', fipePrice ?? null);
-  assign('fipe_codigo', fipeCode ?? null);
-  assign('deal_score', dealScore);
-  assign('imagens', imagesArray);
-
-  // Campos comuns (Inglês)
-  assign('title', vehicleData.title);
-  assign('description', vehicleData.title);
-  assign('brand', normalizedBrand);
-  assign('model', normalizedModel);
-  assign('version', normalizedVariant);
+  // Campos obrigatórios (NOT NULL no schema real)
+  // Campos obrigatórios (NOT NULL)
+  assign('title', vehicleData.title, true);
+  assign('brand', normalizedBrand || 'Desconhecida', true);
+  assign('model', normalizedModel || 'Desconhecido', true);
+  assign('state', fallbackState, true);
+  assign('city', fallbackCity, true);
+  assign('original_url', vehicleData.original_url || leiloeiroUrl || '', true);
+  assign('auctioneer_id', auctioneerId, true);
+  
+  // Campos opcionais (nullable)
+  assign('description', vehicleData.title || null);
+  assign('version', normalizedVariant || null);
   assign('year_model', vehicleData.year_model || null);
   assign('year_manufacture', vehicleData.year_manufacture || vehicleData.year_model || null);
-  // vehicle_type é obrigatório no schema, sempre deve ser salvo mesmo se coluna não for detectada
-  assign('vehicle_type', englishVehicleType || 'Carro', true);
+  assign('vehicle_type', englishVehicleType || 'Carro', true); // Sempre salvar tipo
   assign('color', vehicleData.color || null);
   assign('fuel_type', vehicleData.fuel_type || null);
   assign('transmission', vehicleData.transmission || null);
-  assign('mileage', mileageValue);
-  assign('state', fallbackState);
-  assign('city', fallbackCity);
+  assign('mileage', mileageValue || null);
+  assign('license_plate', vehicleData.license_plate || null);
   assign('current_bid', englishCurrentBid);
   assign('minimum_bid', englishMinimumBid);
+  assign('appraised_value', vehicleData.appraised_value || null);
   assign('auction_type', englishAuctionType);
-  assign('has_financing', vehicleData.has_financing ?? false);
+  assign('auction_status', (vehicleData as any).auction_status || null);
   assign('auction_date', vehicleData.auction_date ? vehicleData.auction_date.toISOString() : null);
+  assign('has_financing', vehicleData.has_financing ?? null);
+  assign('accepts_financing', vehicleData.has_financing ?? null);
+  // aceita_financiamento existe no banco (legado), mas usar accepts_financing ou has_financing
+  assign('aceita_financiamento', vehicleData.has_financing ?? null);
   assign('fipe_price', fipePrice ?? null);
   assign('fipe_code', fipeCode ?? null);
   assign('fipe_discount_percentage', fipeDiscountPercentage ?? null);
-  assign('deal_score', dealScore);
-  assign('original_url', vehicleData.original_url || null);
+  assign('deal_score', dealScore || null);
   assign('thumbnail_url', thumbnailUrl);
-  assign('images', imagesArray);
-  assign('auctioneer_id', auctioneerId);
-
-  // Campos compartilhados
+  assign('images', imagesArray); // Se a coluna images existir
   assign('external_id', vehicleData.external_id || null);
   assign('lot_number', vehicleData.lot_number || null);
+  assign('is_active', (vehicleData as any).is_active ?? true);
+  assign('condition', vehicleData.condition || null);
+  assign('leiloeiro', auctioneerName); // Legado, mas existe no banco (nullable)
 
   // 10. Verificar se veículo já existe (usando leiloeiro + external_id ou apenas external_id)
   let existingVehicleId: string | null = null;
@@ -583,40 +565,40 @@ async function processVehicle(
     if (error && (error.message.includes('does not exist') || error.message.includes('column'))) {
       console.warn(`[${auctioneerName}] Tentando atualizar sem campos opcionais:`, error.message);
       
-      // Remover campos que podem não existir
-      // IMPORTANTE: vehicle_type NUNCA deve ser removido (é obrigatório no schema)
+      // Remover campos opcionais que podem não existir
       vehicleToSaveMinimal = { ...vehicleToSave };
-      delete vehicleToSaveMinimal.leiloeiro;
-      delete vehicleToSaveMinimal.leiloeiro_url;
-      delete vehicleToSaveMinimal.version;
-      delete vehicleToSaveMinimal.versao;
-      delete vehicleToSaveMinimal.modelo_original;
-      delete vehicleToSaveMinimal.title;
+      
+      // Remover campos opcionais específicos que podem não existir
       delete vehicleToSaveMinimal.description;
-      delete vehicleToSaveMinimal.brand;
-      delete vehicleToSaveMinimal.model;
-      delete vehicleToSaveMinimal.auctioneer_id;
-      // Só remove vehicle_type se a coluna não existir (verificar no schema cache)
-      if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
-        delete vehicleToSaveMinimal.vehicle_type;
-      }
+      delete vehicleToSaveMinimal.version;
+      delete vehicleToSaveMinimal.year_manufacture;
+      delete vehicleToSaveMinimal.appraised_value;
+      delete vehicleToSaveMinimal.auction_status;
+      delete vehicleToSaveMinimal.has_financing;
+      delete vehicleToSaveMinimal.fipe_discount_percentage;
+      delete vehicleToSaveMinimal.images;
+      delete vehicleToSaveMinimal.thumbnail_url;
+      delete vehicleToSaveMinimal.condition;
+      delete vehicleToSaveMinimal.is_active;
+      delete vehicleToSaveMinimal.views_count;
+      delete vehicleToSaveMinimal.favorites_count;
+      delete vehicleToSaveMinimal.scraped_at;
       
       // Remover tipo_veiculo se existir (não é a coluna correta, é vehicle_type)
       if (vehicleToSaveMinimal.tipo_veiculo) {
         delete vehicleToSaveMinimal.tipo_veiculo;
       }
       
-      delete vehicleToSaveMinimal.auction_type;
-      delete vehicleToSaveMinimal.fipe_discount_percentage;
-      delete vehicleToSaveMinimal.images;
-      delete vehicleToSaveMinimal.thumbnail_url;
-      
-      // Garantir que vehicle_type esteja presente APENAS se a coluna existir
-      if (hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
-        if (!vehicleToSaveMinimal.vehicle_type) {
-          const englishType = vehicleType ? `${vehicleType.charAt(0).toUpperCase()}${vehicleType.slice(1)}` : 'Carro';
-          vehicleToSaveMinimal.vehicle_type = englishType;
-        }
+      // Garantir que campos obrigatórios estejam presentes
+      if (!vehicleToSaveMinimal.title) vehicleToSaveMinimal.title = vehicleData.title || '';
+      if (!vehicleToSaveMinimal.brand) vehicleToSaveMinimal.brand = normalizedBrand || 'Desconhecida';
+      if (!vehicleToSaveMinimal.model) vehicleToSaveMinimal.model = normalizedModel || 'Desconhecido';
+      if (!vehicleToSaveMinimal.state) vehicleToSaveMinimal.state = fallbackState;
+      if (!vehicleToSaveMinimal.city) vehicleToSaveMinimal.city = fallbackCity;
+      if (!vehicleToSaveMinimal.original_url) vehicleToSaveMinimal.original_url = vehicleData.original_url || leiloeiroUrl || '';
+      if (!vehicleToSaveMinimal.auctioneer_id) vehicleToSaveMinimal.auctioneer_id = auctioneerId;
+      if (!vehicleToSaveMinimal.vehicle_type) {
+        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carro';
       }
       
       const retryResult = await supabase
@@ -666,40 +648,40 @@ async function processVehicle(
     if (error && (error.message.includes('does not exist') || error.message.includes('column'))) {
       console.warn(`[${auctioneerName}] Tentando inserir sem campos opcionais:`, error.message);
       
-      // Remover campos que podem não existir
-      // IMPORTANTE: vehicle_type NUNCA deve ser removido (é obrigatório no schema)
+      // Remover campos opcionais que podem não existir
       vehicleToSaveMinimal = { ...vehicleToSave };
-      delete vehicleToSaveMinimal.leiloeiro;
-      delete vehicleToSaveMinimal.leiloeiro_url;
-      delete vehicleToSaveMinimal.version;
-      delete vehicleToSaveMinimal.versao;
-      delete vehicleToSaveMinimal.modelo_original;
-      delete vehicleToSaveMinimal.title;
+      
+      // Remover campos opcionais específicos que podem não existir
       delete vehicleToSaveMinimal.description;
-      delete vehicleToSaveMinimal.brand;
-      delete vehicleToSaveMinimal.model;
-      delete vehicleToSaveMinimal.auctioneer_id;
-      // Só remove vehicle_type se a coluna não existir (verificar no schema cache)
-      if (!hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
-        delete vehicleToSaveMinimal.vehicle_type;
-      }
+      delete vehicleToSaveMinimal.version;
+      delete vehicleToSaveMinimal.year_manufacture;
+      delete vehicleToSaveMinimal.appraised_value;
+      delete vehicleToSaveMinimal.auction_status;
+      delete vehicleToSaveMinimal.has_financing;
+      delete vehicleToSaveMinimal.fipe_discount_percentage;
+      delete vehicleToSaveMinimal.images;
+      delete vehicleToSaveMinimal.thumbnail_url;
+      delete vehicleToSaveMinimal.condition;
+      delete vehicleToSaveMinimal.is_active;
+      delete vehicleToSaveMinimal.views_count;
+      delete vehicleToSaveMinimal.favorites_count;
+      delete vehicleToSaveMinimal.scraped_at;
       
       // Remover tipo_veiculo se existir (não é a coluna correta, é vehicle_type)
       if (vehicleToSaveMinimal.tipo_veiculo) {
         delete vehicleToSaveMinimal.tipo_veiculo;
       }
       
-      delete vehicleToSaveMinimal.auction_type;
-      delete vehicleToSaveMinimal.fipe_discount_percentage;
-      delete vehicleToSaveMinimal.images;
-      delete vehicleToSaveMinimal.thumbnail_url;
-      
-      // Garantir que vehicle_type esteja presente APENAS se a coluna existir
-      if (hasVehicleColumn(vehicleTableInfo, 'vehicle_type')) {
-        if (!vehicleToSaveMinimal.vehicle_type) {
-          const englishType = vehicleType ? `${vehicleType.charAt(0).toUpperCase()}${vehicleType.slice(1)}` : 'Carro';
-          vehicleToSaveMinimal.vehicle_type = englishType;
-        }
+      // Garantir que campos obrigatórios estejam presentes
+      if (!vehicleToSaveMinimal.title) vehicleToSaveMinimal.title = vehicleData.title || '';
+      if (!vehicleToSaveMinimal.brand) vehicleToSaveMinimal.brand = normalizedBrand || 'Desconhecida';
+      if (!vehicleToSaveMinimal.model) vehicleToSaveMinimal.model = normalizedModel || 'Desconhecido';
+      if (!vehicleToSaveMinimal.state) vehicleToSaveMinimal.state = fallbackState;
+      if (!vehicleToSaveMinimal.city) vehicleToSaveMinimal.city = fallbackCity;
+      if (!vehicleToSaveMinimal.original_url) vehicleToSaveMinimal.original_url = vehicleData.original_url || leiloeiroUrl || '';
+      if (!vehicleToSaveMinimal.auctioneer_id) vehicleToSaveMinimal.auctioneer_id = auctioneerId;
+      if (!vehicleToSaveMinimal.vehicle_type) {
+        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carro';
       }
       
       const retryResult = await supabase
