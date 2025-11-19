@@ -815,12 +815,13 @@ export async function findVehicleTypeInFipe(
       };
     }
 
-    // 2. Se encontrou apenas uma marca, usar o vehicle_type_id dessa marca
+    // 2. Se encontrou apenas uma marca, SEMPRE validar modelo primeiro (se existir)
+    // antes de usar o vehicle_type_id da marca
     if (allBrands.length === 1) {
       const brandRecord = allBrands[0];
-      const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+      const vehicleTypeSlugFromBrand = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
 
-      if (!vehicleTypeSlug) {
+      if (!vehicleTypeSlugFromBrand) {
         return {
           type: null,
           normalizedBrand: brandRecord.name_upper,
@@ -829,35 +830,82 @@ export async function findVehicleTypeInFipe(
         };
       }
 
-      // Se tem modelo, validar e normalizar modelo para retornar normalizado
-      let normalizedModel: string | null = null;
+      // Se tem modelo, SEMPRE buscar em TODOS os tipos primeiro (não apenas no tipo da marca)
+      // O modelo é mais confiável que o vehicle_type_id da marca
       if (model) {
         const trimmedModel = model.trim();
         if (trimmedModel) {
+          // Buscar modelo em TODOS os tipos para garantir classificação correta
+          const modelBase = extractModelBase(trimmedModel);
+          const modelSearchKeys = [
+            modelBase.baseSearchName,
+            buildSearchKey(trimmedModel),
+            buildSearchKey(modelBase.baseNameUpper)
+          ];
+
+          // Buscar modelo em TODOS os tipos (carros, motos, caminhoes)
+          const typesToTest: VehicleTypeSlug[] = ['carros', 'motos', 'caminhoes'];
+          for (const testType of typesToTest) {
+            try {
+              // Buscar marca neste tipo
+              const brandInType = await findBrandRecord(trimmedBrand, testType);
+              if (brandInType) {
+                // Buscar modelo nesta marca/tipo
+                const modelRecord = await findModelRecord(brandInType.id, modelSearchKeys);
+                if (modelRecord) {
+                  // Modelo encontrado neste tipo - usar este tipo (mais confiável)
+                  let normalizedModel: string | null = modelRecord.base_name_upper || toAsciiUpper(trimmedModel);
+                  
+                  return {
+                    type: testType,
+                    normalizedBrand: brandInType.name_upper,
+                    normalizedModel,
+                    isValid: true,
+                  };
+                }
+              }
+            } catch (error) {
+              // Erro ao buscar neste tipo, continua para próximo
+              continue;
+            }
+          }
+
+          // Modelo não encontrado em nenhum tipo, usar tipo da marca como fallback
+          // Mas ainda tentar validar modelo no tipo da marca
           try {
             const modelValidation = await validateAndNormalizeModel(
               brandRecord.name_upper,
               trimmedModel,
-              vehicleTypeSlug
+              vehicleTypeSlugFromBrand
             );
 
-            if (modelValidation.isValid && modelValidation.normalized) {
-              normalizedModel = modelValidation.normalized;
-            } else {
-              // Mesmo sem validar modelo, marca é válida
-              normalizedModel = toAsciiUpper(trimmedModel);
-            }
+            const normalizedModel = modelValidation.isValid && modelValidation.normalized
+              ? modelValidation.normalized
+              : toAsciiUpper(trimmedModel);
+
+            return {
+              type: vehicleTypeSlugFromBrand,
+              normalizedBrand: brandRecord.name_upper,
+              normalizedModel,
+              isValid: true,
+            };
           } catch (error) {
-            // Erro ao validar modelo, mas marca é válida
-            normalizedModel = toAsciiUpper(trimmedModel);
+            // Erro ao validar modelo, usar marca como fallback
+            return {
+              type: vehicleTypeSlugFromBrand,
+              normalizedBrand: brandRecord.name_upper,
+              normalizedModel: toAsciiUpper(trimmedModel),
+              isValid: true,
+            };
           }
         }
       }
 
+      // Sem modelo, usar tipo da marca como fallback
       return {
-        type: vehicleTypeSlug,
+        type: vehicleTypeSlugFromBrand,
         normalizedBrand: brandRecord.name_upper,
-        normalizedModel,
+        normalizedModel: null,
         isValid: true,
       };
     }
