@@ -341,9 +341,19 @@ export class SuperbidRealScraper extends BaseScraper {
               return; // Pular este card (é peça/ferramenta, não veículo)
             }
             
-            // Filtrar códigos de referência típicos de peças (Ref.: XXXXX)
-            if (titleLower.includes('(ref.:') || fullTextLower.includes('(ref.:')) {
-              return; // Pular este card (é peça com código de referência)
+            // Filtrar códigos de referência típicos de peças (Ref.: XXXXX onde XXXXX são números)
+            // NÃO filtrar códigos de referência de leilão (Ref.: MJ, Ref.: MG, etc. - letras apenas)
+            // Peças têm códigos numéricos como (Ref.: 5160905), leilões têm códigos alfanuméricos como (Ref.: MJ)
+            const refMatch = title.match(/\(ref\.?:\s*([^)]+)\)/i) || fullText.match(/\(ref\.?:\s*([^)]+)\)/i);
+            if (refMatch && refMatch[1]) {
+              const refCode = refMatch[1].trim();
+              // Se o código de referência contém apenas números (ou números e poucas letras no início), é provavelmente peça
+              // Se contém apenas letras maiúsculas (1-3 letras), é provavelmente código de leilão (válido)
+              if (/^\d{4,}/.test(refCode) || /^\d+/.test(refCode)) {
+                // Código numérico longo = provavelmente peça (ex: Ref.: 5160905)
+                return; // Pular este card (é peça com código de referência numérico)
+              }
+              // Códigos como (Ref.: MJ), (Ref.: MG) são códigos de leilão válidos, não filtrar
             }
             
             // Extrair preço - procurar em parágrafos primeiro, depois no texto completo
@@ -792,10 +802,24 @@ export class SuperbidRealScraper extends BaseScraper {
     if (titleLower.includes('apl.: mro automotivo') || 
         titleLower.includes('apl.: mro') ||
         titleLower.includes('peso unit.:') ||
-        titleLower.includes('peso unit.') ||
-        titleLower.includes('(ref.:')) {
+        titleLower.includes('peso unit.')) {
       console.log(`[${this.auctioneerName}] Filtrando peça/ferramenta MRO: ${vehicle.title.substring(0, 50)}`);
       return false;
+    }
+    
+    // Filtrar códigos de referência típicos de peças (Ref.: XXXXX onde XXXXX são números)
+    // NÃO filtrar códigos de referência de leilão (Ref.: MJ, Ref.: MG, etc. - letras apenas)
+    const refMatch = vehicle.title.match(/\(ref\.?:\s*([^)]+)\)/i);
+    if (refMatch && refMatch[1]) {
+      const refCode = refMatch[1].trim();
+      // Se o código de referência contém apenas números (ou números e poucas letras no início), é provavelmente peça
+      // Se contém apenas letras maiúsculas (1-3 letras), é provavelmente código de leilão (válido)
+      if (/^\d{4,}/.test(refCode) || /^\d+/.test(refCode)) {
+        // Código numérico longo = provavelmente peça (ex: Ref.: 5160905)
+        console.log(`[${this.auctioneerName}] Filtrando peça com código de referência numérico: ${vehicle.title.substring(0, 50)}`);
+        return false;
+      }
+      // Códigos como (Ref.: MJ), (Ref.: MG) são códigos de leilão válidos, não filtrar
     }
     
     // Palavras-chave específicas de peças automotivas
