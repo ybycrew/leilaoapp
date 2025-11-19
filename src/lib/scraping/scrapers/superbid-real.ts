@@ -230,7 +230,7 @@ export class SuperbidRealScraper extends BaseScraper {
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
           await this.randomDelay(3000, 5000);
 
-          const pageVehicles = await this.scrapePage(currentPage);
+          const pageVehicles = await this.scrapePage(currentPage, baseUrl);
           
           if (pageVehicles.length === 0) {
             console.log(`[${this.auctioneerName}] Nenhum veículo encontrado na página ${currentPage}`);
@@ -282,7 +282,7 @@ export class SuperbidRealScraper extends BaseScraper {
     }
   }
 
-  private async scrapePage(pageNumber: number): Promise<VehicleData[]> {
+  private async scrapePage(pageNumber: number, baseUrl: string): Promise<VehicleData[]> {
     if (!this.page) return [];
 
     const vehicles: VehicleData[] = [];
