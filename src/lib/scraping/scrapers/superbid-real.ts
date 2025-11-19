@@ -287,6 +287,22 @@ export class SuperbidRealScraper extends BaseScraper {
             const paragraphs = Array.from(card.querySelectorAll('p')).map(p => p.textContent?.trim()).filter(Boolean);
             const fullText = card.textContent || '';
             
+            // Filtrar peças e ferramentas MRO (Partes e Peças)
+            const fullTextLower = fullText.toLowerCase();
+            if (fullTextLower.includes('apl.: mro automotivo') || 
+                fullTextLower.includes('apl.: mro') ||
+                fullTextLower.includes('peso unit.:') ||
+                fullTextLower.includes('peso unit.') ||
+                titleLower.includes('apl.: mro') ||
+                titleLower.includes('peso unit.:')) {
+              return; // Pular este card (é peça/ferramenta, não veículo)
+            }
+            
+            // Filtrar códigos de referência típicos de peças (Ref.: XXXXX)
+            if (titleLower.includes('(ref.:') || fullTextLower.includes('(ref.:')) {
+              return; // Pular este card (é peça com código de referência)
+            }
+            
             // Extrair preço - procurar em parágrafos primeiro, depois no texto completo
             let price = '';
             const priceParagraph = paragraphs.find(p => p?.includes('R$'));
@@ -343,7 +359,7 @@ export class SuperbidRealScraper extends BaseScraper {
             
             // Extrair tipo de leilão - procurar nos parágrafos e texto
             let auctionType = 'Online';
-            const fullTextLower = fullText.toLowerCase();
+            // fullTextLower já foi definido acima para o filtro de peças
             if (fullTextLower.includes('tomada de pre') || fullTextLower.includes('tomada de preço')) {
               auctionType = 'Tomada de Preço';
             } else if (fullTextLower.includes('mercado balcão') || fullTextLower.includes('compre já')) {
@@ -727,6 +743,35 @@ export class SuperbidRealScraper extends BaseScraper {
         titleLower.includes('ícone cartão')) {
       console.log(`[${this.auctioneerName}] Filtrando ícone/elemento de interface: ${vehicle.title.substring(0, 50)}`);
       return false;
+    }
+    
+    // Filtrar peças e ferramentas MRO (Partes e Peças)
+    if (titleLower.includes('apl.: mro automotivo') || 
+        titleLower.includes('apl.: mro') ||
+        titleLower.includes('peso unit.:') ||
+        titleLower.includes('peso unit.') ||
+        titleLower.includes('(ref.:')) {
+      console.log(`[${this.auctioneerName}] Filtrando peça/ferramenta MRO: ${vehicle.title.substring(0, 50)}`);
+      return false;
+    }
+    
+    // Palavras-chave específicas de peças automotivas
+    const partKeywords = [
+      'coxim', 'acoplamento', 'difusor', 'bucha', 'flexivel', 'tirante',
+      'parafuso', 'rolamento', 'anel', 'retentor', 'luva', 'tampa',
+      'pino', 'suporte', 'ponteira', 'cubo', 'braco', 'alca', 'mola',
+      'patim', 'dobradica', 'ref.:', 'peso unit', 'mro automotivo'
+    ];
+    
+    // Verificar se o título começa com palavra-chave de peça (indica que é peça, não veículo)
+    const titleWords = titleLower.split(/\s+/);
+    const firstWord = titleWords[0] || '';
+    if (partKeywords.some(keyword => firstWord.startsWith(keyword))) {
+      // Se começa com palavra de peça e não parece veículo, filtrar
+      if (!this.looksLikeVehicle(titleLower)) {
+        console.log(`[${this.auctioneerName}] Filtrando peça (começa com palavra-chave): ${vehicle.title.substring(0, 50)}`);
+        return false;
+      }
     }
     
     const excludeKeywords = [
