@@ -2,7 +2,7 @@
  * Utilitários para scraping
  */
 
-import { calculateDealScore } from './scoring';
+import { calculateDealScore } from '../scoring';
 
 export { calculateDealScore };
 
