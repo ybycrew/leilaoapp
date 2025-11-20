@@ -273,11 +273,18 @@ async function processVehicle(
 
   // 3. Calcular deal score
   const dealScore = calculateDealScore({
-    fipeDiscount: fipeDiscountPercentage || 0,
-    year: vehicleData.year_model || new Date().getFullYear(),
+    title: vehicleData.title,
+    brand: normalizedBrand || vehicleData.brand || '',
+    model: normalizedModel || vehicleData.model || '',
+    fipe_price: fipePrice || null,
+    current_bid: vehicleData.current_bid || 0,
+    year_manufacture: vehicleData.year_model || vehicleData.year_manufacture || new Date().getFullYear(),
     mileage: vehicleData.mileage || 0,
-    auctionType: vehicleData.auction_type || 'Online',
-    hasFinancing: vehicleData.has_financing || false,
+    auction_type: vehicleData.auction_type || 'Online',
+    has_financing: vehicleData.has_financing || false,
+    state: vehicleData.state || 'SP',
+    city: vehicleData.city || 'São Paulo',
+    original_url: vehicleData.original_url || '',
   });
 
   // 4. Extrair URL base do leiloeiro para leiloeiro_url
