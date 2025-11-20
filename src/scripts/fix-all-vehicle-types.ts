@@ -9,6 +9,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { classifyVehicleType } from '../lib/vehicle-type-classifier';
+import { normalizeVehicleTypeForDB } from '../lib/scraping/utils';
 import { Database } from '@/types/database.types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,14 +42,8 @@ interface FixStats {
   }>;
 }
 
-function normalizeTypeForDB(type: string): string {
-  const normalized = type.toLowerCase();
-  if (normalized === 'carro' || normalized === 'carros') return 'Carro';
-  if (normalized === 'moto' || normalized === 'motos') return 'Moto';
-  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'caminhoes') return 'Caminhão';
-  if (normalized === 'van') return 'Van';
-  return 'Carro'; // Fallback
-}
+// Usar função centralizada de normalização
+const normalizeTypeForDB = normalizeVehicleTypeForDB;
 
 async function fixAllVehicleTypes() {
   console.log('🚀 Iniciando correção em massa de tipos de veículos...');

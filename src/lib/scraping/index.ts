@@ -6,7 +6,7 @@ import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
 import { getFipePrice } from '../fipe';
 import { normalizeVehicleBrandModel, findVehicleTypeInFipe, mapFipeTypeToVehicleType } from '../vehicle-normalization';
-import { calculateDealScore } from './utils';
+import { calculateDealScore, normalizeVehicleTypeForDB, validateVehicleTypeByModel } from './utils';
 import { getVehicleTableInfo, hasVehicleColumn } from './vehicle-table-info';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -411,6 +411,30 @@ async function processVehicle(
     console.warn(`[${auctioneerName}] Tipo não definido, usando padrão 'carro'`);
   }
 
+  // 7.5. Validar tipo por modelo conhecido (validação adicional)
+  try {
+    const validation = validateVehicleTypeByModel(
+      vehicleType,
+      normalizedBrand,
+      normalizedModel,
+      vehicleData.title
+    );
+
+    if (!validation.valid && validation.suggestedType) {
+      console.log(`[${auctioneerName}] Tipo corrigido por validação de modelo:`, {
+        original: vehicleType,
+        correto: validation.suggestedType,
+        motivo: validation.reason,
+        brand: normalizedBrand,
+        model: normalizedModel
+      });
+      vehicleType = validation.suggestedType as 'carro' | 'moto' | 'caminhao' | 'van';
+      typeCorrectedByFipe = true;
+    }
+  } catch (error) {
+    console.warn(`[${auctioneerName}] Erro ao validar tipo por modelo:`, error);
+  }
+
   // 8. Normalizar marca e modelo usando serviço de normalização com o tipo correto (se necessário)
   const vehicleTypeForFipe = vehicleType === 'moto' ? 'motos' :
                             vehicleType === 'caminhao' ? 'caminhoes' : 'carros';
@@ -467,7 +491,18 @@ async function processVehicle(
     vehicleToSave[column] = value;
   };
 
-  const englishVehicleType = vehicleType ? `${vehicleType.charAt(0).toUpperCase()}${vehicleType.slice(1)}` : null;
+  // Normalizar tipo para formato do banco APÓS todas as classificações
+  // IMPORTANTE: Isso garante que o tipo já foi corrigido pelo classificador
+  const englishVehicleType = normalizeVehicleTypeForDB(vehicleType);
+  
+  // Log do tipo que será salvo
+  console.log(`[${auctioneerName}] Tipo final a ser salvo:`, {
+    vehicleType: vehicleType,
+    englishVehicleType: englishVehicleType,
+    brand: normalizedBrand,
+    model: normalizedModel,
+    foiCorrigido: typeCorrectedByFipe
+  });
   const normalizedAuctionType = normalizeAuctionType(vehicleData.auction_type);
   const englishAuctionType = normalizedAuctionType
     ? `${normalizedAuctionType.charAt(0).toUpperCase()}${normalizedAuctionType.slice(1)}`
@@ -498,7 +533,7 @@ async function processVehicle(
   assign('version', normalizedVariant || null);
   assign('year_model', vehicleData.year_model || null);
   assign('year_manufacture', vehicleData.year_manufacture || vehicleData.year_model || null);
-  assign('vehicle_type', englishVehicleType || 'Carro', true); // Sempre salvar tipo
+  assign('vehicle_type', englishVehicleType, true); // Sempre salvar tipo (já normalizado)
   assign('color', vehicleData.color || null);
   assign('fuel_type', vehicleData.fuel_type || null);
   assign('transmission', vehicleData.transmission || null);
@@ -660,14 +695,59 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
-    const tipoSalvo = vehicleToSaveMinimal?.vehicle_type || vehicleToSave.vehicle_type;
-    console.log(`[${auctioneerName}] Veículo atualizado:`, {
-      id: vehicleId,
-      tipo_salvo: tipoSalvo,
-      marca: normalizedBrand,
-      modelo: normalizedModel,
-      tipo_correto_fipe: typeCorrectedByFipe
-    });
+    
+    // Verificar se tipo foi realmente salvo corretamente
+    try {
+      const { data: savedVehicle, error: fetchError } = await supabase
+        .from('vehicles')
+        .select('vehicle_type')
+        .eq('id', vehicleId)
+        .single();
+      
+      if (!fetchError && savedVehicle) {
+        const tipoSalvo = savedVehicle.vehicle_type;
+        const tipoEsperado = englishVehicleType;
+        
+        if (tipoSalvo !== tipoEsperado) {
+          console.warn(`[${auctioneerName}] ⚠️  Tipo salvo diferente do esperado:`, {
+            esperado: tipoEsperado,
+            salvo: tipoSalvo,
+            vehicle_id: vehicleId
+          });
+          // Tentar corrigir imediatamente
+          await supabase
+            .from('vehicles')
+            .update({ vehicle_type: tipoEsperado })
+            .eq('id', vehicleId);
+          console.log(`[${auctioneerName}] ✅ Tipo corrigido após salvamento`);
+        }
+        
+        console.log(`[${auctioneerName}] Veículo atualizado:`, {
+          id: vehicleId,
+          tipo_esperado: tipoEsperado,
+          tipo_salvo: tipoSalvo,
+          marca: normalizedBrand,
+          modelo: normalizedModel,
+          tipo_correto_fipe: typeCorrectedByFipe
+        });
+      } else {
+        console.log(`[${auctioneerName}] Veículo atualizado:`, {
+          id: vehicleId,
+          tipo_esperado: englishVehicleType,
+          marca: normalizedBrand,
+          modelo: normalizedModel,
+          tipo_correto_fipe: typeCorrectedByFipe
+        });
+      }
+    } catch (error) {
+      console.warn(`[${auctioneerName}] Erro ao verificar tipo salvo:`, error);
+      console.log(`[${auctioneerName}] Veículo atualizado:`, {
+        id: vehicleId,
+        tipo_esperado: englishVehicleType,
+        marca: normalizedBrand,
+        modelo: normalizedModel
+      });
+    }
   } else {
     // Inserir novo veículo
     let data, error;
@@ -742,14 +822,59 @@ async function processVehicle(
     }
     
     vehicleId = data.id;
-    const tipoSalvo = vehicleToSaveMinimal?.vehicle_type || vehicleToSave.vehicle_type;
-    console.log(`[${auctioneerName}] Veículo inserido:`, {
-      id: vehicleId,
-      tipo_salvo: tipoSalvo,
-      marca: normalizedBrand,
-      modelo: normalizedModel,
-      tipo_correto_fipe: typeCorrectedByFipe
-    });
+    
+    // Verificar se tipo foi realmente salvo corretamente
+    try {
+      const { data: savedVehicle, error: fetchError } = await supabase
+        .from('vehicles')
+        .select('vehicle_type')
+        .eq('id', vehicleId)
+        .single();
+      
+      if (!fetchError && savedVehicle) {
+        const tipoSalvo = savedVehicle.vehicle_type;
+        const tipoEsperado = englishVehicleType;
+        
+        if (tipoSalvo !== tipoEsperado) {
+          console.warn(`[${auctioneerName}] ⚠️  Tipo salvo diferente do esperado:`, {
+            esperado: tipoEsperado,
+            salvo: tipoSalvo,
+            vehicle_id: vehicleId
+          });
+          // Tentar corrigir imediatamente
+          await supabase
+            .from('vehicles')
+            .update({ vehicle_type: tipoEsperado })
+            .eq('id', vehicleId);
+          console.log(`[${auctioneerName}] ✅ Tipo corrigido após salvamento`);
+        }
+        
+        console.log(`[${auctioneerName}] Veículo inserido:`, {
+          id: vehicleId,
+          tipo_esperado: tipoEsperado,
+          tipo_salvo: tipoSalvo,
+          marca: normalizedBrand,
+          modelo: normalizedModel,
+          tipo_correto_fipe: typeCorrectedByFipe
+        });
+      } else {
+        console.log(`[${auctioneerName}] Veículo inserido:`, {
+          id: vehicleId,
+          tipo_esperado: englishVehicleType,
+          marca: normalizedBrand,
+          modelo: normalizedModel,
+          tipo_correto_fipe: typeCorrectedByFipe
+        });
+      }
+    } catch (error) {
+      console.warn(`[${auctioneerName}] Erro ao verificar tipo salvo:`, error);
+      console.log(`[${auctioneerName}] Veículo inserido:`, {
+        id: vehicleId,
+        tipo_esperado: englishVehicleType,
+        marca: normalizedBrand,
+        modelo: normalizedModel
+      });
+    }
   }
 
   // 12. Salvar imagens em tabela separada (se existir a tabela vehicle_images)
