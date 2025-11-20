@@ -272,20 +272,23 @@ async function processVehicle(
   }
 
   // 3. Calcular deal score (usa valores originais, não normalizados)
+  // Nota: calculateDealScore aceita Vehicle completo, mas só usa alguns campos
   const dealScore = calculateDealScore({
+    id: '',
     title: vehicleData.title,
     brand: vehicleData.brand || '',
     model: vehicleData.model || '',
-    fipe_price: fipePrice ?? undefined,
+    fipe_price: fipePrice || undefined,
     current_bid: vehicleData.current_bid || 0,
     year_manufacture: vehicleData.year_model || vehicleData.year_manufacture || new Date().getFullYear(),
-    mileage: vehicleData.mileage ?? undefined,
+    mileage: vehicleData.mileage || undefined,
     auction_type: vehicleData.auction_type || 'Online',
     has_financing: vehicleData.has_financing || false,
     state: vehicleData.state || 'SP',
     city: vehicleData.city || 'São Paulo',
     original_url: vehicleData.original_url || '',
-  });
+    created_at: new Date().toISOString(),
+  } as any); // Usar 'as any' temporariamente pois Vehicle precisa de campos obrigatórios que não temos aqui
 
   // 4. Extrair URL base do leiloeiro para leiloeiro_url
   const leiloeiroUrl = vehicleData.original_url 
