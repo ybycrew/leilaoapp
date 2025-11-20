@@ -271,15 +271,15 @@ async function processVehicle(
       ((fipePrice - vehicleData.current_bid) / fipePrice) * 100;
   }
 
-  // 3. Calcular deal score
+  // 3. Calcular deal score (usa valores originais, não normalizados)
   const dealScore = calculateDealScore({
     title: vehicleData.title,
-    brand: normalizedBrand || vehicleData.brand || '',
-    model: normalizedModel || vehicleData.model || '',
+    brand: vehicleData.brand || '',
+    model: vehicleData.model || '',
     fipe_price: fipePrice || null,
     current_bid: vehicleData.current_bid || 0,
     year_manufacture: vehicleData.year_model || vehicleData.year_manufacture || new Date().getFullYear(),
-    mileage: vehicleData.mileage || 0,
+    mileage: vehicleData.mileage || null,
     auction_type: vehicleData.auction_type || 'Online',
     has_financing: vehicleData.has_financing || false,
     state: vehicleData.state || 'SP',
