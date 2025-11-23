@@ -469,7 +469,7 @@ export class SuperbidRealScraper extends BaseScraper {
       // Processar veículos extraídos
       for (let i = 0; i < extractedVehicles.length; i++) {
         try {
-          const vehicle = this.processExtractedVehicle(extractedVehicles[i], i, pageNumber, baseUrl);
+          const vehicle = await this.processExtractedVehicle(extractedVehicles[i], i, pageNumber, baseUrl);
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
           }
@@ -485,7 +485,7 @@ export class SuperbidRealScraper extends BaseScraper {
     return vehicles;
   }
 
-  private processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number, baseUrl?: string): VehicleData | null {
+  private async processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number, baseUrl?: string): Promise<VehicleData | null> {
     try {
       const cleanTitle = rawVehicle.title.trim();
       if (!cleanTitle || cleanTitle.length < 5) {
