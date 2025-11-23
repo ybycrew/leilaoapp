@@ -79,7 +79,7 @@ async function validateAndFixVehicleTypes() {
     console.log('📊 Buscando veículos do banco de dados...');
     const { data: vehicles, error } = await supabase
       .from('vehicles')
-      .select('id, titulo, marca, modelo, tipo_veiculo, ano, km, preco_atual')
+      .select('id, title, brand, model, vehicle_type, year_manufacture, mileage, current_bid')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -107,7 +107,7 @@ async function validateAndFixVehicleTypes() {
       try {
         stats.analyzed++;
         let needsUpdate = false;
-        let newType = vehicle.tipo_veiculo;
+        let newType = vehicle.vehicle_type;
         let correctionReason = '';
         let correctionSource = '';
         let confidence = 0;
@@ -115,10 +115,10 @@ async function validateAndFixVehicleTypes() {
 
         // Etapa 1: Validação por modelo conhecido
         const modelValidation = validateVehicleTypeByModel(
-          vehicle.tipo_veiculo || 'carro',
-          vehicle.marca,
-          vehicle.modelo,
-          vehicle.titulo
+          vehicle.vehicle_type || 'carro',
+          vehicle.brand,
+          vehicle.model,
+          vehicle.title
         );
 
         if (!modelValidation.valid && modelValidation.suggestedType) {
@@ -131,10 +131,10 @@ async function validateAndFixVehicleTypes() {
 
           stats.validationFixes.push({
             id: vehicle.id,
-            title: vehicle.titulo || '',
-            brand: vehicle.marca || '',
-            model: vehicle.modelo || '',
-            oldType: vehicle.tipo_veiculo || 'carro',
+            title: vehicle.title || '',
+            brand: vehicle.brand || '',
+            model: vehicle.model || '',
+            oldType: vehicle.vehicle_type || 'carro',
             newType: newType,
             reason: correctionReason
           });
@@ -146,16 +146,16 @@ async function validateAndFixVehicleTypes() {
         if (!needsUpdate) {
           try {
             const classification = await classifyVehicleType(
-              vehicle.titulo || '',
-              vehicle.marca,
-              vehicle.modelo,
+              vehicle.title || '',
+              vehicle.brand,
+              vehicle.model,
               null, // fuel_type
-              vehicle.km,
-              vehicle.preco_atual
+              vehicle.mileage,
+              vehicle.current_bid
             );
 
             const normalizedClassification = normalizeVehicleTypeForDB(classification.type);
-            const currentType = vehicle.tipo_veiculo || 'carro';
+            const currentType = vehicle.vehicle_type || 'carro';
 
             if (classification.confidence >= minConfidence && normalizedClassification !== currentType) {
               newType = normalizedClassification;
@@ -167,7 +167,7 @@ async function validateAndFixVehicleTypes() {
 
               stats.corrections.push({
                 id: vehicle.id,
-                title: vehicle.titulo || '',
+                title: vehicle.title || '',
                 oldType: currentType,
                 newType: newType,
                 confidence: confidence,
@@ -185,7 +185,7 @@ async function validateAndFixVehicleTypes() {
         if (needsUpdate && !isDryRun) {
           const { error: updateError } = await supabase
             .from('vehicles')
-            .update({ tipo_veiculo: newType })
+            .update({ vehicle_type: newType })
             .eq('id', vehicle.id);
 
           if (updateError) {
