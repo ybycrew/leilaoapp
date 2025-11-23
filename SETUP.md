@@ -1,4 +1,4 @@
-# 🚀 Guia de Instalação - LeilãoMax
+# 🚀 Guia de Instalação - YbyBid
 
 ## ✅ Pré-requisitos
 

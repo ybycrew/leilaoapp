@@ -1,5 +1,5 @@
 -- ============================================
--- QUERIES ÚTEIS - LEILAOMAX
+-- QUERIES ÚTEIS - YBYBID
 -- Consultas SQL prontas para uso nas APIs
 -- ============================================
 

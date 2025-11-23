@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# SCRIPT DE INSTALAÇÃO AUTOMÁTICA - LEILAOMAX
+# SCRIPT DE INSTALAÇÃO AUTOMÁTICA - YBYBID
 # Execute este script para instalar o banco completo
 # ============================================
 
@@ -239,7 +239,7 @@ STRIPE_WEBHOOK_SECRET=""
 
 # SendGrid/Resend (para emails)
 SENDGRID_API_KEY=""
-EMAIL_FROM="noreply@leilaomax.com"
+EMAIL_FROM="noreply@ybybid.com"
 
 # Cron Job Secret
 CRON_SECRET="$(openssl rand -hex 32)"

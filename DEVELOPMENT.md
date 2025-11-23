@@ -1,8 +1,8 @@
-# LeilãoMax - Documentação de Desenvolvimento
+# YbyBid - Documentação de Desenvolvimento
 
 ## 📚 Visão Geral
 
-O LeilãoMax é uma plataforma de agregação de leilões de veículos que centraliza todos os leilões do Brasil em um único lugar, permitindo comparação inteligente com preços FIPE e identificação de melhores negócios.
+O YbyBid é uma plataforma de agregação de leilões de veículos que centraliza todos os leilões do Brasil em um único lugar, permitindo comparação inteligente com preços FIPE e identificação de melhores negócios.
 
 ## 🏗️ Arquitetura
 

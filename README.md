@@ -1,4 +1,4 @@
-# LeilãoMax
+# YbyBid
 
 Plataforma de agregação de leilões de veículos do Brasil.
 

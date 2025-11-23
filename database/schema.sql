@@ -1,5 +1,5 @@
 -- ============================================
--- SCHEMA SQL COMPLETO - LEILAOMAX
+-- SCHEMA SQL COMPLETO - YBYBID
 -- Plataforma de Agregação de Leilões de Veículos
 -- ============================================
 

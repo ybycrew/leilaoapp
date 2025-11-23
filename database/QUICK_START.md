@@ -1,4 +1,4 @@
-# ⚡ Quick Start - LeilãoMax Database
+# ⚡ Quick Start - YbyBid Database
 
 ## 🎯 Setup em 3 Minutos
 

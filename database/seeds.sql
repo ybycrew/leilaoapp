@@ -1,5 +1,5 @@
 -- ============================================
--- SEEDS - LEILAOMAX
+-- SEEDS - YBYBID
 -- Dados iniciais para desenvolvimento e testes
 -- ============================================
 

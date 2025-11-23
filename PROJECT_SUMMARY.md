@@ -291,7 +291,7 @@ Se tiver dúvidas:
 
 ## ✨ PARABÉNS! 
 
-Seu projeto **LeilãoMax** está 100% configurado e pronto para desenvolvimento! 
+Seu projeto **YbyBid** está 100% configurado e pronto para desenvolvimento! 
 
 ### 🎯 PRÓXIMA AÇÃO:
 ```bash

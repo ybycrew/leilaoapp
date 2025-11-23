@@ -372,5 +372,5 @@ Após fazer download/clone, verifique se tem todos:
 
 **Última atualização:** Outubro 2025  
 **Versão:** 1.0.0  
-**Projeto:** LeilãoMax - Agregador de Leilões de Veículos
+**Projeto:** YbyBid - Agregador de Leilões de Veículos
 

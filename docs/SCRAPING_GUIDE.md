@@ -1,4 +1,4 @@
-# 🕷️ Guia Completo de Scraping - LeilãoMax
+# 🕷️ Guia Completo de Scraping - YbyBid
 
 ## 📋 Índice
 
@@ -14,7 +14,7 @@
 
 ## 🎯 Visão Geral
 
-O sistema de scraping do LeilãoMax é modular e extensível:
+O sistema de scraping do YbyBid é modular e extensível:
 
 - **Classe Base**: `BaseScraper` - Fornece métodos utilitários
 - **Scrapers Específicos**: Um para cada leiloeiro

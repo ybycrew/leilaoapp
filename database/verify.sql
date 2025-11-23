@@ -1,5 +1,5 @@
 -- ============================================
--- VERIFICAÇÃO DE INTEGRIDADE - LEILAOMAX
+-- VERIFICAÇÃO DE INTEGRIDADE - YBYBID
 -- Script para verificar se o banco foi instalado corretamente
 -- ============================================
 

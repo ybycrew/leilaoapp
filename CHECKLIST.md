@@ -1,4 +1,4 @@
-# ✅ Checklist de Implementação - LeilãoMax
+# ✅ Checklist de Implementação - YbyBid
 
 ## 🔧 Setup Inicial
 

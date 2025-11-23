@@ -1,6 +1,6 @@
-# 📦 Database SQL - LeilãoMax
+# 📦 Database SQL - YbyBid
 
-Este diretório contém todos os arquivos SQL necessários para configurar e operar o banco de dados do projeto LeilãoMax.
+Este diretório contém todos os arquivos SQL necessários para configurar e operar o banco de dados do projeto YbyBid.
 
 ## 📁 Estrutura de Arquivos
 

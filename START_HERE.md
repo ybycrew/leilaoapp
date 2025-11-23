@@ -1,4 +1,4 @@
-# ✅ LeilãoMax - Projeto Criado com Sucesso!
+# ✅ YbyBid - Projeto Criado com Sucesso!
 
 ## 📁 Localização
 `C:\Users\lucas\projetos\leilaoapp`

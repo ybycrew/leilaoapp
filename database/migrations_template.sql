@@ -1,5 +1,5 @@
 -- ============================================
--- MIGRATIONS TEMPLATE - LEILAOMAX
+-- MIGRATIONS TEMPLATE - YBYBID
 -- Templates e exemplos de migrations para o banco
 -- ============================================
 
@@ -15,7 +15,7 @@
 
 -- Migration: adicionar coluna vehicle_condition
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 -- Descrição: Adicionar campo para condição detalhada do veículo
 
 BEGIN;
@@ -47,7 +47,7 @@ COMMIT;
 
 -- Migration: criar tabela de avaliações de usuários
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 -- Descrição: Permitir usuários avaliarem leiloeiros
 
 BEGIN;
@@ -105,7 +105,7 @@ COMMIT;
 
 -- Migration: aumentar tamanho do campo description
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -127,7 +127,7 @@ COMMIT;
 
 -- Migration: adicionar função para calcular média de avaliações
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -168,7 +168,7 @@ COMMIT;
 
 -- Migration: otimizar busca por marca e modelo
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -191,7 +191,7 @@ COMMIT;
 
 -- Migration: normalizar nomes de marcas
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -225,7 +225,7 @@ COMMIT;
 
 -- Migration: remover coluna não utilizada
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 -- ATENÇÃO: Esta operação é irreversível!
 
 BEGIN;
@@ -246,7 +246,7 @@ COMMIT;
 
 -- Migration: renomear coluna para melhor clareza
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -268,7 +268,7 @@ COMMIT;
 
 -- Migration: adicionar validação de dados
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -294,7 +294,7 @@ COMMIT;
 
 -- Migration: criar view para relatórios
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -334,7 +334,7 @@ COMMIT;
 
 -- Migration: trigger para log de alterações
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -392,7 +392,7 @@ COMMIT;
 
 -- Migration: otimizações de performance
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -419,7 +419,7 @@ COMMIT;
 
 -- Rollback: reverter adição de coluna vehicle_condition
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 
@@ -439,7 +439,7 @@ COMMIT;
 
 -- Migration: melhorar função search_vehicles
 -- Data: 2025-10-10
--- Autor: Equipe LeilaoMax
+-- Autor: Equipe YbyBid
 
 BEGIN;
 

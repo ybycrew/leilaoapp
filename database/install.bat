@@ -1,6 +1,6 @@
 @echo off
 REM ============================================
-REM SCRIPT DE INSTALACAO AUTOMATICA - LEILAOMAX
+REM SCRIPT DE INSTALACAO AUTOMATICA - YBYBID
 REM Execute este script para instalar o banco completo (Windows)
 REM ============================================
 
@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ========================================
-echo    LeilaoMax - Instalacao do Banco    
+echo    YbyBid - Instalacao do Banco    
 echo ========================================
 echo.
 
@@ -218,7 +218,7 @@ REM Salvar informacoes em arquivo (opcional)
 set /p SAVE_ENV="Salvar configuracao em .env.local? [s/N]: "
 if /i "!SAVE_ENV!"=="s" (
     (
-        echo # LeilaoMax - Database Configuration
+        echo # YbyBid - Database Configuration
         echo # Gerado em: %date% %time%
         echo.
         echo DATABASE_URL="postgresql://!DB_USER!:!DB_PASSWORD!@!DB_HOST!:!DB_PORT!/!DB_NAME!"
@@ -234,7 +234,7 @@ if /i "!SAVE_ENV!"=="s" (
         echo.
         echo # SendGrid/Resend
         echo SENDGRID_API_KEY=""
-        echo EMAIL_FROM="noreply@leilaomax.com"
+        echo EMAIL_FROM="noreply@ybybid.com"
         echo.
         echo # Cron Job Secret
         echo CRON_SECRET=""
@@ -259,7 +259,7 @@ if /i "!OPEN_README!"=="s" (
 )
 
 echo.
-echo Obrigado por usar LeilaoMax!
+echo Obrigado por usar YbyBid!
 echo.
 pause
 

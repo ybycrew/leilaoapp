@@ -11,7 +11,7 @@ export default function BuscarPage() {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold">LeilãoMax</h1>
+            <h1 className="text-xl font-bold">YbyBid</h1>
             <div className="flex-1 max-w-2xl">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />

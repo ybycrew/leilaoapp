@@ -1,5 +1,5 @@
 -- ============================================
--- EXEMPLOS DE USO - LEILAOMAX
+-- EXEMPLOS DE USO - YBYBID
 -- Queries de exemplo para cada funcionalidade
 -- ============================================
 

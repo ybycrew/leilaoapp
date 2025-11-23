@@ -1,8 +1,8 @@
-# 📋 Resumo Executivo - SQL do LeilãoMax
+# 📋 Resumo Executivo - SQL do YbyBid
 
 ## 🎯 Visão Geral
 
-Este documento lista **TODOS** os SQL necessários para criar e operar o banco de dados do projeto LeilãoMax - Plataforma de Agregação de Leilões de Veículos.
+Este documento lista **TODOS** os SQL necessários para criar e operar o banco de dados do projeto YbyBid - Plataforma de Agregação de Leilões de Veículos.
 
 ---
 

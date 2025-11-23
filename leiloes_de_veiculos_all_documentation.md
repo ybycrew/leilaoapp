@@ -5,7 +5,7 @@
 
 ## 📝 Descrição do Projeto
 
-**Nome do Projeto:** LeilãoMax (ou o nome que você preferir)
+**Nome do Projeto:** YbyBid
 
 **Descrição Resumida:**
 Uma plataforma web que agrega leilões de veículos de todos os leiloeiros do Brasil em um único lugar, permitindo que usuários filtrem, comparem preços com a tabela FIPE e identifiquem os melhores negócios através de um sistema inteligente de pontuação.
@@ -23,7 +23,7 @@ Atualmente, pessoas interessadas em comprar veículos em leilões precisam:
 - Perdem oportunidades por não acompanhar todos os leiloeiros
 
 ### **A Solução**
-O LeilãoMax é um agregador inteligente que:
+O YbyBid é um agregador inteligente que:
 - **Centraliza** todos os leilões de veículos do Brasil em uma única plataforma
 - **Automatiza** a coleta de dados através de web scraping de todos os sites de leiloeiros
 - **Filtra** veículos com precisão usando mais de 12 critérios diferentes
