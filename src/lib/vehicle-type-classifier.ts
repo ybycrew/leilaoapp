@@ -32,16 +32,26 @@ function extractTypeFromTitle(title: string): { type: VehicleType | null; confid
   // Palavras-chave para motos
   const motoKeywords = [
     'moto', 'motocicleta', 'motociclismo', 'motoneta', 'scooter',
-    'cb', 'cg', 'xre', 'xtz', 'fazer', 'mt', 'crosser', 'biz',
-    'hornet', 'cbr', 'twister', 'factor', 'titan', 'pop', 'bro'
+    'cb 300', 'cb 250', 'cb 500', 'cb 600', 'cb 1000',
+    'cg 125', 'cg 150', 'cg 160',
+    'titan 125', 'titan 150', 'titan 160', // Titan com cilindrada para não confundir com Ford Titanium
+    'fan 125', 'fan 150', 'fan 160',
+    'xre', 'xtz', 'fazer', 'mt-03', 'mt-07', 'mt-09', 'crosser', 'biz',
+    'hornet', 'cbr', 'twister', 'factor', 'pop', 'bros', 'pcx', 'nmax', 'neo'
   ];
 
   // Palavras-chave para caminhões
+  // REMOVIDO marcas que fabricam carros também (Mercedes, Volvo) para evitar falsos positivos
   const caminhaoKeywords = [
     'caminhão', 'caminhao', 'truck', 'ônibus', 'onibus', 'bus',
-    'carreta', 'bitrem', 'rodotrem', 'cavalo', 'toco', 'truck',
-    'mercedes', 'scania', 'volvo', 'iveco', 'ranger', 'military',
-    'militar', 'força', 'forca', 'exército', 'exercito'
+    'carreta', 'bitrem', 'rodotrem', 'cavalo mecânico', 'cavalo mecanico', 'toco',
+    'scania', 'iveco', 'daf', 'man', 'agrale', // Marcas que só/quase só fazem caminhões no BR
+    'accelo', 'atego', 'axor', 'actros', // Modelos Mercedes caminhão
+    'fh', 'fm', 'vm', // Modelos Volvo caminhão
+    'cargo', 'constellation', 'delivery', 'worker', // Modelos VW/Ford caminhão
+    'stralis', 'tector', 'eurocargo', // Modelos Iveco
+    'ranger militar', 'viatura militar', // Ranger específico
+    'militar', 'exército', 'exercito'
   ];
 
   // Palavras-chave para vans

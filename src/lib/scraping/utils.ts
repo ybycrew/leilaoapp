@@ -52,22 +52,53 @@ export function validateVehicleTypeByModel(
   const typeLower = type.toLowerCase();
 
   // Casos especiais conhecidos
-  // Uno → sempre carro (não caminhão)
-  if (modelLower.includes('uno') && typeLower !== 'carro') {
-    return {
-      valid: false,
-      suggestedType: 'carro',
-      reason: 'Uno é sempre um carro, não caminhão'
-    };
+  
+  // Carros populares que NUNCA são caminhões/motos
+  const commonCars = [
+    'uno', 'palio', 'gol', 'fox', 'celta', 'corsa', 'onix', 'prisma', 'hb20', 
+    'ka', 'fiesta', 'focus', 'ecosport', 'fit', 'civic', 'crv', 'hrv', 'wrv',
+    'corolla', 'etios', 'yaris', 'sandero', 'logan', 'duster', 'kwid',
+    'argo', 'cronos', 'mobi', 'pulse', 'toro', 'renegade', 'compass',
+    'polo', 'virtus', 'voyage', 'saveiro', 'nivus', 't-cross', 'jetta',
+    'bravo', 'punto', 'siena', 'idea', 'linea', 'doblo',
+    'cruze', 'tracker', 'spin', 'cobalt', 'sonic', 'agile', 'montana',
+    '208', '2008', '3008', 'c3', 'c4', 'cactus',
+    'i30', 'ix35', 'tucson', 'creta', 'hb20s', 'hb20x',
+    'kicks', 'versa', 'march', 'sentra'
+  ];
+
+  if (commonCars.some(car => modelLower.includes(car))) {
+    // Exceção: "Uno" pode dar match em "Nuno" (raro), mas "Uno" é seguro.
+    // "Ka" é perigoso? "Kawasaki"? Não, Kawasaki é marca.
+    if (typeLower !== 'carro') {
+      return {
+        valid: false,
+        suggestedType: 'carro',
+        reason: `Modelo '${modelLower}' é um carro conhecido`
+      };
+    }
   }
 
-  // Palio → sempre carro
-  if (modelLower.includes('palio') && typeLower !== 'carro') {
-    return {
-      valid: false,
-      suggestedType: 'carro',
-      reason: 'Palio é sempre um carro'
-    };
+  // Marcas de luxo que são primariamente carros (no contexto de leilão comum)
+  // A menos que o modelo seja explicitamente de caminhão
+  const luxuryCarBrands = ['mercedes', 'bmw', 'audi', 'volvo', 'porsche', 'land rover', 'jaguar', 'mini'];
+  
+  if (luxuryCarBrands.some(b => brandLower.includes(b))) {
+    // Lista de modelos de caminhão dessas marcas para excluir da regra
+    const truckModels = [
+      'accelo', 'atego', 'axor', 'actros', 'sprinter', // Mercedes
+      'fh', 'fm', 'fmx', 'vm', // Volvo
+    ];
+    
+    const isTruckModel = truckModels.some(m => modelLower.includes(m));
+    
+    if (!isTruckModel && typeLower !== 'carro' && typeLower !== 'van') {
+       return {
+        valid: false,
+        suggestedType: 'carro',
+        reason: `Marca '${brand}' geralmente fabrica carros (modelo não identificado como caminhão)`
+      };
+    }
   }
 
   // CB, CG, XRE → sempre moto (Honda)
