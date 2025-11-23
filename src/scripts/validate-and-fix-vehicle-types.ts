@@ -75,32 +75,68 @@ async function validateAndFixVehicleTypes() {
   };
 
   try {
-    // Buscar todos os veículos ativos
+    // Buscar todos os veículos ativos usando paginação para não ter limite
     console.log('📊 Buscando veículos do banco de dados...');
-    const { data: vehicles, error } = await supabase
+    
+    // Primeiro, contar o total de veículos
+    const { count: totalCount, error: countError } = await supabase
       .from('vehicles')
-      .select('id, title, brand, model, vehicle_type, year_manufacture, mileage, current_bid')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
 
-    if (error) {
-      throw new Error(`Erro ao buscar veículos: ${error.message}`);
+    if (countError) {
+      throw new Error(`Erro ao contar veículos: ${countError.message}`);
     }
 
-    if (!vehicles || vehicles.length === 0) {
+    if (!totalCount || totalCount === 0) {
       console.log('❌ Nenhum veículo encontrado no banco de dados');
       return;
     }
 
+    console.log(`📊 Total de veículos encontrados: ${totalCount}`);
+    
+    // Buscar todos os veículos usando paginação
+    let allVehicles: any[] = [];
+    const pageSize = 1000;
+    let currentPage = 0;
+    
+    while (true) {
+      console.log(`📥 Buscando página ${currentPage + 1} (${currentPage * pageSize + 1}-${Math.min((currentPage + 1) * pageSize, totalCount)} de ${totalCount})`);
+      
+      const { data: pageVehicles, error: pageError } = await supabase
+        .from('vehicles')
+        .select('id, title, brand, model, vehicle_type, year_manufacture, mileage, current_bid')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .range(currentPage * pageSize, (currentPage + 1) * pageSize - 1);
+
+      if (pageError) {
+        throw new Error(`Erro ao buscar página ${currentPage + 1}: ${pageError.message}`);
+      }
+
+      if (!pageVehicles || pageVehicles.length === 0) {
+        break;
+      }
+
+      allVehicles.push(...pageVehicles);
+      
+      if (pageVehicles.length < pageSize) {
+        break; // Última página
+      }
+      
+      currentPage++;
+    }
+
+    const vehicles = allVehicles;
     stats.total = vehicles.length;
-    console.log(`✅ Encontrados ${stats.total} veículos para analisar\n`);
+    console.log(`✅ Carregados ${stats.total} veículos para análise\n`);
 
     // Processar cada veículo
     for (let i = 0; i < vehicles.length; i++) {
       const vehicle = vehicles[i];
       const progress = Math.round((i / vehicles.length) * 100);
       
-      if (i % 100 === 0) {
+      if (i % 500 === 0) {
         console.log(`📈 Progresso: ${progress}% (${i}/${vehicles.length})`);
       }
 
@@ -195,6 +231,14 @@ async function validateAndFixVehicleTypes() {
           }
         } else if (needsUpdate && isDryRun) {
           stats.corrected++; // Contar como corrigido no dry-run
+        }
+
+        // Log de progresso mais detalhado a cada 1000 veículos
+        if ((i + 1) % 1000 === 0) {
+          console.log(`🔄 Processados ${i + 1}/${vehicles.length} veículos`);
+          console.log(`   📊 Correções até agora: ${stats.corrected}`);
+          console.log(`   ⚠️  Erros de validação: ${stats.validationErrors}`);
+          console.log(`   ❌ Erros de classificação: ${stats.classificationErrors}`);
         }
 
       } catch (error) {
