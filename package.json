@@ -13,6 +13,8 @@
     "generate-types:linked": "supabase gen types typescript --linked --schema public > src/types/database.types.ts",
     "analyze-types": "tsx src/scripts/analyze-vehicle-types.ts",
     "fix-types": "tsx src/scripts/fix-all-vehicle-types.ts",
+    "validate-fix-types": "tsx src/scripts/validate-and-fix-vehicle-types.ts",
+    "validate-fix-types:dry": "tsx src/scripts/validate-and-fix-vehicle-types.ts --dry-run",
     "fix-types:dry": "tsx src/scripts/fix-all-vehicle-types.ts --dry-run"
   },
   "dependencies": {

@@ -42,7 +42,7 @@ interface FixStats {
   }>;
 }
 
-// Usar função centralizada de normalização
+// Usar função centralizada de normalização (formato Supabase)
 const normalizeTypeForDB = normalizeVehicleTypeForDB;
 
 async function fixAllVehicleTypes() {

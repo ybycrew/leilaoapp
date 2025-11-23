@@ -1,5 +1,7 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
+import { classifyVehicleType } from '../../vehicle-type-classifier';
+import { normalizeVehicleTypeForDB } from '../utils';
 
 /**
  * Superbid Real Scraper
@@ -330,30 +332,51 @@ export class SuperbidRealScraper extends BaseScraper {
             const paragraphs = Array.from(card.querySelectorAll('p')).map(p => p.textContent?.trim()).filter(Boolean);
             const fullText = card.textContent || '';
             
-            // Filtrar peças e ferramentas MRO (Partes e Peças)
+            // Filtrar peças e ferramentas MRO (Partes e Peças) - EXPANDIDO
             const fullTextLower = fullText.toLowerCase();
             if (fullTextLower.includes('apl.: mro automotivo') || 
                 fullTextLower.includes('apl.: mro') ||
                 fullTextLower.includes('peso unit.:') ||
                 fullTextLower.includes('peso unit.') ||
+                fullTextLower.includes('peso unitário') ||
+                fullTextLower.includes('peso unitario') ||
+                fullTextLower.includes('unidade de medida:') ||
+                fullTextLower.includes('qtd. disponível:') ||
+                fullTextLower.includes('qtd. disponivel:') ||
+                fullTextLower.includes('dimensões:') ||
+                fullTextLower.includes('dimensoes:') ||
+                fullTextLower.includes('material:') ||
+                fullTextLower.includes('fabricante:') ||
+                fullTextLower.includes('código do produto:') ||
+                fullTextLower.includes('codigo do produto:') ||
                 titleLower.includes('apl.: mro') ||
-                titleLower.includes('peso unit.:')) {
+                titleLower.includes('peso unit.:') ||
+                titleLower.includes('peso unitário') ||
+                titleLower.includes('peso unitario')) {
               return; // Pular este card (é peça/ferramenta, não veículo)
             }
             
-            // Filtrar códigos de referência típicos de peças (Ref.: XXXXX onde XXXXX são números)
-            // NÃO filtrar códigos de referência de leilão (Ref.: MJ, Ref.: MG, etc. - letras apenas)
+            // Filtrar códigos de referência típicos de peças (MELHORADO)
             // Peças têm códigos numéricos como (Ref.: 5160905), leilões têm códigos alfanuméricos como (Ref.: MJ)
             const refMatch = title.match(/\(ref\.?:\s*([^)]+)\)/i) || fullText.match(/\(ref\.?:\s*([^)]+)\)/i);
             if (refMatch && refMatch[1]) {
               const refCode = refMatch[1].trim();
-              // Se o código de referência contém apenas números (ou números e poucas letras no início), é provavelmente peça
-              // Se contém apenas letras maiúsculas (1-3 letras), é provavelmente código de leilão (válido)
-              if (/^\d{4,}/.test(refCode) || /^\d+/.test(refCode)) {
-                // Código numérico longo = provavelmente peça (ex: Ref.: 5160905)
-                return; // Pular este card (é peça com código de referência numérico)
+              // Padrões que indicam peças:
+              // - Códigos puramente numéricos longos (4+ dígitos)
+              // - Códigos alfanuméricos com muitos números
+              // - Códigos que começam com letras seguidas de muitos números
+              if (/^\d{4,}$/.test(refCode) || // Ex: 5160905
+                  /^[A-Z]{1,3}\d{4,}$/.test(refCode) || // Ex: ABC12345
+                  /^\d+[A-Z]*\d+$/.test(refCode) || // Ex: 123ABC456
+                  /^[A-Z]+\d{6,}$/.test(refCode)) { // Ex: REF123456
+                return; // Pular este card (é peça com código de referência de peça)
               }
-              // Códigos como (Ref.: MJ), (Ref.: MG) são códigos de leilão válidos, não filtrar
+              // Códigos como (Ref.: MJ), (Ref.: MG), (Ref.: SP123) são códigos de leilão válidos
+            }
+            
+            // Filtrar por padrões específicos de peças no título
+            if (/^(coxim|acoplamento|difusor|bucha|flexivel|tirante|parafuso|rolamento|anel|retentor|luva|tampa|pino|suporte|ponteira|cubo|braco|alca|mola|patim|dobradica)\b/i.test(title)) {
+              return; // Pular este card (título começa com palavra típica de peça)
             }
             
             // Extrair preço - procurar em parágrafos primeiro, depois no texto completo
@@ -488,7 +511,34 @@ export class SuperbidRealScraper extends BaseScraper {
         images.push(rawVehicle.imageUrl);
       }
 
-      const detectedType = this.detectVehicleType(cleanTitle);
+      // Usar classificador multi-camada para determinar tipo correto
+      let finalVehicleType = 'carro';
+      try {
+        const classification = await classifyVehicleType(
+          cleanTitle,
+          brand || null,
+          model || null,
+          null, // fuel_type não disponível no scraping
+          rawVehicle.mileage || null,
+          currentBid || null
+        );
+        
+        if (classification.confidence >= 70) {
+          finalVehicleType = classification.type;
+          console.log(`[${this.auctioneerName}] Tipo classificado (confiança ${classification.confidence}%): ${finalVehicleType} - ${classification.reasons.join('; ')}`);
+        } else {
+          // Se confiança baixa, usar detecção simples como fallback
+          const simpleDetection = this.detectVehicleType(cleanTitle);
+          finalVehicleType = normalizeVehicleTypeForDB(simpleDetection);
+          console.log(`[${this.auctioneerName}] Baixa confiança na classificação (${classification.confidence}%), usando detecção simples: ${finalVehicleType}`);
+        }
+      } catch (error) {
+        console.error(`[${this.auctioneerName}] Erro na classificação multi-camada:`, error);
+        const simpleDetection = this.detectVehicleType(cleanTitle);
+        finalVehicleType = normalizeVehicleTypeForDB(simpleDetection);
+        console.log(`[${this.auctioneerName}] Usando detecção simples como fallback: ${finalVehicleType}`);
+      }
+
       const vehicle: VehicleData = {
         external_id: externalId,
         title: cleanTitle,
@@ -496,7 +546,7 @@ export class SuperbidRealScraper extends BaseScraper {
         model: model || 'Desconhecido',
         year_manufacture: year || undefined,
         year_model: year || undefined,
-        vehicle_type: detectedType,
+        vehicle_type: finalVehicleType,
         color: color || undefined,
         mileage: rawVehicle.mileage || undefined,
         state: 'SP',
@@ -762,20 +812,20 @@ export class SuperbidRealScraper extends BaseScraper {
   private detectVehicleType(title: string): string {
     if (!title || typeof title !== 'string') {
       console.warn('[Superbid] detectVehicleType: título inválido ou vazio');
-      return 'Carro';
+      return 'carro';
     }
     
     const titleLower = title.toLowerCase();
-    let detectedType = 'Carro';
+    let detectedType = 'carro';
     
     if (titleLower.includes('moto') || titleLower.includes('motocicleta') || titleLower.includes('bike')) {
-      detectedType = 'Moto';
+      detectedType = 'moto';
     } else if (titleLower.includes('caminhão') || titleLower.includes('caminhao') || titleLower.includes('truck')) {
-      detectedType = 'Caminhão';
+      detectedType = 'caminhao';
     } else if (titleLower.includes('ônibus') || titleLower.includes('onibus') || titleLower.includes('bus')) {
-      detectedType = 'Ônibus';
+      detectedType = 'caminhao'; // Ônibus vira caminhão
     } else if (titleLower.includes('van') || titleLower.includes('furgão') || titleLower.includes('furgao')) {
-      detectedType = 'Van';
+      detectedType = 'van';
     }
     
     console.log(`[Superbid] Tipo detectado para "${title}": ${detectedType}`);
@@ -822,12 +872,18 @@ export class SuperbidRealScraper extends BaseScraper {
       // Códigos como (Ref.: MJ), (Ref.: MG) são códigos de leilão válidos, não filtrar
     }
     
-    // Palavras-chave específicas de peças automotivas
+    // Palavras-chave específicas de peças automotivas (EXPANDIDO)
     const partKeywords = [
       'coxim', 'acoplamento', 'difusor', 'bucha', 'flexivel', 'tirante',
       'parafuso', 'rolamento', 'anel', 'retentor', 'luva', 'tampa',
       'pino', 'suporte', 'ponteira', 'cubo', 'braco', 'alca', 'mola',
-      'patim', 'dobradica', 'ref.:', 'peso unit', 'mro automotivo'
+      'patim', 'dobradica', 'ref.:', 'peso unit', 'mro automotivo',
+      'filtro', 'vela', 'correia', 'tensor', 'amortecedor', 'pastilha',
+      'disco de freio', 'cabo', 'mangueira', 'junta', 'vedacao',
+      'engrenagem', 'corrente', 'polia', 'radiador', 'condensador',
+      'compressor', 'alternador', 'motor de partida', 'bobina',
+      'sensor', 'valvula', 'bico injetor', 'bomba', 'reservatorio',
+      'chicote', 'fio', 'terminal', 'conector', 'rele', 'fusivel'
     ];
     
     // Verificar se o título começa com palavra-chave de peça (indica que é peça, não veículo)
@@ -851,6 +907,16 @@ export class SuperbidRealScraper extends BaseScraper {
       'peças',
       'ferramentas',
       'equipamentos',
+      'conjunto de',
+      'kit de',
+      'lote de peças',
+      'sobressalentes',
+      'componentes',
+      'acessórios automotivos',
+      'peças de reposição',
+      'material rodante',
+      'sucata',
+      'ferro velho'
     ];
     
     // Filtrar "LOTE X LINHA DE PRODUÇÃO" - sempre filtrar (independente do contexto)

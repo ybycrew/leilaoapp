@@ -7,30 +7,30 @@ import { calculateDealScore } from '../scoring';
 export { calculateDealScore };
 
 /**
- * Normaliza tipo de veículo para formato do banco de dados
- * Garante formato consistente: "Carro", "Moto", "Caminhão", "Van"
+ * Normaliza tipo de veículo para formato do banco de dados Supabase
+ * Garante formato consistente: 'carro', 'moto', 'caminhao', 'van', 'outros'
  */
 export function normalizeVehicleTypeForDB(type: string | null | undefined): string {
-  if (!type) return 'Carro';
+  if (!type) return 'carro';
   
   const normalized = type.toLowerCase().trim();
   
   // Normalizar variações
   if (normalized === 'carro' || normalized === 'carros' || normalized === 'car') {
-    return 'Carro';
+    return 'carro';
   }
   if (normalized === 'moto' || normalized === 'motos' || normalized === 'motocicleta' || normalized === 'motociclismo') {
-    return 'Moto';
+    return 'moto';
   }
-  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'caminhoes' || normalized === 'caminhões' || normalized === 'truck') {
-    return 'Caminhão';
+  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'caminhoes' || normalized === 'caminhões' || normalized === 'truck' || normalized === 'onibus' || normalized === 'ônibus') {
+    return 'caminhao';
   }
-  if (normalized === 'van' || normalized === 'minivan') {
-    return 'Van';
+  if (normalized === 'van' || normalized === 'minivan' || normalized === 'furgao' || normalized === 'furgão') {
+    return 'van';
   }
   
   // Fallback para carro
-  return 'Carro';
+  return 'carro';
 }
 
 /**
@@ -56,7 +56,7 @@ export function validateVehicleTypeByModel(
   if (modelLower.includes('uno') && typeLower !== 'carro') {
     return {
       valid: false,
-      suggestedType: 'Carro',
+      suggestedType: 'carro',
       reason: 'Uno é sempre um carro, não caminhão'
     };
   }
@@ -65,7 +65,7 @@ export function validateVehicleTypeByModel(
   if (modelLower.includes('palio') && typeLower !== 'carro') {
     return {
       valid: false,
-      suggestedType: 'Carro',
+      suggestedType: 'carro',
       reason: 'Palio é sempre um carro'
     };
   }
@@ -75,7 +75,7 @@ export function validateVehicleTypeByModel(
     if ((modelLower.includes('cb') || modelLower.includes('cg') || modelLower.includes('xre')) && typeLower !== 'moto') {
       return {
         valid: false,
-        suggestedType: 'Moto',
+        suggestedType: 'moto',
         reason: 'Honda CB/CG/XRE são motos'
       };
     }
@@ -83,7 +83,7 @@ export function validateVehicleTypeByModel(
     if ((modelLower.includes('civic') || modelLower.includes('fit') || modelLower.includes('crv')) && typeLower !== 'carro') {
       return {
         valid: false,
-        suggestedType: 'Carro',
+        suggestedType: 'carro',
         reason: 'Honda Civic/Fit/CRV são carros'
       };
     }
@@ -94,24 +94,45 @@ export function validateVehicleTypeByModel(
     if ((modelLower.includes('xtz') || modelLower.includes('fazer') || modelLower.includes('mt')) && typeLower !== 'moto') {
       return {
         valid: false,
-        suggestedType: 'Moto',
+        suggestedType: 'moto',
         reason: 'Yamaha XTZ/Fazer/MT são motos'
       };
     }
   }
 
-  // Ranger → pode ser caminhão (militar) ou SUV
+  // Ranger → caminhonete permanece como carro (não caminhão)
+  // Apenas se for militar específico vira caminhão
   if (brandLower.includes('ford') && modelLower.includes('ranger')) {
     // Se título menciona "ranger" como caminhão militar, pode ser caminhão
-    if (titleLower.includes('militar') || titleLower.includes('exército') || titleLower.includes('exercito')) {
-      if (typeLower !== 'caminhao' && typeLower !== 'caminhão') {
+    if (titleLower.includes('militar') || titleLower.includes('exército') || titleLower.includes('exercito') || titleLower.includes('força')) {
+      if (typeLower !== 'caminhao') {
         return {
           valid: false,
-          suggestedType: 'Caminhão',
+          suggestedType: 'caminhao',
           reason: 'Ford Ranger militar é caminhão'
         };
       }
+    } else {
+      // Ranger civil é carro (caminhonete)
+      if (typeLower !== 'carro') {
+        return {
+          valid: false,
+          suggestedType: 'carro',
+          reason: 'Ford Ranger civil é caminhonete (carro)'
+        };
+      }
     }
+  }
+
+  // S10, Hilux, Amarok → caminhonetes são carros
+  if ((modelLower.includes('s10') || modelLower.includes('hilux') || modelLower.includes('amarok') || 
+       modelLower.includes('l200') || modelLower.includes('frontier') || modelLower.includes('saveiro')) && 
+      typeLower !== 'carro') {
+    return {
+      valid: false,
+      suggestedType: 'carro',
+      reason: 'Caminhonetes são classificadas como carros'
+    };
   }
 
   return { valid: true };
