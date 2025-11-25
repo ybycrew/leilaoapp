@@ -1388,7 +1388,26 @@ export async function findVehicleTypeInFipe(
       buildSearchKey(modelBase.baseNameUpper)
     ];
 
-    for (const brandRecord of allBrands) {
+    // Ordenar marcas: priorizar carros, depois motos, depois caminhões
+    // Isso garante que modelos conhecidos como carros sejam encontrados primeiro
+    const typePriority: Record<string, number> = {
+      'carros': 1,
+      'motos': 2,
+      'caminhoes': 3
+    };
+
+    // Mapear tipos de todas as marcas primeiro
+    const brandsWithTypes = await Promise.all(
+      allBrands.map(async (brand) => {
+        const type = await mapVehicleTypeIdToSlug(brand.vehicle_type_id);
+        return { brand, type, priority: type ? (typePriority[type] || 99) : 99 };
+      })
+    );
+
+    // Ordenar por prioridade
+    brandsWithTypes.sort((a, b) => a.priority - b.priority);
+
+    for (const { brand: brandRecord } of brandsWithTypes) {
       try {
         // Buscar modelo nesta marca
         const modelRecord = await findModelRecord(brandRecord.id, modelSearchKeys);
