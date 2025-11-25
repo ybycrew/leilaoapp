@@ -3,17 +3,19 @@
 /**
  * Script Integrado de Validação e Correção de Tipos de Veículos
  * 
- * Executa validação completa e correção automática de tipos de veículos:
- * 1. Analisa classificações atuais
- * 2. Identifica problemas usando classificador multi-camada
- * 3. Corrige tipos com confiança >= 70%
- * 4. Valida por modelos conhecidos
- * 5. Gera relatório completo
+ * Executa validação completa e correção automática de tipos de veículos usando:
+ * 1. PRIORIDADE 1: Lookup direto FIPE (mais confiável - usa vehicle_type_id em fipe_models)
+ * 2. PRIORIDADE 2: Validação por modelo conhecido
+ * 3. PRIORIDADE 3: Classificação multi-camada (fallback)
+ * 
+ * Resolve problemas de classificação incorreta, especialmente para marcas duais
+ * (Honda, Suzuki, Volvo) que fabricam carros e motos.
  */
 
 import { createClient } from '@supabase/supabase-js';
 import { classifyVehicleType } from '../lib/vehicle-type-classifier';
 import { normalizeVehicleTypeForDB, validateVehicleTypeByModel } from '../lib/scraping/utils';
+import { findVehicleTypeInFipe, mapFipeTypeToVehicleType } from '../lib/vehicle-normalization';
 import { Database } from '@/types/database.types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -34,6 +36,7 @@ interface ValidationStats {
   total: number;
   analyzed: number;
   corrected: number;
+  fipeCorrections: number;
   validationErrors: number;
   classificationErrors: number;
   corrections: Array<{
@@ -68,6 +71,7 @@ async function validateAndFixVehicleTypes() {
     total: 0,
     analyzed: 0,
     corrected: 0,
+    fipeCorrections: 0,
     validationErrors: 0,
     classificationErrors: 0,
     corrections: [],
@@ -148,37 +152,83 @@ async function validateAndFixVehicleTypes() {
         let correctionSource = '';
         let confidence = 0;
         let reasons: string[] = [];
+        const currentType = vehicle.vehicle_type || 'carro';
 
-        // Etapa 1: Validação por modelo conhecido
-        const modelValidation = validateVehicleTypeByModel(
-          vehicle.vehicle_type || 'carro',
-          vehicle.brand,
-          vehicle.model,
-          vehicle.title
-        );
+        // ============================================
+        // PRIORIDADE 1: Lookup direto FIPE (mais confiável)
+        // ============================================
+        if (vehicle.brand || vehicle.model) {
+          try {
+            const fipeResult = await findVehicleTypeInFipe(
+              vehicle.brand,
+              vehicle.model
+            );
 
-        if (!modelValidation.valid && modelValidation.suggestedType) {
-          newType = normalizeVehicleTypeForDB(modelValidation.suggestedType);
-          needsUpdate = true;
-          correctionReason = modelValidation.reason || 'Validação por modelo';
-          correctionSource = 'model_validation';
-          confidence = 95;
-          reasons = [correctionReason];
+            if (fipeResult.isValid && fipeResult.type) {
+              const fipeVehicleType = mapFipeTypeToVehicleType(fipeResult.type);
+              const normalizedFipeType = normalizeVehicleTypeForDB(fipeVehicleType);
 
-          stats.validationFixes.push({
-            id: vehicle.id,
-            title: vehicle.title || '',
-            brand: vehicle.brand || '',
-            model: vehicle.model || '',
-            oldType: vehicle.vehicle_type || 'carro',
-            newType: newType,
-            reason: correctionReason
-          });
+              if (normalizedFipeType !== currentType) {
+                newType = normalizedFipeType;
+                needsUpdate = true;
+                correctionReason = `FIPE: ${fipeResult.type} (lookup direto por modelo)`;
+                correctionSource = 'fipe_direct_lookup';
+                confidence = 95; // FIPE é fonte de verdade, alta confiança
+                reasons = [correctionReason];
 
-          stats.validationErrors++;
+                stats.corrections.push({
+                  id: vehicle.id,
+                  title: vehicle.title || '',
+                  oldType: currentType,
+                  newType: newType,
+                  confidence: confidence,
+                  source: correctionSource,
+                  reasons: reasons
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`Erro no lookup FIPE do veículo ${vehicle.id}:`, error);
+            // Continua para próximas etapas se FIPE falhar
+          }
         }
 
-        // Etapa 2: Classificação multi-camada (se não foi corrigido por validação)
+        // ============================================
+        // PRIORIDADE 2: Validação por modelo conhecido (se FIPE não encontrou)
+        // ============================================
+        if (!needsUpdate) {
+          const modelValidation = validateVehicleTypeByModel(
+            currentType,
+            vehicle.brand,
+            vehicle.model,
+            vehicle.title
+          );
+
+          if (!modelValidation.valid && modelValidation.suggestedType) {
+            newType = normalizeVehicleTypeForDB(modelValidation.suggestedType);
+            needsUpdate = true;
+            correctionReason = modelValidation.reason || 'Validação por modelo conhecido';
+            correctionSource = 'model_validation';
+            confidence = 90;
+            reasons = [correctionReason];
+
+            stats.validationFixes.push({
+              id: vehicle.id,
+              title: vehicle.title || '',
+              brand: vehicle.brand || '',
+              model: vehicle.model || '',
+              oldType: currentType,
+              newType: newType,
+              reason: correctionReason
+            });
+
+            stats.validationErrors++;
+          }
+        }
+
+        // ============================================
+        // PRIORIDADE 3: Classificação multi-camada (fallback)
+        // ============================================
         if (!needsUpdate) {
           try {
             const classification = await classifyVehicleType(
@@ -191,7 +241,6 @@ async function validateAndFixVehicleTypes() {
             );
 
             const normalizedClassification = normalizeVehicleTypeForDB(classification.type);
-            const currentType = vehicle.vehicle_type || 'carro';
 
             if (classification.confidence >= minConfidence && normalizedClassification !== currentType) {
               newType = normalizedClassification;
@@ -253,9 +302,26 @@ async function validateAndFixVehicleTypes() {
     console.log(`📊 Total de veículos: ${stats.total}`);
     console.log(`🔍 Analisados: ${stats.analyzed}`);
     console.log(`✅ Corrigidos: ${stats.corrected}`);
-    console.log(`⚠️  Erros de validação encontrados: ${stats.validationErrors}`);
-    console.log(`❌ Erros de classificação: ${stats.classificationErrors}`);
+    console.log(`🎯 Correções por FIPE (lookup direto): ${stats.fipeCorrections}`);
+    console.log(`⚠️  Correções por validação de modelo: ${stats.validationErrors}`);
+    console.log(`🤖 Correções por classificação multi-camada: ${stats.classificationErrors}`);
     console.log(`📈 Taxa de correção: ${((stats.corrected / stats.analyzed) * 100).toFixed(1)}%`);
+
+    // Separar correções por FIPE das outras
+    const fipeCorrections = stats.corrections.filter(c => c.source === 'fipe_direct_lookup');
+    const otherCorrections = stats.corrections.filter(c => c.source !== 'fipe_direct_lookup');
+
+    if (fipeCorrections.length > 0) {
+      console.log('\n🎯 CORREÇÕES POR FIPE (LOOKUP DIRETO - MAIS CONFIÁVEL):');
+      fipeCorrections.slice(0, 10).forEach(correction => {
+        console.log(`  • ${correction.title.substring(0, 50)}...`);
+        console.log(`    ${correction.oldType} → ${correction.newType} (${correction.confidence}% - FIPE)`);
+        console.log(`    Razão: ${correction.reasons.join('; ')}`);
+      });
+      if (fipeCorrections.length > 10) {
+        console.log(`    ... e mais ${fipeCorrections.length - 10} correções por FIPE`);
+      }
+    }
 
     if (stats.validationFixes.length > 0) {
       console.log('\n🔧 CORREÇÕES POR VALIDAÇÃO DE MODELO:');
@@ -268,15 +334,15 @@ async function validateAndFixVehicleTypes() {
       }
     }
 
-    if (stats.corrections.length > 0) {
+    if (otherCorrections.length > 0) {
       console.log('\n🤖 CORREÇÕES POR CLASSIFICAÇÃO MULTI-CAMADA:');
-      stats.corrections.slice(0, 10).forEach(correction => {
+      otherCorrections.slice(0, 10).forEach(correction => {
         console.log(`  • ${correction.title.substring(0, 50)}...`);
         console.log(`    ${correction.oldType} → ${correction.newType} (${correction.confidence}% - ${correction.source})`);
         console.log(`    Razões: ${correction.reasons.join('; ')}`);
       });
-      if (stats.corrections.length > 10) {
-        console.log(`    ... e mais ${stats.corrections.length - 10} correções`);
+      if (otherCorrections.length > 10) {
+        console.log(`    ... e mais ${otherCorrections.length - 10} correções`);
       }
     }
 
