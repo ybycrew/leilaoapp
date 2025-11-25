@@ -1298,6 +1298,31 @@ export async function findVehicleTypeInFipe(
       // Se tem modelo, tentar validar no tipo da marca
       if (trimmedModel) {
         try {
+          // Primeiro, buscar o modelo diretamente para obter seu vehicle_type_id
+          const modelBase = extractModelBase(trimmedModel);
+          const modelSearchKeys = [
+            modelBase.baseSearchName,
+            buildSearchKey(trimmedModel),
+            buildSearchKey(modelBase.baseNameUpper)
+          ];
+          
+          const modelRecord = await findModelRecord(brandRecord.id, modelSearchKeys);
+          
+          if (modelRecord && modelRecord.vehicle_type_id) {
+            // Modelo encontrado! Usar o tipo do modelo, não da marca
+            const modelVehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id);
+            
+            if (modelVehicleTypeSlug) {
+              return {
+                type: modelVehicleTypeSlug,
+                normalizedBrand: brandRecord.name_upper,
+                normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
+                isValid: true,
+              };
+            }
+          }
+          
+          // Se não encontrou modelo, tentar validar no tipo da marca (fallback)
           const modelValidation = await validateAndNormalizeModel(
             brandRecord.name_upper,
             trimmedModel,
