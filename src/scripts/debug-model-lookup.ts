@@ -27,6 +27,7 @@ interface TestCase {
 const testCases: TestCase[] = [
   { brand: 'Volvo', model: 'FH', expectedType: 'caminhao' },
   { brand: 'Chevrolet', model: 'S10', expectedType: 'carro' },
+  { brand: 'GM', model: 'S10', expectedType: 'carro' }, // GM também pode ser usado
 ];
 
 async function debugLookup(brand: string, model: string, expectedType: string) {
