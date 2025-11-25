@@ -19,7 +19,8 @@
     "fipe-sync": "tsx src/scripts/fipe-sync.ts",
     "fipe-sync:cars": "tsx src/scripts/fipe-sync.ts --types=carros",
     "fipe-sync:motos": "tsx src/scripts/fipe-sync.ts --types=motos",
-    "fipe-sync:trucks": "tsx src/scripts/fipe-sync.ts --types=caminhoes"
+    "fipe-sync:trucks": "tsx src/scripts/fipe-sync.ts --types=caminhoes",
+    "test-classification": "tsx src/scripts/test-vehicle-classification.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",
