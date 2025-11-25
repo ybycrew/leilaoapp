@@ -1324,13 +1324,7 @@ export async function findVehicleTypeInFipe(
           
           // Se não encontrou modelo nesta marca, tentar busca direta (PRIORIDADE 1)
           // que não depende da marca - pode encontrar o modelo em outra marca do mesmo nome
-          const modelBase = extractModelBase(trimmedModel);
-          const modelSearchKeys = [
-            modelBase.baseSearchName,
-            buildSearchKey(trimmedModel),
-            buildSearchKey(modelBase.baseNameUpper)
-          ];
-          
+          // Reutilizar modelBase e modelSearchKeys já declarados acima
           const directLookup = await findModelByDirectLookup(trimmedModel, modelSearchKeys, trimmedBrand);
           
           if (directLookup) {
