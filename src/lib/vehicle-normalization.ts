@@ -442,6 +442,14 @@ async function findModelByDirectLookup(
           }
         } else {
           // Sem marca fornecida, usar o primeiro match
+          // MAS: se temos marca fornecida mas não encontramos na busca dentro da marca,
+          // NÃO retornar resultado da busca global (pode ser de outra marca)
+          if (brandIds.length > 0) {
+            // Temos marca mas não encontramos na busca dentro da marca
+            // Não retornar falso positivo da busca global
+            continue;
+          }
+          
           const modelRecord = exactMatch[0] as ModelRecord & { brand_id: string };
           const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
           
@@ -493,7 +501,13 @@ async function findModelByDirectLookup(
           }
         }
 
-        // Busca parcial global (se não encontrou na marca ou não temos marca)
+        // Busca parcial global (apenas se não temos marca ou se temos marca mas não encontramos na busca dentro da marca)
+        // MAS: se temos marca mas não encontramos no banco (brandIds vazio), NÃO fazer busca global
+        if (brandName && brandIds.length === 0) {
+          // Temos marca mas não encontramos no banco - não fazer busca global (pode retornar modelo errado)
+          continue;
+        }
+
         const { data: partialMatch, error: partialError } = await client
           .from('fipe_models')
           .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
@@ -551,13 +565,14 @@ async function findModelByDirectLookup(
             return 0;
           });
 
-          // Se temos marca, priorizar matches da marca correta
+          // Se temos marca, APENAS retornar matches da marca correta
           if (brandIds.length > 0 && relevantMatches.length > 0) {
             const matchingInBrand = relevantMatches.find((m: any) => brandIds.includes(m.brand_id));
             if (matchingInBrand) {
               relevantMatches = [matchingInBrand];
             } else {
-              // Não encontrou na marca correta - não retornar falso positivo
+              // Não encontrou na marca correta - NÃO retornar falso positivo
+              // Continuar para próxima chave ou próxima prioridade
               continue;
             }
           }
