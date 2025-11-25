@@ -1043,7 +1043,7 @@ export async function findVehicleTypeInFipe(
       };
     }
 
-    const trimmedModel = model.trim();
+    // trimmedModel já foi declarado no início da função
     if (!trimmedModel) {
       // Modelo vazio, usa primeira marca como fallback
       const brandRecord = allBrands[0];
