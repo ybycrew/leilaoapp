@@ -1322,9 +1322,51 @@ export async function findVehicleTypeInFipe(
             }
           }
           
-          // Se não encontrou modelo nesta marca, NÃO usar tipo da marca como fallback
-          // O modelo pode não existir nesta marca (ex: S10 não existe em Chevrolet caminhão)
-          // Retornar inválido para que a busca continue ou use próxima prioridade
+          // Se não encontrou modelo nesta marca, tentar busca direta (PRIORIDADE 1)
+          // que não depende da marca - pode encontrar o modelo em outra marca do mesmo nome
+          const modelBase = extractModelBase(trimmedModel);
+          const modelSearchKeys = [
+            modelBase.baseSearchName,
+            buildSearchKey(trimmedModel),
+            buildSearchKey(modelBase.baseNameUpper)
+          ];
+          
+          const directLookup = await findModelByDirectLookup(trimmedModel, modelSearchKeys, trimmedBrand);
+          
+          if (directLookup) {
+            // Encontrou modelo na busca direta!
+            const { modelRecord, vehicleTypeSlug } = directLookup;
+            const modelRecordWithBrand = modelRecord as ModelRecord & { brand_id?: string };
+            
+            // Buscar marca do modelo encontrado
+            if (modelRecordWithBrand.brand_id) {
+              const client = getSupabaseClient();
+              const { data: brandData, error: brandError } = await client
+                .from('fipe_brands')
+                .select('id, name, name_upper, search_name, vehicle_type_id')
+                .eq('id', modelRecordWithBrand.brand_id)
+                .maybeSingle();
+
+              if (!brandError && brandData) {
+                return {
+                  type: vehicleTypeSlug,
+                  normalizedBrand: brandData.name_upper,
+                  normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
+                  isValid: true,
+                };
+              }
+            }
+            
+            // Se não encontrou marca, usar a marca fornecida
+            return {
+              type: vehicleTypeSlug,
+              normalizedBrand: brandRecord.name_upper,
+              normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
+              isValid: true,
+            };
+          }
+          
+          // Se busca direta também não encontrou, retornar null
           return {
             type: null,
             normalizedBrand: brandRecord.name_upper,
