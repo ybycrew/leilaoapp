@@ -1322,22 +1322,14 @@ export async function findVehicleTypeInFipe(
             }
           }
           
-          // Se não encontrou modelo, tentar validar no tipo da marca (fallback)
-          const modelValidation = await validateAndNormalizeModel(
-            brandRecord.name_upper,
-            trimmedModel,
-            vehicleTypeSlugFromBrand
-          );
-
-          const normalizedModel = modelValidation.isValid && modelValidation.normalized
-            ? modelValidation.normalized
-            : toAsciiUpper(trimmedModel);
-
+          // Se não encontrou modelo nesta marca, NÃO usar tipo da marca como fallback
+          // O modelo pode não existir nesta marca (ex: S10 não existe em Chevrolet caminhão)
+          // Retornar inválido para que a busca continue ou use próxima prioridade
           return {
-            type: vehicleTypeSlugFromBrand,
+            type: null,
             normalizedBrand: brandRecord.name_upper,
-            normalizedModel,
-            isValid: true,
+            normalizedModel: toAsciiUpper(trimmedModel),
+            isValid: false,
           };
         } catch (error) {
           // Erro ao validar modelo, usar marca como fallback
