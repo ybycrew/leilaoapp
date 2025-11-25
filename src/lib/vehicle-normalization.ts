@@ -384,6 +384,7 @@ async function findModelByDirectLookup(
     try {
       // Se temos marca, buscar primeiro dentro dessa marca
       if (brandIds.length > 0) {
+        // 1. Busca exata
         const { data: exactMatchInBrand, error: exactErrorInBrand } = await client
           .from('fipe_models')
           .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
@@ -407,15 +408,80 @@ async function findModelByDirectLookup(
             };
           }
         }
+
+        // 2. Busca por prefixo (modelos que começam com a chave) - importante para modelos curtos como "FH"
+        // Ex: "FH" deve encontrar "FH400", "FH480", "FH440", etc.
+        if (key.length >= 2) {
+          const { data: prefixMatchInBrand, error: prefixErrorInBrand } = await client
+            .from('fipe_models')
+            .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
+            .ilike('base_search_name', `${key}%`)
+            .in('brand_id', brandIds)
+            .not('vehicle_type_id', 'is', null)
+            .limit(10);
+
+          if (!prefixErrorInBrand && prefixMatchInBrand && prefixMatchInBrand.length > 0) {
+            // Priorizar matches mais específicos (mais longos) primeiro
+            prefixMatchInBrand.sort((a: any, b: any) => {
+              const aLen = a.base_search_name?.length || 0;
+              const bLen = b.base_search_name?.length || 0;
+              return bLen - aLen; // Mais longo primeiro
+            });
+
+            const modelRecord = prefixMatchInBrand[0] as ModelRecord & { brand_id: string };
+            const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
+            
+            if (vehicleTypeSlug) {
+              return {
+                modelRecord: {
+                  ...modelRecord,
+                  name_search: buildSearchKey(modelRecord.name)
+                },
+                vehicleTypeSlug
+              };
+            }
+          }
+        }
       }
 
       // Busca exata por base_search_name (busca global se não encontrou na marca)
-      const { data: exactMatch, error: exactError } = await client
-        .from('fipe_models')
-        .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
-        .eq('base_search_name', key)
-        .not('vehicle_type_id', 'is', null)
-        .limit(10); // Pode haver múltiplos se mesma marca em tipos diferentes
+      // MAS: se temos marca mas não encontramos na busca dentro da marca, NÃO fazer busca global
+      let exactMatch: any[] = [];
+      let exactError: any = null;
+
+      if (brandIds.length === 0 || !brandName) {
+        // Sem marca ou marca não encontrada - fazer busca global
+        const result = await client
+          .from('fipe_models')
+          .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
+          .eq('base_search_name', key)
+          .not('vehicle_type_id', 'is', null)
+          .limit(10);
+        
+        exactMatch = result.data || [];
+        exactError = result.error;
+      }
+
+      // Se não encontrou exato e temos chave curta (>= 2), tentar busca por prefixo global
+      if ((!exactMatch || exactMatch.length === 0) && key.length >= 2 && (!brandName || brandIds.length === 0)) {
+        const { data: prefixMatch, error: prefixError } = await client
+          .from('fipe_models')
+          .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
+          .ilike('base_search_name', `${key}%`)
+          .not('vehicle_type_id', 'is', null)
+          .limit(10);
+
+        if (!prefixError && prefixMatch && prefixMatch.length > 0) {
+          // Priorizar matches mais específicos (mais longos) primeiro
+          prefixMatch.sort((a: any, b: any) => {
+            const aLen = a.base_search_name?.length || 0;
+            const bLen = b.base_search_name?.length || 0;
+            return bLen - aLen; // Mais longo primeiro
+          });
+
+          exactMatch = prefixMatch;
+        }
+      }
 
         if (!exactError && exactMatch && exactMatch.length > 0) {
         // Se temos marca, validar que o modelo encontrado pertence a uma marca compatível
@@ -466,9 +532,12 @@ async function findModelByDirectLookup(
       }
 
       // Busca parcial por base_search_name (contém a chave)
-      if (key.length >= 3) {
+      // Para modelos curtos (2+ caracteres), também fazer busca parcial
+      // Mas priorizar matches que começam com a chave (já feito acima)
+      if (key.length >= 2) {
         // Se temos marca, buscar primeiro dentro dessa marca
         if (brandIds.length > 0) {
+          // Busca parcial (contém) - apenas se não encontrou por prefixo acima
           const { data: partialMatchInBrand, error: partialErrorInBrand } = await client
             .from('fipe_models')
             .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
@@ -479,10 +548,26 @@ async function findModelByDirectLookup(
 
           if (!partialErrorInBrand && partialMatchInBrand && partialMatchInBrand.length > 0) {
             // Filtrar matches mais relevantes
-            const relevantMatches = partialMatchInBrand.filter((m: any) => {
-              const baseSearch = m.base_search_name?.toLowerCase() || '';
-              return baseSearch.includes(key.toLowerCase()) || key.toLowerCase().includes(baseSearch);
-            });
+            // Priorizar matches que começam com a chave
+            const keyLower = key.toLowerCase();
+            const relevantMatches = partialMatchInBrand
+              .filter((m: any) => {
+                const baseSearch = m.base_search_name?.toLowerCase() || '';
+                return baseSearch.includes(keyLower) || keyLower.includes(baseSearch);
+              })
+              .sort((a: any, b: any) => {
+                const aSearch = a.base_search_name?.toLowerCase() || '';
+                const bSearch = b.base_search_name?.toLowerCase() || '';
+                
+                // Priorizar matches que começam com a chave
+                const aStarts = aSearch.startsWith(keyLower);
+                const bStarts = bSearch.startsWith(keyLower);
+                if (aStarts && !bStarts) return -1;
+                if (!aStarts && bStarts) return 1;
+                
+                // Depois priorizar matches mais longos (mais específicos)
+                return bSearch.length - aSearch.length;
+              });
 
             if (relevantMatches.length > 0) {
               const modelRecord = relevantMatches[0] as ModelRecord & { brand_id: string };
@@ -537,8 +622,8 @@ async function findModelByDirectLookup(
             const words = baseName.split(/\s+/);
             if (words.some(word => word === keyLower || word.startsWith(keyLower))) return true;
             
-            // Se a chave é muito curta (< 4 chars), ser mais restritivo
-            if (keyLower.length < 4) {
+            // Se a chave é muito curta (< 3 chars), ser mais restritivo
+            if (keyLower.length < 3) {
               // Apenas se for match exato ou começar com a chave
               return baseSearch === keyLower || baseSearch.startsWith(keyLower);
             }
