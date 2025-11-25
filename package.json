@@ -15,7 +15,11 @@
     "fix-types": "tsx src/scripts/fix-all-vehicle-types.ts",
     "validate-fix-types": "tsx src/scripts/validate-and-fix-vehicle-types.ts",
     "validate-fix-types:dry": "tsx src/scripts/validate-and-fix-vehicle-types.ts --dry-run",
-    "fix-types:dry": "tsx src/scripts/fix-all-vehicle-types.ts --dry-run"
+    "fix-types:dry": "tsx src/scripts/fix-all-vehicle-types.ts --dry-run",
+    "fipe-sync": "tsx src/scripts/fipe-sync.ts",
+    "fipe-sync:cars": "tsx src/scripts/fipe-sync.ts --types=carros",
+    "fipe-sync:motos": "tsx src/scripts/fipe-sync.ts --types=motos",
+    "fipe-sync:trucks": "tsx src/scripts/fipe-sync.ts --types=caminhoes"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",

@@ -495,6 +495,7 @@ async function upsertModels(
   supabase: any,
   brandId: string,
   brandCode: string,
+  vehicleTypeId: string,
   models: FipeModelApi[],
 ): Promise<Map<string, string>> {
   if (models.length === 0) {
@@ -505,6 +506,7 @@ async function upsertModels(
     const base = extractModelBase(model.nome);
     return {
       brand_id: brandId,
+      vehicle_type_id: vehicleTypeId, // Adicionar vehicle_type_id para lookup direto
       fipe_code: model.codigo,
       name: model.nome,
       name_upper: base.nameUpper,
@@ -524,7 +526,18 @@ async function upsertModels(
     throw new Error(`Erro ao upsert de modelos (marca ${brandCode}): ${error.message}`);
   }
 
+  // Garantir que todos os modelos tenham vehicle_type_id atualizado
+  // (para modelos que já existiam antes da adição da coluna)
   const codes = payload.map((item) => item.fipe_code);
+  const { error: updateError } = await db
+    .from('fipe_models')
+    .update({ vehicle_type_id: vehicleTypeId })
+    .eq('brand_id', brandId)
+    .in('fipe_code', codes);
+
+  if (updateError) {
+    console.warn(`⚠️  Aviso: Erro ao atualizar vehicle_type_id dos modelos (marca ${brandCode}): ${updateError.message}`);
+  }
 
   const { data, error: selectError } = await db
     .from('fipe_models')
@@ -656,7 +669,7 @@ async function syncVehicleType(
 
     console.log(`   • Modelos encontrados: ${models.length}. Processando ${selectedModels.length}.`);
 
-    const modelMap = await upsertModels(supabase, brandId, brand.codigo, selectedModels);
+    const modelMap = await upsertModels(supabase, brandId, brand.codigo, vehicleTypeId, selectedModels);
 
     let modelIndex = 0;
     for (const model of selectedModels) {
