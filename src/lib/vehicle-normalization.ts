@@ -1377,8 +1377,12 @@ export async function findVehicleTypeInFipe(
         const modelRecord = await findModelRecord(brandRecord.id, modelSearchKeys);
 
         if (modelRecord) {
-          // Encontrou modelo nesta marca, usa este tipo
-          const vehicleTypeSlug = await mapVehicleTypeIdToSlug(brandRecord.vehicle_type_id);
+          // Encontrou modelo nesta marca
+          // IMPORTANTE: usar vehicle_type_id do MODELO, não da marca
+          // Isso garante que se a marca existe em múltiplos tipos (ex: Chevrolet em carros e caminhões),
+          // retornamos o tipo correto do modelo encontrado (ex: S10 é carro, não caminhão)
+          const modelVehicleTypeId = modelRecord.vehicle_type_id || brandRecord.vehicle_type_id;
+          const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelVehicleTypeId);
 
           if (vehicleTypeSlug) {
             return {
