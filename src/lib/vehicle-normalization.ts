@@ -323,10 +323,13 @@ async function getModelMap(brandId: string): Promise<Map<string, ModelRecord>> {
  * PRIORIDADE 1: Lookup direto na tabela fipe_models usando base_search_name e vehicle_type_id
  * Permite encontrar o tipo diretamente pelo modelo, sem precisar passar pela marca
  * Resolve problema de marcas duais (Honda, Suzuki, Volvo)
+ * 
+ * Se marca fornecida, busca primeiro dentro dessa marca para evitar falsos positivos
  */
 async function findModelByDirectLookup(
   model: string,
-  searchKeys: string[]
+  searchKeys: string[],
+  brandName?: string | null
 ): Promise<{ modelRecord: ModelRecord; vehicleTypeSlug: VehicleTypeSlug } | null> {
   if (!model || searchKeys.length === 0) {
     return null;
@@ -339,11 +342,74 @@ async function findModelByDirectLookup(
     return null;
   }
 
+  // Se temos marca, buscar primeiro dentro dessa marca para evitar falsos positivos
+  let brandIds: string[] = [];
+  if (brandName) {
+    try {
+      const brandSearchKey = buildSearchKey(brandName);
+      if (brandSearchKey) {
+        // Buscar todas as marcas com esse nome em todos os tipos
+        // Primeiro tenta busca exata por search_name
+        const { data: brandsExact, error: brandErrorExact } = await client
+          .from('fipe_brands')
+          .select('id, search_name, name_upper')
+          .eq('search_name', brandSearchKey)
+          .limit(10);
+
+        if (!brandErrorExact && brandsExact && brandsExact.length > 0) {
+          brandIds = brandsExact.map(b => b.id);
+        } else {
+          // Se não encontrou exato, tenta busca parcial por name_upper
+          const brandUpper = brandName.toUpperCase();
+          const { data: brandsPartial, error: brandErrorPartial } = await client
+            .from('fipe_brands')
+            .select('id, search_name, name_upper')
+            .ilike('name_upper', `%${brandUpper}%`)
+            .limit(10);
+
+          if (!brandErrorPartial && brandsPartial && brandsPartial.length > 0) {
+            brandIds = brandsPartial.map(b => b.id);
+          }
+        }
+      }
+    } catch (error) {
+      // Erro ao buscar marca, continua com busca global
+      console.warn(`[findModelByDirectLookup] Erro ao buscar marca ${brandName}:`, error);
+    }
+  }
+
   // Buscar modelo diretamente usando base_search_name em TODOS os tipos
   // Isso permite encontrar o tipo correto mesmo para marcas duais
   for (const key of keys) {
     try {
-      // Busca exata por base_search_name
+      // Se temos marca, buscar primeiro dentro dessa marca
+      if (brandIds.length > 0) {
+        const { data: exactMatchInBrand, error: exactErrorInBrand } = await client
+          .from('fipe_models')
+          .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
+          .eq('base_search_name', key)
+          .in('brand_id', brandIds)
+          .not('vehicle_type_id', 'is', null)
+          .limit(10);
+
+        if (!exactErrorInBrand && exactMatchInBrand && exactMatchInBrand.length > 0) {
+          // Encontrou dentro da marca fornecida - usar este (mais confiável)
+          const modelRecord = exactMatchInBrand[0] as ModelRecord & { brand_id: string };
+          const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
+          
+          if (vehicleTypeSlug) {
+            return {
+              modelRecord: {
+                ...modelRecord,
+                name_search: buildSearchKey(modelRecord.name)
+              },
+              vehicleTypeSlug
+            };
+          }
+        }
+      }
+
+      // Busca exata por base_search_name (busca global se não encontrou na marca)
       const { data: exactMatch, error: exactError } = await client
         .from('fipe_models')
         .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
@@ -351,24 +417,83 @@ async function findModelByDirectLookup(
         .not('vehicle_type_id', 'is', null)
         .limit(10); // Pode haver múltiplos se mesma marca em tipos diferentes
 
-      if (!exactError && exactMatch && exactMatch.length > 0) {
-        // Se encontrou match exato, usar o primeiro (mais específico)
-        const modelRecord = exactMatch[0] as ModelRecord & { brand_id: string };
-        const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
-        
-        if (vehicleTypeSlug) {
-          return {
-            modelRecord: {
-              ...modelRecord,
-              name_search: buildSearchKey(modelRecord.name)
-            },
-            vehicleTypeSlug
-          };
+        if (!exactError && exactMatch && exactMatch.length > 0) {
+        // Se temos marca, validar que o modelo encontrado pertence a uma marca compatível
+        if (brandIds.length > 0) {
+          const matchingInBrand = exactMatch.find((m: any) => brandIds.includes(m.brand_id));
+          if (matchingInBrand) {
+            // Encontrou modelo na marca correta
+            const modelRecord = matchingInBrand as ModelRecord & { brand_id: string };
+            const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
+            
+            if (vehicleTypeSlug) {
+              return {
+                modelRecord: {
+                  ...modelRecord,
+                  name_search: buildSearchKey(modelRecord.name)
+                },
+                vehicleTypeSlug
+              };
+            }
+          } else {
+            // Modelo encontrado mas não pertence à marca fornecida - pular esta chave
+            // Não retornar falso positivo
+            continue;
+          }
+        } else {
+          // Sem marca fornecida, usar o primeiro match
+          const modelRecord = exactMatch[0] as ModelRecord & { brand_id: string };
+          const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
+          
+          if (vehicleTypeSlug) {
+            return {
+              modelRecord: {
+                ...modelRecord,
+                name_search: buildSearchKey(modelRecord.name)
+              },
+              vehicleTypeSlug
+            };
+          }
         }
       }
 
       // Busca parcial por base_search_name (contém a chave)
       if (key.length >= 3) {
+        // Se temos marca, buscar primeiro dentro dessa marca
+        if (brandIds.length > 0) {
+          const { data: partialMatchInBrand, error: partialErrorInBrand } = await client
+            .from('fipe_models')
+            .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
+            .ilike('base_search_name', `%${key}%`)
+            .in('brand_id', brandIds)
+            .not('vehicle_type_id', 'is', null)
+            .limit(10);
+
+          if (!partialErrorInBrand && partialMatchInBrand && partialMatchInBrand.length > 0) {
+            // Filtrar matches mais relevantes
+            const relevantMatches = partialMatchInBrand.filter((m: any) => {
+              const baseSearch = m.base_search_name?.toLowerCase() || '';
+              return baseSearch.includes(key.toLowerCase()) || key.toLowerCase().includes(baseSearch);
+            });
+
+            if (relevantMatches.length > 0) {
+              const modelRecord = relevantMatches[0] as ModelRecord & { brand_id: string };
+              const vehicleTypeSlug = await mapVehicleTypeIdToSlug(modelRecord.vehicle_type_id!);
+              
+              if (vehicleTypeSlug) {
+                return {
+                  modelRecord: {
+                    ...modelRecord,
+                    name_search: buildSearchKey(modelRecord.name)
+                  },
+                  vehicleTypeSlug
+                };
+              }
+            }
+          }
+        }
+
+        // Busca parcial global (se não encontrou na marca ou não temos marca)
         const { data: partialMatch, error: partialError } = await client
           .from('fipe_models')
           .select('id, name, name_upper, base_name, base_name_upper, base_search_name, fipe_code, vehicle_type_id, brand_id')
@@ -378,10 +503,64 @@ async function findModelByDirectLookup(
 
         if (!partialError && partialMatch && partialMatch.length > 0) {
           // Filtrar matches mais relevantes
-          const relevantMatches = partialMatch.filter((m: any) => {
+          // Priorizar matches que começam com a chave ou são palavras completas
+          const keyLower = key.toLowerCase();
+          let relevantMatches = partialMatch.filter((m: any) => {
             const baseSearch = m.base_search_name?.toLowerCase() || '';
-            return baseSearch.includes(key.toLowerCase()) || key.toLowerCase().includes(baseSearch);
+            const baseName = m.base_name_upper?.toLowerCase() || '';
+            
+            // Match exato
+            if (baseSearch === keyLower) return true;
+            
+            // Começa com a chave (ex: "TITAN150" começa com "TITAN")
+            if (baseSearch.startsWith(keyLower)) return true;
+            
+            // A chave começa com o baseSearch (ex: "TITAN150" começa com "TITAN")
+            if (keyLower.startsWith(baseSearch) && baseSearch.length >= 3) return true;
+            
+            // Palavra completa presente (evita "TITAN" em "PARATITAN")
+            // Verificar se a chave aparece como palavra completa no nome
+            const words = baseName.split(/\s+/);
+            if (words.some(word => word === keyLower || word.startsWith(keyLower))) return true;
+            
+            // Se a chave é muito curta (< 4 chars), ser mais restritivo
+            if (keyLower.length < 4) {
+              // Apenas se for match exato ou começar com a chave
+              return baseSearch === keyLower || baseSearch.startsWith(keyLower);
+            }
+            
+            // Para chaves maiores, aceitar se contém (mas priorizar outros)
+            return baseSearch.includes(keyLower) || keyLower.includes(baseSearch);
           });
+
+          // Ordenar por relevância: exato > começa com > contém
+          relevantMatches.sort((a: any, b: any) => {
+            const aSearch = a.base_search_name?.toLowerCase() || '';
+            const bSearch = b.base_search_name?.toLowerCase() || '';
+            
+            const aExact = aSearch === keyLower;
+            const bExact = bSearch === keyLower;
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            
+            const aStarts = aSearch.startsWith(keyLower);
+            const bStarts = bSearch.startsWith(keyLower);
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            
+            return 0;
+          });
+
+          // Se temos marca, priorizar matches da marca correta
+          if (brandIds.length > 0 && relevantMatches.length > 0) {
+            const matchingInBrand = relevantMatches.find((m: any) => brandIds.includes(m.brand_id));
+            if (matchingInBrand) {
+              relevantMatches = [matchingInBrand];
+            } else {
+              // Não encontrou na marca correta - não retornar falso positivo
+              continue;
+            }
+          }
 
           if (relevantMatches.length > 0) {
             const modelRecord = relevantMatches[0] as ModelRecord & { brand_id: string };
@@ -902,7 +1081,7 @@ export async function findVehicleTypeInFipe(
         buildSearchKey(modelBase.baseNameUpper)
       ];
 
-      const directLookup = await findModelByDirectLookup(trimmedModel, modelSearchKeys);
+      const directLookup = await findModelByDirectLookup(trimmedModel, modelSearchKeys, trimmedBrand);
       
       if (directLookup) {
         // Encontrou modelo diretamente! Agora buscar a marca correspondente
@@ -919,17 +1098,44 @@ export async function findVehicleTypeInFipe(
             .maybeSingle();
 
           if (!brandError && brandData) {
-            return {
-              type: vehicleTypeSlug,
-              normalizedBrand: brandData.name_upper,
-              normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
-              isValid: true,
-            };
+            // Se temos marca fornecida, validar que corresponde à marca do modelo encontrado
+            if (trimmedBrand) {
+              const brandSearchKey = buildSearchKey(trimmedBrand);
+              const foundBrandSearchKey = buildSearchKey(brandData.name_upper);
+              
+              // Validar que a marca encontrada corresponde à marca fornecida
+              if (brandSearchKey && foundBrandSearchKey && 
+                  brandSearchKey !== foundBrandSearchKey &&
+                  !brandData.name_upper.toUpperCase().includes(trimmedBrand.toUpperCase()) &&
+                  !trimmedBrand.toUpperCase().includes(brandData.name_upper.toUpperCase())) {
+                // Marca não corresponde - não retornar falso positivo
+                // Continuar para próxima prioridade
+              } else {
+                // Marca corresponde ou não temos marca para validar
+                return {
+                  type: vehicleTypeSlug,
+                  normalizedBrand: brandData.name_upper,
+                  normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
+                  isValid: true,
+                };
+              }
+            } else {
+              // Sem marca fornecida, usar a marca do modelo encontrado
+              return {
+                type: vehicleTypeSlug,
+                normalizedBrand: brandData.name_upper,
+                normalizedModel: modelRecord.base_name_upper || toAsciiUpper(trimmedModel),
+                isValid: true,
+              };
+            }
           }
         }
 
-        // Se não encontrou marca, mas tem brand fornecido, usar ele
+        // Se não encontrou marca no banco, mas tem brand fornecido, validar antes de usar
         if (trimmedBrand) {
+          // Validar que o modelo realmente pertence à marca fornecida
+          // Se chegou aqui, o findModelByDirectLookup já validou a marca (se fornecida)
+          // Então podemos confiar no resultado
           const brandValidation = await validateAndNormalizeBrand(trimmedBrand, vehicleTypeSlug);
           return {
             type: vehicleTypeSlug,
