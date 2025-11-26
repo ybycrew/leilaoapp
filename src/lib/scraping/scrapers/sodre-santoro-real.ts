@@ -27,11 +27,11 @@ export class SodreSantoroRealScraper extends BaseScraper {
   private getVehicleTypeCategories(): Array<{ urlCategory: string; internalType: string }> {
     return [
       // Caminhões e ônibus agrupados
-      { urlCategory: 'onibus__caminh%C3%B5es__implementos+rod.', internalType: 'caminhão' },
+      { urlCategory: 'onibus__caminh%C3%B5es__implementos+rod.', internalType: 'Caminhões e Ônibus' },
       // Carros agrupados (inclui carros, utilitários pesados, utilitários leves e van leve)
-      { urlCategory: 'carros__utilit.+pesados__utilitarios+leves__van+leve', internalType: 'carro' },
+      { urlCategory: 'carros__utilit.+pesados__utilitarios+leves__van+leve', internalType: 'Carros' },
       // Motos
-      { urlCategory: 'motos', internalType: 'moto' },
+      { urlCategory: 'motos', internalType: 'Motos' },
     ];
   }
 
@@ -445,10 +445,10 @@ export class SodreSantoroRealScraper extends BaseScraper {
         allImages = [rawVehicle.imageUrl];
       }
 
-      // Usar tipo da categoria (fonte verdadeira), ou fallback para detecção se não fornecido
-      const finalVehicleType = vehicleType || this.detectVehicleType(rawVehicle.title);
+      // Usar tipo da categoria diretamente (sem normalização ou detecção)
+      const finalVehicleType = vehicleType || 'Carros'; // Fallback apenas se não fornecido
       
-      console.log(`[${this.auctioneerName}] Tipo atribuído: ${finalVehicleType} (origem: ${vehicleType ? 'categoria URL' : 'detecção título'})`);
+      console.log(`[${this.auctioneerName}] Tipo atribuído: ${finalVehicleType} (origem: categoria URL)`);
 
       return {
         external_id: externalId,
