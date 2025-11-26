@@ -4,9 +4,8 @@ import { SodreSantoroFastScraper } from './scrapers/sodre-santoro-fast';
 import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
-import { getFipePrice } from '../fipe';
 import { normalizeVehicleBrandModel, findVehicleTypeInFipe, mapFipeTypeToVehicleType } from '../vehicle-normalization';
-import { calculateDealScore, normalizeVehicleTypeForDB, validateVehicleTypeByModel } from './utils';
+import { normalizeVehicleTypeForDB, validateVehicleTypeByModel } from './utils';
 import { getVehicleTableInfo, hasVehicleColumn } from './vehicle-table-info';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -283,53 +282,7 @@ async function processVehicle(
   auctioneerId: string,
   auctioneerName: string
 ): Promise<{ created: boolean; updated: boolean }> {
-  // 1. Buscar preço FIPE (DESABILITADO TEMPORARIAMENTE - API com rate limit 429)
-  let fipePrice: number | undefined;
-  let fipeCode: string | undefined;
-
-  // TODO: Reabilitar depois com cache e delays maiores
-  /*
-  if (vehicleData.brand && vehicleData.model && vehicleData.year_model) {
-    const fipeData = await getFipePrice(
-      vehicleData.brand,
-      vehicleData.model,
-      vehicleData.year_model
-    );
-
-    if (fipeData) {
-      fipePrice = fipeData.preco;
-      fipeCode = fipeData.codigo;
-    }
-  }
-  */
-
-  // 2. Calcular desconto FIPE
-  let fipeDiscountPercentage: number | undefined;
-  if (fipePrice && vehicleData.current_bid) {
-    fipeDiscountPercentage =
-      ((fipePrice - vehicleData.current_bid) / fipePrice) * 100;
-  }
-
-  // 3. Calcular deal score (usa valores originais, não normalizados)
-  // Nota: calculateDealScore aceita Vehicle completo, mas só usa alguns campos
-  const dealScore = calculateDealScore({
-    id: '',
-    title: vehicleData.title,
-    brand: vehicleData.brand || '',
-    model: vehicleData.model || '',
-    fipe_price: fipePrice || undefined,
-    current_bid: vehicleData.current_bid || 0,
-    year_manufacture: vehicleData.year_model || vehicleData.year_manufacture || new Date().getFullYear(),
-    mileage: vehicleData.mileage || undefined,
-    auction_type: vehicleData.auction_type || 'Online',
-    has_financing: vehicleData.has_financing || false,
-    state: vehicleData.state || 'SP',
-    city: vehicleData.city || 'São Paulo',
-    original_url: vehicleData.original_url || '',
-    created_at: new Date().toISOString(),
-  } as any); // Usar 'as any' temporariamente pois Vehicle precisa de campos obrigatórios que não temos aqui
-
-  // 4. Extrair URL base do leiloeiro para leiloeiro_url
+  // 1. Extrair URL base do leiloeiro para leiloeiro_url
   const leiloeiroUrl = vehicleData.original_url 
     ? new URL(vehicleData.original_url).origin 
     : '';
@@ -614,10 +567,6 @@ async function processVehicle(
   assign('accepts_financing', vehicleData.has_financing ?? null);
   // aceita_financiamento existe no banco (legado), mas usar accepts_financing ou has_financing
   assign('aceita_financiamento', vehicleData.has_financing ?? null);
-  assign('fipe_price', fipePrice ?? null);
-  assign('fipe_code', fipeCode ?? null);
-  assign('fipe_discount_percentage', fipeDiscountPercentage ?? null);
-  assign('deal_score', dealScore?.score || null);
   assign('thumbnail_url', thumbnailUrl);
   assign('images', imagesArray); // Se a coluna images existir
   assign('external_id', vehicleData.external_id || null);
