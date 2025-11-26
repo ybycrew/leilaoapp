@@ -573,56 +573,12 @@ async function processVehicle(
     
     vehicleId = data.id;
     
-    // Verificar se tipo foi realmente salvo corretamente
-    try {
-      const { data: savedVehicle, error: fetchError } = await supabase
-        .from('vehicles')
-        .select('vehicle_type')
-        .eq('id', vehicleId)
-        .single();
-      
-      if (!fetchError && savedVehicle) {
-        const tipoSalvo = savedVehicle.vehicle_type;
-        const tipoEsperado = englishVehicleType;
-        
-        if (tipoSalvo !== tipoEsperado) {
-          console.warn(`[${auctioneerName}] ⚠️  Tipo salvo diferente do esperado:`, {
-            esperado: tipoEsperado,
-            salvo: tipoSalvo,
-            vehicle_id: vehicleId
-          });
-          // Tentar corrigir imediatamente
-          await supabase
-            .from('vehicles')
-            .update({ vehicle_type: tipoEsperado })
-            .eq('id', vehicleId);
-          console.log(`[${auctioneerName}] ✅ Tipo corrigido após salvamento`);
-        }
-        
-        console.log(`[${auctioneerName}] Veículo atualizado:`, {
-          id: vehicleId,
-          tipo_esperado: tipoEsperado,
-          tipo_salvo: tipoSalvo,
-          marca: normalizedBrand,
-          modelo: normalizedModel,
-        });
-      } else {
-        console.log(`[${auctioneerName}] Veículo atualizado:`, {
-          id: vehicleId,
-          tipo_esperado: englishVehicleType,
-          marca: normalizedBrand,
-          modelo: normalizedModel,
-        });
-      }
-    } catch (error) {
-      console.warn(`[${auctioneerName}] Erro ao verificar tipo salvo:`, error);
-      console.log(`[${auctioneerName}] Veículo atualizado:`, {
-        id: vehicleId,
-        tipo_esperado: englishVehicleType,
-        marca: normalizedBrand,
-        modelo: normalizedModel
-      });
-    }
+    console.log(`[${auctioneerName}] Veículo atualizado:`, {
+      id: vehicleId,
+      tipo: englishVehicleType,
+      marca: normalizedBrand,
+      modelo: normalizedModel,
+    });
   } else {
     // Inserir novo veículo
     let data, error;
@@ -712,56 +668,12 @@ async function processVehicle(
     
     vehicleId = data.id;
     
-    // Verificar se tipo foi realmente salvo corretamente
-    try {
-      const { data: savedVehicle, error: fetchError } = await supabase
-        .from('vehicles')
-        .select('vehicle_type')
-        .eq('id', vehicleId)
-        .single();
-      
-      if (!fetchError && savedVehicle) {
-        const tipoSalvo = savedVehicle.vehicle_type;
-        const tipoEsperado = englishVehicleType;
-        
-        if (tipoSalvo !== tipoEsperado) {
-          console.warn(`[${auctioneerName}] ⚠️  Tipo salvo diferente do esperado:`, {
-            esperado: tipoEsperado,
-            salvo: tipoSalvo,
-            vehicle_id: vehicleId
-          });
-          // Tentar corrigir imediatamente
-          await supabase
-            .from('vehicles')
-            .update({ vehicle_type: tipoEsperado })
-            .eq('id', vehicleId);
-          console.log(`[${auctioneerName}] ✅ Tipo corrigido após salvamento`);
-        }
-        
-        console.log(`[${auctioneerName}] Veículo inserido:`, {
-          id: vehicleId,
-          tipo_esperado: tipoEsperado,
-          tipo_salvo: tipoSalvo,
-          marca: normalizedBrand,
-          modelo: normalizedModel,
-        });
-      } else {
-        console.log(`[${auctioneerName}] Veículo inserido:`, {
-          id: vehicleId,
-          tipo_esperado: englishVehicleType,
-          marca: normalizedBrand,
-          modelo: normalizedModel,
-        });
-      }
-    } catch (error) {
-      console.warn(`[${auctioneerName}] Erro ao verificar tipo salvo:`, error);
-      console.log(`[${auctioneerName}] Veículo inserido:`, {
-        id: vehicleId,
-        tipo_esperado: englishVehicleType,
-        marca: normalizedBrand,
-        modelo: normalizedModel
-      });
-    }
+    console.log(`[${auctioneerName}] Veículo inserido:`, {
+      id: vehicleId,
+      tipo: englishVehicleType,
+      marca: normalizedBrand,
+      modelo: normalizedModel,
+    });
   }
 
   // 12. Salvar imagens em tabela separada (se existir a tabela vehicle_images)
