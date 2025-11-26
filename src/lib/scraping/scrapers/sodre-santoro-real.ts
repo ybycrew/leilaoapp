@@ -12,11 +12,28 @@ import { extractBrandAndModel } from '../brands';
  */
 export class SodreSantoroRealScraper extends BaseScraper {
   private readonly baseUrl = 'https://www.sodresantoro.com.br';
-  private readonly vehiclesUrl = `${this.baseUrl}/veiculos/lotes?sort=auction_date_init_asc`;
+  private readonly vehiclesUrl = `${this.baseUrl}/veiculos/lotes`;
 
   constructor() {
     // Nome alinhado com o registro no banco
     super('Sodré Santoro');
+  }
+
+  /**
+   * Retorna as categorias de tipo de veículo com seus mapeamentos
+   * O tipo será definido diretamente pela categoria da URL
+   */
+  private getVehicleTypeCategories(): Array<{ urlCategory: string; internalType: string }> {
+    return [
+      { urlCategory: 'carros', internalType: 'carro' },
+      { urlCategory: 'utilitarios+leves', internalType: 'carro' },
+      { urlCategory: 'motos', internalType: 'moto' },
+      { urlCategory: 'caminh%C3%B5es', internalType: 'caminhão' },
+      { urlCategory: 'implementos+rod.', internalType: 'caminhão' },
+      { urlCategory: 'onibus', internalType: 'ônibus' },
+      { urlCategory: 'van+leve', internalType: 'van' },
+      { urlCategory: 'embarca%C3%A7%C3%B5es', internalType: 'embarcações' },
+    ];
   }
 
   async scrapeVehicles(): Promise<VehicleData[]> {
@@ -25,142 +42,166 @@ export class SodreSantoroRealScraper extends BaseScraper {
     const vehicles: VehicleData[] = [];
     const seenIds = new Set<string>();
     const maxPages = 100; // Aumentado para usar recursos do GitHub Actions
-    let duplicatePageCount = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Zerar horário para comparar apenas datas
 
     try {
-      console.log(`[${this.auctioneerName}] Iniciando scraping do site Sodré Santoro...`);
+      console.log(`[${this.auctioneerName}] Iniciando scraping do site Sodré Santoro por categorias...`);
       console.log(`[${this.auctioneerName}] Filtrando apenas leilões com data >= ${today.toISOString().split('T')[0]}`);
-      console.log(`[${this.auctioneerName}] URL base: ${this.vehiclesUrl}`);
 
-      // Loop através das páginas
-      for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
-        const pageUrl = currentPage === 1 
-          ? this.vehiclesUrl 
-          : `${this.vehiclesUrl}&page=${currentPage}`;
+      // Obter categorias de tipo de veículo
+      const categories = this.getVehicleTypeCategories();
+      console.log(`[${this.auctioneerName}] Total de categorias a processar: ${categories.length}`);
 
-        console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
+      // Loop através das categorias
+      for (const category of categories) {
+        console.log(`[${this.auctioneerName}] Processando categoria: ${category.urlCategory} → tipo: ${category.internalType}`);
+        
+        let duplicatePageCount = 0;
+        const categoryVehicles: VehicleData[] = [];
 
-        try {
-          await this.page.goto(pageUrl, {
-            waitUntil: 'domcontentloaded', // Mais rápido que networkidle0
-            timeout: 30000, // Reduzido de 90s para 30s
-          });
+        // Loop através das páginas para esta categoria
+        for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
+          // Construir URL com categoria específica
+          const categoryUrl = `${this.vehiclesUrl}?lot_category=${category.urlCategory}&sort=auction_date_init_asc`;
+          const pageUrl = currentPage === 1 
+            ? categoryUrl 
+            : `${categoryUrl}&page=${currentPage}`;
 
-          // Aguardar apenas o essencial (GitHub Actions tem recursos ilimitados)
-          await this.randomDelay(100, 300); // Mínimo para GitHub Actions
+          console.log(`[${this.auctioneerName}] [${category.internalType}] Acessando página ${currentPage}: ${pageUrl}`);
 
-          // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
-          // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
-          const selectorUnion = 'a[href*="/lote/"], .lote-card, .vehicle-card, [data-testid*="vehicle"], a[href*="/leilao/"]';
-          await this.page.waitForSelector(selectorUnion, {
-            timeout: 10000, // Reduzido de 30s para 10s
-          }).catch(() => {
-            console.log(`[${this.auctioneerName}] Timeout ao aguardar cards na página ${currentPage}`);
-          });
+          try {
+            await this.page.goto(pageUrl, {
+              waitUntil: 'domcontentloaded', // Mais rápido que networkidle0
+              timeout: 30000, // Reduzido de 90s para 30s
+            });
 
-          await this.scrollToLoadContent();
+            // Aguardar apenas o essencial (GitHub Actions tem recursos ilimitados)
+            await this.randomDelay(100, 300); // Mínimo para GitHub Actions
 
-          const pageVehicles = await this.extractVehiclesFromPage(currentPage);
+            // Aguardar cards de veículos carregarem - usar seletores específicos do Sodré Santoro
+            // Priorizar links de lote (granular por veículo) e incluir seletores auxiliares
+            const selectorUnion = 'a[href*="/lote/"], .lote-card, .vehicle-card, [data-testid*="vehicle"], a[href*="/leilao/"]';
+            await this.page.waitForSelector(selectorUnion, {
+              timeout: 10000, // Reduzido de 30s para 10s
+            }).catch(() => {
+              console.log(`[${this.auctioneerName}] [${category.internalType}] Timeout ao aguardar cards na página ${currentPage}`);
+            });
 
-          // Se nada foi encontrado, capture HTML parcial para debug
-          if (pageVehicles.length === 0) {
-            const snapshot = await this.page.evaluate(() => document.body.innerText.slice(0, 500));
-            console.log(`[${this.auctioneerName}] Snapshot de página vazia (500 chars):`, snapshot);
-          }
+            await this.scrollToLoadContent();
 
-          console.log(`[${this.auctioneerName}] Página ${currentPage}: ${pageVehicles.length} veículos extraídos`);
+            const pageVehicles = await this.extractVehiclesFromPage(currentPage);
 
-          if (pageVehicles.length === 0) {
-            console.log(`[${this.auctioneerName}] Nenhum veículo encontrado, última página alcançada`);
-            break;
-          }
-
-          // Processar veículos
-          let processedCount = 0;
-          let skippedCount = 0;
-          let duplicatesInPage = 0;
-          let futureAuctionsCount = 0;
-
-          for (const rawVehicle of pageVehicles) {
-            try {
-              // Validar dados mínimos
-              if (!rawVehicle.title || !rawVehicle.detailUrl) {
-                skippedCount++;
-                continue;
-              }
-
-              const detailUrl = rawVehicle.detailUrl.startsWith('http') 
-                ? rawVehicle.detailUrl 
-                : `${this.baseUrl}${rawVehicle.detailUrl}`;
-
-              // Extrair ID externo REAL da URL
-              const externalId = this.extractRealExternalId(detailUrl);
-
-              // Verificar duplicatas
-              if (seenIds.has(externalId)) {
-                duplicatesInPage++;
-                continue;
-              }
-              
-              seenIds.add(externalId);
-
-              // Verificar se a data do leilão é futura
-              const auctionDate = this.extractAuctionDate(rawVehicle.infoTexts, rawVehicle.auctionDate);
-              if (auctionDate && auctionDate < today) {
-                console.log(`[${this.auctioneerName}] Pulando leilão passado: ${auctionDate.toISOString().split('T')[0]}`);
-                skippedCount++;
-                continue;
-              }
-
-              if (auctionDate) {
-                futureAuctionsCount++;
-              }
-
-              // Processar dados do veículo
-              const vehicleData = await this.processVehicleData(rawVehicle, detailUrl, externalId, auctionDate);
-              
-              if (vehicleData) {
-                vehicles.push(vehicleData);
-                processedCount++;
-              } else {
-                skippedCount++;
-              }
-            } catch (error) {
-              console.error(`[${this.auctioneerName}] Erro ao processar veículo:`, error);
-              skippedCount++;
+            // Se nada foi encontrado, capture HTML parcial para debug
+            if (pageVehicles.length === 0) {
+              const snapshot = await this.page.evaluate(() => document.body.innerText.slice(0, 500));
+              console.log(`[${this.auctioneerName}] [${category.internalType}] Snapshot de página vazia (500 chars):`, snapshot);
             }
-          }
 
-          console.log(`[${this.auctioneerName}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
+            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${pageVehicles.length} veículos extraídos`);
 
-          // Saída antecipada: se não há leilões futuros, para após algumas páginas
-          if (futureAuctionsCount === 0 && currentPage > 10) {
-            console.log(`[${this.auctioneerName}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando scraping`);
-            break;
-          }
-
-          // Verificar se página está se repetindo
-          if (duplicatesInPage >= pageVehicles.length * 0.9) {
-            duplicatePageCount++;
-            console.log(`[${this.auctioneerName}] Página com muitas duplicatas (${duplicatePageCount}ª consecutiva)`);
-            
-            if (duplicatePageCount >= 2) {
-              console.log(`[${this.auctioneerName}] Duas páginas consecutivas duplicadas, fim alcançado`);
+            if (pageVehicles.length === 0) {
+              console.log(`[${this.auctioneerName}] [${category.internalType}] Nenhum veículo encontrado, última página alcançada`);
               break;
             }
-          } else {
-            duplicatePageCount = 0;
+
+            // Processar veículos
+            let processedCount = 0;
+            let skippedCount = 0;
+            let duplicatesInPage = 0;
+            let futureAuctionsCount = 0;
+
+            for (const rawVehicle of pageVehicles) {
+              try {
+                // Validar dados mínimos
+                if (!rawVehicle.title || !rawVehicle.detailUrl) {
+                  skippedCount++;
+                  continue;
+                }
+
+                const detailUrl = rawVehicle.detailUrl.startsWith('http') 
+                  ? rawVehicle.detailUrl 
+                  : `${this.baseUrl}${rawVehicle.detailUrl}`;
+
+                // Extrair ID externo REAL da URL
+                const externalId = this.extractRealExternalId(detailUrl);
+
+                // Verificar duplicatas (global entre todas as categorias)
+                if (seenIds.has(externalId)) {
+                  duplicatesInPage++;
+                  continue;
+                }
+                
+                seenIds.add(externalId);
+
+                // Verificar se a data do leilão é futura
+                const auctionDate = this.extractAuctionDate(rawVehicle.infoTexts, rawVehicle.auctionDate);
+                if (auctionDate && auctionDate < today) {
+                  console.log(`[${this.auctioneerName}] [${category.internalType}] Pulando leilão passado: ${auctionDate.toISOString().split('T')[0]}`);
+                  skippedCount++;
+                  continue;
+                }
+
+                if (auctionDate) {
+                  futureAuctionsCount++;
+                }
+
+                // Processar dados do veículo com o tipo da categoria
+                const vehicleData = await this.processVehicleData(
+                  rawVehicle, 
+                  detailUrl, 
+                  externalId, 
+                  auctionDate,
+                  category.internalType // Passar tipo da categoria
+                );
+                
+                if (vehicleData) {
+                  categoryVehicles.push(vehicleData);
+                  processedCount++;
+                } else {
+                  skippedCount++;
+                }
+              } catch (error) {
+                console.error(`[${this.auctioneerName}] [${category.internalType}] Erro ao processar veículo:`, error);
+                skippedCount++;
+              }
+            }
+
+            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
+
+            // Saída antecipada: se não há leilões futuros, para após algumas páginas
+            if (futureAuctionsCount === 0 && currentPage > 10) {
+              console.log(`[${this.auctioneerName}] [${category.internalType}] Nenhum leilão futuro encontrado na página ${currentPage}, finalizando categoria`);
+              break;
+            }
+
+            // Verificar se página está se repetindo
+            if (duplicatesInPage >= pageVehicles.length * 0.9) {
+              duplicatePageCount++;
+              console.log(`[${this.auctioneerName}] [${category.internalType}] Página com muitas duplicatas (${duplicatePageCount}ª consecutiva)`);
+              
+              if (duplicatePageCount >= 2) {
+                console.log(`[${this.auctioneerName}] [${category.internalType}] Duas páginas consecutivas duplicadas, finalizando categoria`);
+                break;
+              }
+            } else {
+              duplicatePageCount = 0;
+            }
+
+            // Delay entre páginas (mínimo para GitHub Actions)
+            await this.randomDelay(100, 200);
+
+          } catch (pageError) {
+            console.error(`[${this.auctioneerName}] [${category.internalType}] Erro na página ${currentPage}:`, pageError);
+            continue;
           }
-
-          // Delay entre páginas (mínimo para GitHub Actions)
-          await this.randomDelay(100, 200);
-
-        } catch (pageError) {
-          console.error(`[${this.auctioneerName}] Erro na página ${currentPage}:`, pageError);
-          continue;
         }
+
+        console.log(`[${this.auctioneerName}] [${category.internalType}] ✅ Categoria concluída: ${categoryVehicles.length} veículos coletados`);
+        vehicles.push(...categoryVehicles);
+        
+        // Delay entre categorias
+        await this.randomDelay(500, 1000);
       }
 
       console.log(`[${this.auctioneerName}] ✅ Total de veículos coletados: ${vehicles.length}`);
@@ -373,8 +414,15 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
   /**
    * Processa dados do veículo com filtro de data
+   * @param vehicleType - Tipo do veículo vindo da categoria da URL (fonte verdadeira)
    */
-  private async processVehicleData(rawVehicle: any, detailUrl: string, externalId: string, auctionDate?: Date): Promise<VehicleData | null> {
+  private async processVehicleData(
+    rawVehicle: any, 
+    detailUrl: string, 
+    externalId: string, 
+    auctionDate?: Date,
+    vehicleType?: string
+  ): Promise<VehicleData | null> {
     try {
       // Usar a nova função híbrida para extrair marca e modelo
       const { brand, model } = extractBrandAndModel(rawVehicle.title);
@@ -398,6 +446,11 @@ export class SodreSantoroRealScraper extends BaseScraper {
         allImages = [rawVehicle.imageUrl];
       }
 
+      // Usar tipo da categoria (fonte verdadeira), ou fallback para detecção se não fornecido
+      const finalVehicleType = vehicleType || this.detectVehicleType(rawVehicle.title);
+      
+      console.log(`[${this.auctioneerName}] Tipo atribuído: ${finalVehicleType} (origem: ${vehicleType ? 'categoria URL' : 'detecção título'})`);
+
       return {
         external_id: externalId,
         title: rawVehicle.title,
@@ -405,7 +458,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
         model: model || 'Desconhecido',
         year_manufacture: yearModel,
         year_model: yearModel,
-        vehicle_type: this.detectVehicleType(rawVehicle.title),
+        vehicle_type: finalVehicleType,
         mileage: this.extractMileage(rawVehicle.infoTexts),
         state: state || 'SP',
         city: city || 'São Paulo',

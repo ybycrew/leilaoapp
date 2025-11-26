@@ -22,11 +22,17 @@ export function normalizeVehicleTypeForDB(type: string | null | undefined): stri
   if (normalized === 'moto' || normalized === 'motos' || normalized === 'motocicleta' || normalized === 'motociclismo') {
     return 'moto';
   }
-  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'caminhoes' || normalized === 'caminhões' || normalized === 'truck' || normalized === 'onibus' || normalized === 'ônibus') {
+  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'caminhoes' || normalized === 'caminhões' || normalized === 'truck') {
     return 'caminhao';
   }
   if (normalized === 'van' || normalized === 'minivan' || normalized === 'furgao' || normalized === 'furgão') {
     return 'van';
+  }
+  if (normalized === 'onibus' || normalized === 'ônibus') {
+    return 'outros'; // Ônibus vai para 'outros' conforme schema do banco
+  }
+  if (normalized === 'embarcacoes' || normalized === 'embarcações' || normalized === 'barco' || normalized === 'lancha') {
+    return 'outros'; // Embarcações vai para 'outros' conforme schema do banco
   }
   
   // Fallback para carro

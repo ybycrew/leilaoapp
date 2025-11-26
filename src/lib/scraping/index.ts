@@ -304,145 +304,161 @@ async function processVehicle(
     return 'online';
   };
 
-  // 6. Normalizar tipo de veículo para valores aceitos pelo schema
-  const normalizeVehicleType = (type?: string): 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' => {
-    if (!type) return 'carro';
-    const typeLower = type.toLowerCase();
-    if (typeLower.includes('moto')) return 'moto';
-    if (typeLower.includes('caminhao') || typeLower.includes('caminhão')) return 'caminhao';
-    if (typeLower.includes('van')) return 'van';
-    return 'carro';
-  };
-
-  // 7. Validar e corrigir tipo de veículo usando estratégia multi-camada
-  let vehicleType: 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' = normalizeVehicleType(vehicleData.vehicle_type);
+  // 6. Validar e corrigir tipo de veículo
+  // Se o tipo vier da categoria da URL (Sodre Santoro), confiar nele diretamente
+  // Caso contrário, usar classificação multi-camada
+  // Usar normalizeVehicleTypeForDB para normalização inicial (já trata todos os casos incluindo ônibus e embarcações)
+  let vehicleType: 'carro' | 'moto' | 'caminhao' | 'van' | 'outros' = normalizeVehicleTypeForDB(vehicleData.vehicle_type) as 'carro' | 'moto' | 'caminhao' | 'van' | 'outros';
   let normalizedBrand = vehicleData.brand || null;
   let normalizedModel = vehicleData.model || null;
   let normalizedVariant: string | null = null;
   let typeCorrectedByFipe = false;
+  let typeFromUrlCategory = false;
+
+  // Tipos válidos que podem vir de categorias de URL (fonte confiável)
+  // Esses são os tipos exatos que vêm das categorias do Sodre Santoro
+  const urlCategoryTypesLower = ['carro', 'moto', 'caminhão', 'ônibus', 'van', 'embarcações'].map(t => t.toLowerCase());
+  const vehicleTypeLower = (vehicleData.vehicle_type || '').toLowerCase().trim();
+  
+  // Verificar se o tipo parece ter vindo de uma categoria de URL
+  // Tipos de categorias são específicos e diretos: 'carro', 'moto', 'caminhão', 'ônibus', 'van', 'embarcações'
+  // Tipos detectados por título geralmente são mais genéricos: 'Carro', 'SUV', 'Caminhonete', etc.
+  // Verificar correspondência exata (após normalização) com os tipos esperados das categorias
+  if (vehicleData.vehicle_type && urlCategoryTypesLower.includes(vehicleTypeLower)) {
+    typeFromUrlCategory = true;
+    console.log(`[${auctioneerName}] Tipo veio de categoria de URL (fonte confiável): ${vehicleData.vehicle_type} → ${vehicleType}`);
+  }
 
   // Log tipo detectado pelo scraper
   console.log(`[${auctioneerName}] Tipo detectado pelo scraper:`, {
     original: vehicleData.vehicle_type,
     normalized: vehicleType,
     brand: vehicleData.brand,
-    model: vehicleData.model
+    model: vehicleData.model,
+    fromUrlCategory: typeFromUrlCategory
   });
 
-  // Usar classificador multi-camada para determinar tipo correto
-  try {
-    const { classifyVehicleType } = await import('../vehicle-type-classifier');
-    
-    const classification = await classifyVehicleType(
-      vehicleData.title,
-      vehicleData.brand || null,
-      vehicleData.model || null,
-      vehicleData.fuel_type || null,
-      vehicleData.mileage || null,
-      vehicleData.current_bid || null
-    );
+  // Se o tipo veio da categoria da URL, confiar nele e apenas normalizar
+  // Se não, usar classificação multi-camada
+  if (!typeFromUrlCategory) {
+    // Usar classificador multi-camada para determinar tipo correto
+    try {
+      const { classifyVehicleType } = await import('../vehicle-type-classifier');
+      
+      const classification = await classifyVehicleType(
+        vehicleData.title,
+        vehicleData.brand || null,
+        vehicleData.model || null,
+        vehicleData.fuel_type || null,
+        vehicleData.mileage || null,
+        vehicleData.current_bid || null
+      );
 
-    // Aplicar classificação se confiança for alta
-    if (classification.confidence >= 70) {
-      const correctType = classification.type;
-      
-      if (correctType !== vehicleType) {
-        console.log(`[${auctioneerName}] Tipo corrigido (${classification.source}, confiança: ${classification.confidence}%):`, {
-          original: vehicleType,
-          correto: correctType,
-          brand: vehicleData.brand,
-          model: vehicleData.model || 'sem modelo',
-          razões: classification.reasons
-        });
-        typeCorrectedByFipe = true;
-      }
-      
-      vehicleType = correctType;
-      
-      // Se FIPE encontrou, usar marca/modelo normalizados
-      if (classification.source === 'fipe' && vehicleData.brand) {
-        const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model || null);
-        if (fipeResult.normalizedBrand) {
-          normalizedBrand = fipeResult.normalizedBrand;
-        }
-        if (fipeResult.normalizedModel) {
-          normalizedModel = fipeResult.normalizedModel;
-        }
-      }
-    } else {
-      console.log(`[${auctioneerName}] Classificação com baixa confiança (${classification.confidence}%), mantendo tipo do scraping:`, {
-        type: vehicleType,
-        sugerido: classification.type,
-        brand: vehicleData.brand,
-        model: vehicleData.model || 'sem modelo'
-      });
-    }
-  } catch (error) {
-    // Fallback para método antigo se classificador falhar
-    console.warn(`[${auctioneerName}] Erro ao usar classificador, usando método FIPE tradicional:`, error);
-    
-    if (vehicleData.brand) {
-      try {
-        const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model || null);
+      // Aplicar classificação se confiança for alta
+      if (classification.confidence >= 70) {
+        const correctType = classification.type;
         
-        if (fipeResult.isValid && fipeResult.type) {
-          const correctType = mapFipeTypeToVehicleType(fipeResult.type);
-          
-          if (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao') {
-            if (correctType !== vehicleType) {
-              console.log(`[${auctioneerName}] Tipo corrigido pela FIPE:`, {
-                original: vehicleType,
-                correto: correctType,
-                brand: vehicleData.brand,
-                model: vehicleData.model || 'sem modelo'
-              });
-              typeCorrectedByFipe = true;
-            }
-            
-            vehicleType = correctType as 'carro' | 'moto' | 'caminhao';
-            
-            if (fipeResult.normalizedBrand) {
-              normalizedBrand = fipeResult.normalizedBrand;
-            }
-            if (fipeResult.normalizedModel) {
-              normalizedModel = fipeResult.normalizedModel;
-            }
+        if (correctType !== vehicleType) {
+          console.log(`[${auctioneerName}] Tipo corrigido (${classification.source}, confiança: ${classification.confidence}%):`, {
+            original: vehicleType,
+            correto: correctType,
+            brand: vehicleData.brand,
+            model: vehicleData.model || 'sem modelo',
+            razões: classification.reasons
+          });
+          typeCorrectedByFipe = true;
+        }
+        
+        vehicleType = correctType;
+        
+        // Se FIPE encontrou, usar marca/modelo normalizados
+        if (classification.source === 'fipe' && vehicleData.brand) {
+          const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model || null);
+          if (fipeResult.normalizedBrand) {
+            normalizedBrand = fipeResult.normalizedBrand;
+          }
+          if (fipeResult.normalizedModel) {
+            normalizedModel = fipeResult.normalizedModel;
           }
         }
-      } catch (fipeError) {
-        console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE:`, fipeError);
+      } else {
+        console.log(`[${auctioneerName}] Classificação com baixa confiança (${classification.confidence}%), mantendo tipo do scraping:`, {
+          type: vehicleType,
+          sugerido: classification.type,
+          brand: vehicleData.brand,
+          model: vehicleData.model || 'sem modelo'
+        });
+      }
+    } catch (error) {
+      // Fallback para método antigo se classificador falhar
+      console.warn(`[${auctioneerName}] Erro ao usar classificador, usando método FIPE tradicional:`, error);
+      
+      if (vehicleData.brand) {
+        try {
+          const fipeResult = await findVehicleTypeInFipe(vehicleData.brand, vehicleData.model || null);
+          
+          if (fipeResult.isValid && fipeResult.type) {
+            const correctType = mapFipeTypeToVehicleType(fipeResult.type);
+            
+            if (correctType === 'carro' || correctType === 'moto' || correctType === 'caminhao') {
+              if (correctType !== vehicleType) {
+                console.log(`[${auctioneerName}] Tipo corrigido pela FIPE:`, {
+                  original: vehicleType,
+                  correto: correctType,
+                  brand: vehicleData.brand,
+                  model: vehicleData.model || 'sem modelo'
+                });
+                typeCorrectedByFipe = true;
+              }
+              
+              vehicleType = correctType as 'carro' | 'moto' | 'caminhao';
+              
+              if (fipeResult.normalizedBrand) {
+                normalizedBrand = fipeResult.normalizedBrand;
+              }
+              if (fipeResult.normalizedModel) {
+                normalizedModel = fipeResult.normalizedModel;
+              }
+            }
+          }
+        } catch (fipeError) {
+          console.warn(`[${auctioneerName}] Erro ao buscar tipo na FIPE:`, fipeError);
+        }
       }
     }
+    
+    // Validar tipo por modelo conhecido apenas se não veio da URL
+    try {
+      const validation = validateVehicleTypeByModel(
+        vehicleType,
+        normalizedBrand,
+        normalizedModel,
+        vehicleData.title
+      );
+
+      if (!validation.valid && validation.suggestedType) {
+        console.log(`[${auctioneerName}] Tipo corrigido por validação de modelo:`, {
+          original: vehicleType,
+          correto: validation.suggestedType,
+          motivo: validation.reason,
+          brand: normalizedBrand,
+          model: normalizedModel
+        });
+        vehicleType = validation.suggestedType as 'carro' | 'moto' | 'caminhao' | 'van';
+        typeCorrectedByFipe = true;
+      }
+    } catch (error) {
+      console.warn(`[${auctioneerName}] Erro ao validar tipo por modelo:`, error);
+    }
+  } else {
+    // Tipo veio da URL - apenas normalizar para formato do banco
+    console.log(`[${auctioneerName}] Tipo da categoria URL usado diretamente (sem classificação): ${vehicleType}`);
   }
   
   // Garantir que sempre tenha um tipo válido
   if (!vehicleType) {
     vehicleType = 'carro';
     console.warn(`[${auctioneerName}] Tipo não definido, usando padrão 'carro'`);
-  }
-
-  // 7.5. Validar tipo por modelo conhecido (validação adicional)
-  try {
-    const validation = validateVehicleTypeByModel(
-      vehicleType,
-      normalizedBrand,
-      normalizedModel,
-      vehicleData.title
-    );
-
-    if (!validation.valid && validation.suggestedType) {
-      console.log(`[${auctioneerName}] Tipo corrigido por validação de modelo:`, {
-        original: vehicleType,
-        correto: validation.suggestedType,
-        motivo: validation.reason,
-        brand: normalizedBrand,
-        model: normalizedModel
-      });
-      vehicleType = validation.suggestedType as 'carro' | 'moto' | 'caminhao' | 'van';
-      typeCorrectedByFipe = true;
-    }
-  } catch (error) {
-    console.warn(`[${auctioneerName}] Erro ao validar tipo por modelo:`, error);
   }
 
   // 8. Normalizar marca e modelo usando serviço de normalização com o tipo correto (se necessário)
