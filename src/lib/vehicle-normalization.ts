@@ -620,7 +620,7 @@ async function findModelByDirectLookup(
             // Palavra completa presente (evita "TITAN" em "PARATITAN")
             // Verificar se a chave aparece como palavra completa no nome
             const words = baseName.split(/\s+/);
-            if (words.some(word => word === keyLower || word.startsWith(keyLower))) return true;
+            if (words.some((word: string) => word === keyLower || word.startsWith(keyLower))) return true;
             
             // Se a chave é muito curta (< 3 chars), ser mais restritivo
             if (keyLower.length < 3) {
