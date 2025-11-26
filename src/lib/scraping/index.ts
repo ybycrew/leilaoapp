@@ -533,7 +533,7 @@ async function processVehicle(
       if (!vehicleToSaveMinimal.original_url) vehicleToSaveMinimal.original_url = vehicleData.original_url || leiloeiroUrl || '';
       if (!vehicleToSaveMinimal.auctioneer_id) vehicleToSaveMinimal.auctioneer_id = auctioneerId;
       if (!vehicleToSaveMinimal.vehicle_type) {
-        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carro';
+        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carros';
       }
       
       const retryResult = await supabase
@@ -605,7 +605,6 @@ async function processVehicle(
           tipo_salvo: tipoSalvo,
           marca: normalizedBrand,
           modelo: normalizedModel,
-          tipo_correto_fipe: typeCorrectedByFipe
         });
       } else {
         console.log(`[${auctioneerName}] Veículo atualizado:`, {
@@ -613,7 +612,6 @@ async function processVehicle(
           tipo_esperado: englishVehicleType,
           marca: normalizedBrand,
           modelo: normalizedModel,
-          tipo_correto_fipe: typeCorrectedByFipe
         });
       }
     } catch (error) {
@@ -677,7 +675,7 @@ async function processVehicle(
       if (!vehicleToSaveMinimal.original_url) vehicleToSaveMinimal.original_url = vehicleData.original_url || leiloeiroUrl || '';
       if (!vehicleToSaveMinimal.auctioneer_id) vehicleToSaveMinimal.auctioneer_id = auctioneerId;
       if (!vehicleToSaveMinimal.vehicle_type) {
-        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carro';
+        vehicleToSaveMinimal.vehicle_type = englishVehicleType || 'Carros';
       }
       
       const retryResult = await supabase
@@ -746,7 +744,6 @@ async function processVehicle(
           tipo_salvo: tipoSalvo,
           marca: normalizedBrand,
           modelo: normalizedModel,
-          tipo_correto_fipe: typeCorrectedByFipe
         });
       } else {
         console.log(`[${auctioneerName}] Veículo inserido:`, {
@@ -754,7 +751,6 @@ async function processVehicle(
           tipo_esperado: englishVehicleType,
           marca: normalizedBrand,
           modelo: normalizedModel,
-          tipo_correto_fipe: typeCorrectedByFipe
         });
       }
     } catch (error) {
