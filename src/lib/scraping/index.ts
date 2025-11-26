@@ -203,17 +203,56 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     result.vehiclesScraped = vehicles.length;
 
     // 3. Processar cada veículo
+    console.log(`[${auctioneerName}] 🚀 Iniciando processamento de ${vehicles.length} veículos...`);
+    let processedCount = 0;
+    let errorCount = 0;
+    
     for (const vehicleData of vehicles) {
+      processedCount++;
       try {
+        if (processedCount % 50 === 0) {
+          console.log(`[${auctioneerName}] 📊 Progresso: ${processedCount}/${vehicles.length} veículos processados...`);
+        }
+        
         const { created, updated } = await processVehicle(vehicleData, auctioneerId, auctioneerName);
         
-        if (created) result.vehiclesCreated++;
-        if (updated) result.vehiclesUpdated++;
+        if (created) {
+          result.vehiclesCreated++;
+          if (result.vehiclesCreated % 10 === 0) {
+            console.log(`[${auctioneerName}] ✅ ${result.vehiclesCreated} veículos criados até agora...`);
+          }
+        }
+        if (updated) {
+          result.vehiclesUpdated++;
+          if (result.vehiclesUpdated % 10 === 0) {
+            console.log(`[${auctioneerName}] 🔄 ${result.vehiclesUpdated} veículos atualizados até agora...`);
+          }
+        }
+        
+        // Log se nem criou nem atualizou (possível problema)
+        if (!created && !updated) {
+          console.warn(`[${auctioneerName}] ⚠️ Veículo ${vehicleData.external_id || 'sem ID'} não foi criado nem atualizado.`);
+        }
       } catch (error: any) {
-        console.error(`Erro ao processar veículo ${vehicleData.external_id}:`, error);
-        result.errors.push(`${vehicleData.external_id}: ${error.message}`);
+        errorCount++;
+        console.error(`[${auctioneerName}] ❌ Erro ao processar veículo ${vehicleData.external_id || 'sem ID'}:`, error);
+        console.error(`[${auctioneerName}] Stack trace:`, error.stack);
+        console.error(`[${auctioneerName}] Dados do veículo:`, {
+          title: vehicleData.title,
+          brand: vehicleData.brand,
+          model: vehicleData.model,
+          external_id: vehicleData.external_id
+        });
+        result.errors.push(`${vehicleData.external_id || 'sem ID'}: ${error.message}`);
+        
+        // Log primeiros 5 erros completos para debug
+        if (errorCount <= 5) {
+          console.error(`[${auctioneerName}] 🔍 Erro detalhado #${errorCount}:`, JSON.stringify(error, null, 2));
+        }
       }
     }
+    
+    console.log(`[${auctioneerName}] 📊 Processamento concluído: ${processedCount} processados, ${result.vehiclesCreated} criados, ${result.vehiclesUpdated} atualizados, ${errorCount} erros`);
 
     // 4. Atualizar última execução do leiloeiro
     await supabase
@@ -713,10 +752,26 @@ async function processVehicle(
     }
     
     if (error) {
-      throw new Error(`Erro ao atualizar veículo: ${error.message}`);
+      console.error(`[${auctioneerName}] ❌ Erro detalhado ao atualizar veículo:`, {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        vehicle_id: existingVehicleId,
+        vehicle_title: vehicleData.title,
+        vehicle_external_id: vehicleData.external_id,
+        campos_tentados: Object.keys(vehicleToSaveMinimal || vehicleToSave)
+      });
+      throw new Error(`Erro ao atualizar veículo: ${error.message} (Code: ${error.code || 'N/A'})`);
     }
     
     if (!data) {
+      console.error(`[${auctioneerName}] ❌ Nenhum dado retornado após atualização:`, {
+        vehicle_id: existingVehicleId,
+        vehicle_title: vehicleData.title,
+        vehicle_external_id: vehicleData.external_id,
+        error_anterior: error
+      });
       throw new Error('Erro ao atualizar veículo: nenhum dado retornado');
     }
     
@@ -840,10 +895,24 @@ async function processVehicle(
     }
     
     if (error) {
-      throw new Error(`Erro ao salvar veículo: ${error.message}`);
+      console.error(`[${auctioneerName}] ❌ Erro detalhado ao inserir veículo:`, {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        vehicle_title: vehicleData.title,
+        vehicle_external_id: vehicleData.external_id,
+        campos_tentados: Object.keys(vehicleToSaveMinimal || vehicleToSave)
+      });
+      throw new Error(`Erro ao salvar veículo: ${error.message} (Code: ${error.code || 'N/A'})`);
     }
     
     if (!data) {
+      console.error(`[${auctioneerName}] ❌ Nenhum dado retornado após inserção:`, {
+        vehicle_title: vehicleData.title,
+        vehicle_external_id: vehicleData.external_id,
+        error_anterior: error
+      });
       throw new Error('Erro ao salvar veículo: nenhum dado retornado');
     }
     
