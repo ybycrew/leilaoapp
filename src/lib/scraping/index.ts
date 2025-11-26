@@ -617,7 +617,7 @@ async function processVehicle(
   assign('fipe_price', fipePrice ?? null);
   assign('fipe_code', fipeCode ?? null);
   assign('fipe_discount_percentage', fipeDiscountPercentage ?? null);
-  assign('deal_score', dealScore || null);
+  assign('deal_score', dealScore?.score || null);
   assign('thumbnail_url', thumbnailUrl);
   assign('images', imagesArray); // Se a coluna images existir
   assign('external_id', vehicleData.external_id || null);
