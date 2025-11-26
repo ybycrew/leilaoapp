@@ -22,17 +22,16 @@ export class SodreSantoroRealScraper extends BaseScraper {
   /**
    * Retorna as categorias de tipo de veículo com seus mapeamentos
    * O tipo será definido diretamente pela categoria da URL
+   * Agora usando URLs agrupadas com __ (dois underscores) como separador
    */
   private getVehicleTypeCategories(): Array<{ urlCategory: string; internalType: string }> {
     return [
-      { urlCategory: 'carros', internalType: 'carro' },
-      { urlCategory: 'utilitarios+leves', internalType: 'carro' },
+      // Caminhões e ônibus agrupados
+      { urlCategory: 'onibus__caminh%C3%B5es__implementos+rod.', internalType: 'caminhão' },
+      // Carros agrupados (inclui carros, utilitários pesados, utilitários leves e van leve)
+      { urlCategory: 'carros__utilit.+pesados__utilitarios+leves__van+leve', internalType: 'carro' },
+      // Motos
       { urlCategory: 'motos', internalType: 'moto' },
-      { urlCategory: 'caminh%C3%B5es', internalType: 'caminhão' },
-      { urlCategory: 'implementos+rod.', internalType: 'caminhão' },
-      { urlCategory: 'onibus', internalType: 'ônibus' },
-      { urlCategory: 'van+leve', internalType: 'van' },
-      { urlCategory: 'embarca%C3%A7%C3%B5es', internalType: 'embarcações' },
     ];
   }
 
