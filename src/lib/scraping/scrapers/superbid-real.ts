@@ -1,7 +1,5 @@
 import { BaseScraper, VehicleData } from '../base-scraper';
 import { extractBrandAndModel } from '../brands';
-import { classifyVehicleType } from '../../vehicle-type-classifier';
-import { normalizeVehicleTypeForDB } from '../utils';
 
 /**
  * Superbid Real Scraper
@@ -13,14 +11,61 @@ import { normalizeVehicleTypeForDB } from '../utils';
  * - Extração completa de dados (imagens, preços, datas, km)
  */
 export class SuperbidRealScraper extends BaseScraper {
-  private readonly baseUrls = [
-    'https://www.superbid.net/categorias/carros-motos',
-    'https://www.superbid.net/categorias/caminhoes-onibus'
-  ];
-  private readonly pageSize = 60;
-
   constructor() {
     super('Superbid Real');
+  }
+
+  /**
+   * Retorna as categorias de tipo de veículo com seus mapeamentos
+   * O tipo será definido diretamente pela categoria da URL
+   */
+  private getVehicleTypeCategories(): Array<{ 
+    baseUrl: string; 
+    urlPath: string; 
+    internalType: string;
+    pageSize: number;
+    orderBy: string;
+  }> {
+    return [
+      // Carros
+      {
+        baseUrl: 'https://www.superbid.net',
+        urlPath: '/categorias/carros-motos/carros',
+        internalType: 'Carros',
+        pageSize: 60,
+        orderBy: 'endDate:asc'
+      },
+      {
+        baseUrl: 'https://www.superbid.net',
+        urlPath: '/categorias/caminhoes-onibus/vans',
+        internalType: 'Carros',
+        pageSize: 60,
+        orderBy: 'endDate:asc'
+      },
+      // Caminhões e Ônibus
+      {
+        baseUrl: 'https://exchange.superbid.net',
+        urlPath: '/categorias/caminhoes-onibus/caminhoes',
+        internalType: 'Caminhões e Ônibus',
+        pageSize: 30,
+        orderBy: 'score:desc'
+      },
+      {
+        baseUrl: 'https://exchange.superbid.net',
+        urlPath: '/categorias/caminhoes-onibus/onibus',
+        internalType: 'Caminhões e Ônibus',
+        pageSize: 30,
+        orderBy: 'score:desc'
+      },
+      // Motos
+      {
+        baseUrl: 'https://www.superbid.net',
+        urlPath: '/categorias/carros-motos/motos',
+        internalType: 'Motos',
+        pageSize: 30,
+        orderBy: 'endDate:asc'
+      }
+    ];
   }
 
   async scrapeVehicles(): Promise<VehicleData[]> {
@@ -31,30 +76,38 @@ export class SuperbidRealScraper extends BaseScraper {
     const seenTitles = new Set<string>();
 
     try {
-      console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid...`);
-      console.log(`[${this.auctioneerName}] Categorias a processar: ${this.baseUrls.length}`);
+      console.log(`[${this.auctioneerName}] Iniciando scraping do Superbid por categorias...`);
+
+      // Obter categorias de tipo de veículo
+      const categories = this.getVehicleTypeCategories();
+      console.log(`[${this.auctioneerName}] Total de categorias a processar: ${categories.length}`);
 
       // Processar cada categoria
-      for (let i = 0; i < this.baseUrls.length; i++) {
-        const baseUrl = this.baseUrls[i];
-        const categoryName = baseUrl.includes('carros-motos') ? 'Carros e Motos' : 
-                           baseUrl.includes('caminhoes-onibus') ? 'Caminhões e Ônibus' : 
-                           'Categoria';
+      for (let i = 0; i < categories.length; i++) {
+        const category = categories[i];
+        const categoryUrl = `${category.baseUrl}${category.urlPath}`;
         
-        console.log(`[${this.auctioneerName}] Processando categoria ${i + 1}/${this.baseUrls.length}: ${categoryName}`);
-        console.log(`[${this.auctioneerName}] URL base: ${baseUrl}`);
+        console.log(`[${this.auctioneerName}] Processando categoria ${i + 1}/${categories.length}: ${category.internalType}`);
+        console.log(`[${this.auctioneerName}] URL: ${categoryUrl}`);
 
         try {
-          const categoryVehicles = await this.scrapeCategory(baseUrl, seenIds, seenTitles);
+          const categoryVehicles = await this.scrapeCategory(
+            categoryUrl,
+            category.internalType,
+            category.pageSize,
+            category.orderBy,
+            seenIds,
+            seenTitles
+          );
           vehicles.push(...categoryVehicles);
-          console.log(`[${this.auctioneerName}] Categoria ${categoryName} concluída. ${categoryVehicles.length} veículos coletados.`);
+          console.log(`[${this.auctioneerName}] Categoria ${category.internalType} concluída. ${categoryVehicles.length} veículos coletados.`);
         } catch (categoryError) {
-          console.error(`[${this.auctioneerName}] Erro ao processar categoria ${categoryName}:`, categoryError);
+          console.error(`[${this.auctioneerName}] Erro ao processar categoria ${category.internalType}:`, categoryError);
           // Continuar com próxima categoria mesmo se uma falhar
         }
 
         // Delay entre categorias
-        if (i < this.baseUrls.length - 1) {
+        if (i < categories.length - 1) {
           await this.randomDelay(3000, 5000);
         }
       }
@@ -67,20 +120,26 @@ export class SuperbidRealScraper extends BaseScraper {
     }
   }
 
-  private async scrapeCategory(baseUrl: string, seenIds: Set<string>, seenTitles: Set<string>): Promise<VehicleData[]> {
+  private async scrapeCategory(
+    baseUrl: string, 
+    internalType: string,
+    pageSize: number,
+    orderBy: string,
+    seenIds: Set<string>, 
+    seenTitles: Set<string>
+  ): Promise<VehicleData[]> {
     if (!this.page) throw new Error('Página não inicializada');
 
     const vehicles: VehicleData[] = [];
 
     try {
-
       let currentPage = 1;
       let duplicatePageCount = 0;
       const maxDuplicatePages = 2;
 
       while (currentPage <= 250) {
-        const pageUrl = `${baseUrl}?pageNumber=${currentPage}&pageSize=${this.pageSize}`;
-        console.log(`[${this.auctioneerName}] Acessando página ${currentPage}: ${pageUrl}`);
+        const pageUrl = `${baseUrl}?pageNumber=${currentPage}&searchType=opened&pageSize=${pageSize}&orderBy=${orderBy}`;
+        console.log(`[${this.auctioneerName}] [${internalType}] Acessando página ${currentPage}: ${pageUrl}`);
 
         try {
           // Tentar navegar com timeout maior e ignorar erros de rede
@@ -232,7 +291,7 @@ export class SuperbidRealScraper extends BaseScraper {
           // Aguardar um pouco mais para garantir que JS terminou de renderizar
           await this.randomDelay(3000, 5000);
 
-          const pageVehicles = await this.scrapePage(currentPage, baseUrl);
+          const pageVehicles = await this.scrapePage(currentPage, baseUrl, internalType);
           
           if (pageVehicles.length === 0) {
             console.log(`[${this.auctioneerName}] Nenhum veículo encontrado na página ${currentPage}`);
@@ -284,7 +343,7 @@ export class SuperbidRealScraper extends BaseScraper {
     }
   }
 
-  private async scrapePage(pageNumber: number, baseUrl: string): Promise<VehicleData[]> {
+  private async scrapePage(pageNumber: number, baseUrl: string, internalType: string): Promise<VehicleData[]> {
     if (!this.page) return [];
 
     const vehicles: VehicleData[] = [];
@@ -469,7 +528,7 @@ export class SuperbidRealScraper extends BaseScraper {
       // Processar veículos extraídos
       for (let i = 0; i < extractedVehicles.length; i++) {
         try {
-          const vehicle = await this.processExtractedVehicle(extractedVehicles[i], i, pageNumber, baseUrl);
+          const vehicle = await this.processExtractedVehicle(extractedVehicles[i], i, pageNumber, baseUrl, internalType);
           if (vehicle && this.isRelevantVehicle(vehicle)) {
             vehicles.push(vehicle);
           }
@@ -485,7 +544,7 @@ export class SuperbidRealScraper extends BaseScraper {
     return vehicles;
   }
 
-  private async processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number, baseUrl?: string): Promise<VehicleData | null> {
+  private async processExtractedVehicle(rawVehicle: any, index: number, pageNumber: number, baseUrl: string, internalType: string): Promise<VehicleData | null> {
     try {
       const cleanTitle = rawVehicle.title.trim();
       if (!cleanTitle || cleanTitle.length < 5) {
@@ -499,7 +558,7 @@ export class SuperbidRealScraper extends BaseScraper {
       // Parse preço
       const currentBid = rawVehicle.price ? this.parsePrice(rawVehicle.price) : undefined;
 
-      // Parse data
+      // Parse data - ACEITAR TODOS OS VEÍCULOS (com ou sem data, independente da data)
       const auctionDate = rawVehicle.auctionDate ? this.parseAuctionDate(rawVehicle.auctionDate) : undefined;
 
       // ID externo
@@ -511,33 +570,8 @@ export class SuperbidRealScraper extends BaseScraper {
         images.push(rawVehicle.imageUrl);
       }
 
-      // Usar classificador multi-camada para determinar tipo correto
-      let finalVehicleType = 'carro';
-      try {
-        const classification = await classifyVehicleType(
-          cleanTitle,
-          brand || null,
-          model || null,
-          null, // fuel_type não disponível no scraping
-          rawVehicle.mileage || null,
-          currentBid || null
-        );
-        
-        if (classification.confidence >= 70) {
-          finalVehicleType = classification.type;
-          console.log(`[${this.auctioneerName}] Tipo classificado (confiança ${classification.confidence}%): ${finalVehicleType} - ${classification.reasons.join('; ')}`);
-        } else {
-          // Se confiança baixa, usar detecção simples como fallback
-          const simpleDetection = this.detectVehicleType(cleanTitle);
-          finalVehicleType = normalizeVehicleTypeForDB(simpleDetection);
-          console.log(`[${this.auctioneerName}] Baixa confiança na classificação (${classification.confidence}%), usando detecção simples: ${finalVehicleType}`);
-        }
-      } catch (error) {
-        console.error(`[${this.auctioneerName}] Erro na classificação multi-camada:`, error);
-        const simpleDetection = this.detectVehicleType(cleanTitle);
-        finalVehicleType = normalizeVehicleTypeForDB(simpleDetection);
-        console.log(`[${this.auctioneerName}] Usando detecção simples como fallback: ${finalVehicleType}`);
-      }
+      // Usar tipo da categoria diretamente (SEM classificação ou normalização)
+      const finalVehicleType = internalType;
 
       const vehicle: VehicleData = {
         external_id: externalId,
@@ -553,10 +587,10 @@ export class SuperbidRealScraper extends BaseScraper {
         city: 'São Paulo',
         current_bid: currentBid,
         minimum_bid: undefined,
-        auction_date: auctionDate,
+        auction_date: auctionDate, // Aceitar mesmo se for undefined ou data passada
         auction_type: rawVehicle.auctionType || 'Online',
         condition: 'Usado',
-        original_url: rawVehicle.detailUrl || `${baseUrl || this.baseUrls[0]}?pageNumber=${pageNumber}&pageSize=${this.pageSize}#${index}`,
+        original_url: rawVehicle.detailUrl || `${baseUrl}?pageNumber=${pageNumber}#${index}`,
         thumbnail_url: rawVehicle.imageUrl || undefined,
         images: images.length > 0 ? images : undefined
       };
