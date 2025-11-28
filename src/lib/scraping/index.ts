@@ -197,21 +197,18 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     const auctioneerId = auctioneer.id;
     console.log(`[${auctioneerName}] Leiloeiro encontrado com ID: ${auctioneerId}`);
 
-    // 2. Limpar veículos com leilões passados (auction_date < hoje)
-    console.log(`[${auctioneerName}] Limpando leilões passados...`);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas data
+    // 2. Limpar TODOS os veículos do leiloeiro antes do scrape (renovação completa)
+    console.log(`[${auctioneerName}] Limpando TODOS os veículos do leiloeiro para renovação completa...`);
     
     const { error: deleteError, count } = await supabase
       .from('vehicles')
       .delete()
-      .eq('auctioneer_id', auctioneerId)
-      .lt('auction_date', today.toISOString());
+      .eq('auctioneer_id', auctioneerId);
     
     if (deleteError) {
-      console.warn(`[${auctioneerName}] ⚠️ Erro ao limpar leilões passados:`, deleteError);
+      console.warn(`[${auctioneerName}] ⚠️ Erro ao limpar veículos:`, deleteError);
     } else {
-      console.log(`[${auctioneerName}] ✅ Leilões passados removidos: ${count || 0} veículos`);
+      console.log(`[${auctioneerName}] ✅ Todos os veículos removidos: ${count || 0} veículos`);
       result.vehiclesDeleted = count || 0;
     }
 
