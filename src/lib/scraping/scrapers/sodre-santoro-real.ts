@@ -109,6 +109,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
             let skippedCount = 0;
             let duplicatesInPage = 0;
             let futureAuctionsCount = 0;
+            let pastAuctionsCount = 0;
 
             for (const rawVehicle of pageVehicles) {
               try {
@@ -133,15 +134,24 @@ export class SodreSantoroRealScraper extends BaseScraper {
                 
                 seenIds.add(externalId);
 
-                // Verificar se a data do leilão é futura
+                // Verificar se a data do leilão é passada (excluir apenas leilões anteriores a hoje)
                 const auctionDate = this.extractAuctionDate(rawVehicle.infoTexts, rawVehicle.auctionDate);
-                if (auctionDate && auctionDate < today) {
-                  console.log(`[${this.auctioneerName}] [${category.internalType}] Pulando leilão passado: ${auctionDate.toISOString().split('T')[0]}`);
-                  skippedCount++;
-                  continue;
-                }
-
                 if (auctionDate) {
+                  // Normalizar datas para comparar apenas dia/mês/ano (sem horas)
+                  const todayDateOnly = new Date(today);
+                  todayDateOnly.setHours(0, 0, 0, 0);
+                  
+                  const auctionDateOnly = new Date(auctionDate);
+                  auctionDateOnly.setHours(0, 0, 0, 0);
+                  
+                  // Pular apenas leilões com data anterior a hoje (incluir leilões de hoje)
+                  if (auctionDateOnly < todayDateOnly) {
+                    pastAuctionsCount++;
+                    skippedCount++;
+                    continue;
+                  }
+                  
+                  // Contar leilões em andamento/futuros (data >= hoje)
                   futureAuctionsCount++;
                 }
 
@@ -166,7 +176,8 @@ export class SodreSantoroRealScraper extends BaseScraper {
               }
             }
 
-            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões futuros`);
+            const pastAuctionsInfo = pastAuctionsCount > 0 ? `, ${pastAuctionsCount} leilões passados filtrados` : '';
+            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões em andamento/futuros${pastAuctionsInfo}`);
 
             // Saída antecipada: se não há leilões futuros, para após algumas páginas
             if (futureAuctionsCount === 0 && currentPage > 10) {

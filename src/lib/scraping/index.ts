@@ -31,6 +31,7 @@ export interface ScrapingResult {
   vehiclesScraped: number;
   vehiclesCreated: number;
   vehiclesUpdated: number;
+  vehiclesDeleted?: number;
   errors: string[];
   executionTimeMs: number;
 }
@@ -91,8 +92,9 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
   console.log('Scraping concluído');
   console.log('Resumo:');
   results.forEach((r) => {
+    const deletedInfo = r.vehiclesDeleted ? `, ${r.vehiclesDeleted} removidos` : '';
     console.log(
-      `  ${r.auctioneer}: ${r.success ? '✓' : '✗'} - ${r.vehiclesCreated} novos, ${r.vehiclesUpdated} atualizados`
+      `  ${r.auctioneer}: ${r.success ? '✓' : '✗'} - ${r.vehiclesCreated} novos, ${r.vehiclesUpdated} atualizados${deletedInfo}`
     );
   });
   console.log('====================================');
@@ -113,6 +115,7 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     vehiclesScraped: 0,
     vehiclesCreated: 0,
     vehiclesUpdated: 0,
+    vehiclesDeleted: 0,
     errors: [],
     executionTimeMs: 0,
   };
@@ -194,7 +197,25 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     const auctioneerId = auctioneer.id;
     console.log(`[${auctioneerName}] Leiloeiro encontrado com ID: ${auctioneerId}`);
 
-    // 2. Executar scraping
+    // 2. Limpar veículos com leilões passados (auction_date < hoje)
+    console.log(`[${auctioneerName}] Limpando leilões passados...`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas data
+    
+    const { error: deleteError, count } = await supabase
+      .from('vehicles')
+      .delete()
+      .eq('auctioneer_id', auctioneerId)
+      .lt('auction_date', today.toISOString());
+    
+    if (deleteError) {
+      console.warn(`[${auctioneerName}] ⚠️ Erro ao limpar leilões passados:`, deleteError);
+    } else {
+      console.log(`[${auctioneerName}] ✅ Leilões passados removidos: ${count || 0} veículos`);
+      result.vehiclesDeleted = count || 0;
+    }
+
+    // 3. Executar scraping
     console.log(`[${auctioneerName}] Executando scraper...`);
     // Executa o fluxo completo do scraper (inicializa navegador, coleta e fecha)
     const vehicles = await scraper.run();
