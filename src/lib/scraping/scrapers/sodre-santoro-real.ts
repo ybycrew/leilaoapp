@@ -110,6 +110,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
             let duplicatesInPage = 0;
             let futureAuctionsCount = 0;
             let pastAuctionsCount = 0;
+            let vehiclesWithoutDate = 0;
 
             for (const rawVehicle of pageVehicles) {
               try {
@@ -136,24 +137,32 @@ export class SodreSantoroRealScraper extends BaseScraper {
 
                 // Verificar se a data do leilão é passada (excluir apenas leilões anteriores a hoje)
                 const auctionDate = this.extractAuctionDate(rawVehicle.infoTexts, rawVehicle.auctionDate);
-                if (auctionDate) {
-                  // Normalizar datas para comparar apenas dia/mês/ano (sem horas)
-                  const todayDateOnly = new Date(today);
-                  todayDateOnly.setHours(0, 0, 0, 0);
-                  
-                  const auctionDateOnly = new Date(auctionDate);
-                  auctionDateOnly.setHours(0, 0, 0, 0);
-                  
-                  // Pular apenas leilões com data anterior a hoje (incluir leilões de hoje)
-                  if (auctionDateOnly < todayDateOnly) {
-                    pastAuctionsCount++;
-                    skippedCount++;
-                    continue;
-                  }
-                  
-                  // Contar leilões em andamento/futuros (data >= hoje)
-                  futureAuctionsCount++;
+                
+                // CRÍTICO: Detectar veículos sem data (não vendidos, não estão mais em leilão)
+                // Quando aparecem veículos sem data, significa que chegamos ao fim dos leilões ativos
+                // Após esses, aparecerão leilões já vendidos (datas antigas que reaparecem)
+                if (!auctionDate) {
+                  vehiclesWithoutDate++;
+                  skippedCount++;
+                  continue; // Pular veículos sem data - não são leilões ativos
                 }
+                
+                // Normalizar datas para comparar apenas dia/mês/ano (sem horas)
+                const todayDateOnly = new Date(today);
+                todayDateOnly.setHours(0, 0, 0, 0);
+                
+                const auctionDateOnly = new Date(auctionDate);
+                auctionDateOnly.setHours(0, 0, 0, 0);
+                
+                // Pular apenas leilões com data anterior a hoje (incluir leilões de hoje)
+                if (auctionDateOnly < todayDateOnly) {
+                  pastAuctionsCount++;
+                  skippedCount++;
+                  continue;
+                }
+                
+                // Contar leilões em andamento/futuros (data >= hoje)
+                futureAuctionsCount++;
 
                 // Processar dados do veículo com o tipo da categoria
                 const vehicleData = await this.processVehicleData(
@@ -177,7 +186,17 @@ export class SodreSantoroRealScraper extends BaseScraper {
             }
 
             const pastAuctionsInfo = pastAuctionsCount > 0 ? `, ${pastAuctionsCount} leilões passados filtrados` : '';
-            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões em andamento/futuros${pastAuctionsInfo}`);
+            const withoutDateInfo = vehiclesWithoutDate > 0 ? `, ${vehiclesWithoutDate} sem data (não ativos)` : '';
+            console.log(`[${this.auctioneerName}] [${category.internalType}] Página ${currentPage}: ${processedCount} processados, ${skippedCount} pulados, ${duplicatesInPage} duplicatas, ${futureAuctionsCount} leilões em andamento/futuros${pastAuctionsInfo}${withoutDateInfo}`);
+
+            // CRÍTICO: Parar quando encontrar veículos sem data
+            // Veículos sem data são não vendidos que não estão mais em leilão
+            // Após esses, aparecerão leilões já vendidos (datas antigas que reaparecem)
+            if (vehiclesWithoutDate > 0) {
+              console.log(`[${this.auctioneerName}] [${category.internalType}] ⚠️ Encontrados ${vehiclesWithoutDate} veículos sem data na página ${currentPage}`);
+              console.log(`[${this.auctioneerName}] [${category.internalType}] 🛑 Parando paginação - veículos sem data indicam fim dos leilões ativos`);
+              break;
+            }
 
             // Saída antecipada: se não há leilões futuros, para após algumas páginas
             if (futureAuctionsCount === 0 && currentPage > 10) {
