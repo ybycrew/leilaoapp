@@ -197,20 +197,9 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     const auctioneerId = auctioneer.id;
     console.log(`[${auctioneerName}] Leiloeiro encontrado com ID: ${auctioneerId}`);
 
-    // 2. Limpar TODOS os veículos do leiloeiro antes do scrape (renovação completa)
-    console.log(`[${auctioneerName}] Limpando TODOS os veículos do leiloeiro para renovação completa...`);
-    
-    const { error: deleteError, count } = await supabase
-      .from('vehicles')
-      .delete()
-      .eq('auctioneer_id', auctioneerId);
-    
-    if (deleteError) {
-      console.warn(`[${auctioneerName}] ⚠️ Erro ao limpar veículos:`, deleteError);
-    } else {
-      console.log(`[${auctioneerName}] ✅ Todos os veículos removidos: ${count || 0} veículos`);
-      result.vehiclesDeleted = count || 0;
-    }
+    // 2. Guardar timestamp de início para identificar veículos não atualizados
+    const scrapeStartTime = new Date();
+    console.log(`[${auctioneerName}] Iniciando scrape às ${scrapeStartTime.toISOString()}...`);
 
     // 3. Executar scraping
     console.log(`[${auctioneerName}] Executando scraper...`);
@@ -271,7 +260,23 @@ async function runScraper(scraper: any): Promise<ScrapingResult> {
     
     console.log(`[${auctioneerName}] 📊 Processamento concluído: ${processedCount} processados, ${result.vehiclesCreated} criados, ${result.vehiclesUpdated} atualizados, ${errorCount} erros`);
 
-    // 4. Atualizar última execução do leiloeiro
+    // 4. Deletar veículos que não foram atualizados (não encontrados no scrape)
+    console.log(`[${auctioneerName}] Removendo veículos não encontrados no scrape...`);
+    
+    const { error: cleanupError, count: cleanupCount } = await supabase
+      .from('vehicles')
+      .delete()
+      .eq('auctioneer_id', auctioneerId)
+      .lt('updated_at', scrapeStartTime.toISOString());
+    
+    if (cleanupError) {
+      console.warn(`[${auctioneerName}] ⚠️ Erro ao limpar veículos antigos:`, cleanupError);
+    } else {
+      console.log(`[${auctioneerName}] ✅ Veículos não encontrados removidos: ${cleanupCount || 0}`);
+      result.vehiclesDeleted = cleanupCount || 0;
+    }
+
+    // 5. Atualizar última execução do leiloeiro
     await supabase
       .from('auctioneers')
       .update({ last_scrape_at: new Date().toISOString() })
