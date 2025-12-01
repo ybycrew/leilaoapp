@@ -115,7 +115,7 @@ export default function Home() {
       </section>
 
       {/* 3. BLOCOS DE VALOR */}
-      <section className="py-20 bg-carbon border-y border-border">
+      <section className="py-20 bg-muted/30 border-y border-border">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
@@ -273,7 +273,7 @@ export default function Home() {
       </section>
 
       {/* 5. PROVA SOCIAL - Depoimentos */}
-      <section className="py-20 bg-carbon border-y border-border">
+      <section className="py-20 bg-muted/30 border-y border-border">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
@@ -548,7 +548,7 @@ export default function Home() {
       </section>
 
       {/* 9. SOBRE NÓS - Simon Sinek Style */}
-      <section className="py-20 bg-carbon border-y border-border">
+      <section className="py-20 bg-muted/30 border-y border-border">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
@@ -650,13 +650,13 @@ export default function Home() {
       </section>
 
       {/* CTA Final */}
-      <section className="py-20 bg-gradient-to-r from-petrol to-carbon border-t border-border">
+      <section className="py-20 bg-gradient-to-r from-petrol to-petrol/90 border-t border-border">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-6">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
               Pronto Para Encontrar Seu Próximo Veículo?
             </h2>
-            <p className="text-xl text-foreground/80 mb-8">
+            <p className="text-xl text-white/90 mb-8">
               Junte-se a centenas de pessoas que já transformaram como compram veículos
             </p>
             
@@ -688,7 +688,7 @@ export default function Home() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-12 bg-carbon">
+      <footer className="border-t border-border py-12 bg-muted/50">
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
