@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionItem } from "@/components/ui/accordion";
 import { 
-  Car, 
   Search, 
   TrendingDown, 
   Shield, 
@@ -18,6 +17,7 @@ import {
   Target,
   Sparkles
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { ProtectedSearchAutocomplete } from "@/components/ProtectedSearchAutocomplete";
 import { HomepageAuthHandler } from "@/components/HomepageAuthHandler";
@@ -30,10 +30,16 @@ export default function Home() {
       {/* Header */}
       <header className="border-b border-border sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Car className="h-8 w-8 text-signal-orange" />
-            <h1 className="text-2xl font-bold text-foreground font-heading">YBYBID</h1>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Image
+              src="/images/logo/logo.svg"
+              alt="YBYBID Logo"
+              width={200}
+              height={60}
+              className="h-8 w-auto"
+              priority
+            />
+          </Link>
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/#como-funciona" className="text-sm text-foreground hover:text-signal-orange transition-colors">
               Como Funciona
@@ -692,10 +698,15 @@ export default function Home() {
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Car className="h-6 w-6 text-signal-orange" />
-                <span className="font-bold text-foreground text-lg">YBYBID</span>
-              </div>
+              <Link href="/" className="flex items-center gap-2 mb-4">
+                <Image
+                  src="/images/logo/logo.svg"
+                  alt="YBYBID Logo"
+                  width={150}
+                  height={45}
+                  className="h-8 w-auto"
+                />
+              </Link>
               <p className="text-sm text-foreground/70">
                 O jeito mais inteligente de encontrar veículos em leilão no Brasil.
               </p>
