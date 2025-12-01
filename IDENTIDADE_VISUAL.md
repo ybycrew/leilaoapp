@@ -79,7 +79,6 @@ Você terá 3 variações — institucional, direta e de performance.
 A estética deve transmitir:
 - 📍 Tecnologia, precisão e oportunidade
 - 📍 Sem romantização automotiva (não é revenda; é inteligência de compra)
-- 📍 Dark mode premium — com efeitos neon ou petrol
 
 **Estilo fotográfico:**
 - ângulos de garagem
