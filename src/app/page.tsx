@@ -36,7 +36,7 @@ export default function Home() {
               alt="YBYBID Logo"
               width={200}
               height={60}
-              className="h-8 w-auto"
+              className="h-12 md:h-14 w-auto"
               priority
             />
           </Link>
@@ -702,9 +702,9 @@ export default function Home() {
                 <Image
                   src="/images/logo/logo.svg"
                   alt="YBYBID Logo"
-                  width={150}
-                  height={45}
-                  className="h-8 w-auto"
+                  width={180}
+                  height={54}
+                  className="h-10 w-auto"
                 />
               </Link>
               <p className="text-sm text-foreground/70">
