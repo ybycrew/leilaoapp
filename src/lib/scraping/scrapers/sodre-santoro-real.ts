@@ -411,6 +411,20 @@ export class SodreSantoroRealScraper extends BaseScraper {
             const smallTexts = Array.from(card.querySelectorAll('.line-clamp-1.text-body-small, .text-body-small, .text-caption, .info'));
             const infoTexts = smallTexts.map(el => el.textContent?.trim()).filter(text => text);
 
+            // Extrair cidade/estado usando o seletor específico
+            // Formato: "CIDADE / ESTADO" (ex: "GUARULHOS / SP")
+            let cityState = '';
+            const cityStateElements = card.querySelectorAll('.line-clamp-1.text-body-small');
+            for (const el of cityStateElements) {
+              const text = el.textContent?.trim() || '';
+              // Padrão: texto com letras, espaço, barra, espaço, sigla de estado (2 letras - pode ser maiúscula ou minúscula)
+              // Exemplos: "guarulhos i / SP", "monte mor / SP", "curitiba ii / PR"
+              if (text && /[a-zA-Z].*\s+\/\s+[A-Za-z]{2}$/.test(text)) {
+                cityState = text;
+                break;
+              }
+            }
+
             // Extrair data do leilão - geralmente está nos smallTexts
             let auctionDate = '';
             for (const text of infoTexts) {
@@ -427,6 +441,7 @@ export class SodreSantoroRealScraper extends BaseScraper {
               detailUrl,
               infoTexts,
               auctionDate,
+              cityState, // Cidade/Estado no formato "CIDADE / ESTADO"
               rawHtml: card.outerHTML.substring(0, 200) // Para debug
             };
           } catch (err) {
@@ -459,9 +474,9 @@ export class SodreSantoroRealScraper extends BaseScraper {
       // Parse do preço
       const currentBid = this.parsePrice(rawVehicle.price);
       
-      // Extrair informações adicionais
-      const location = rawVehicle.infoTexts.find((text: string) => 
-        text && (text.includes(',') || text.includes('-') || text.match(/\b[A-Z]{2}\b/))
+      // Extrair cidade/estado - usar o campo específico extraído ou buscar nos infoTexts
+      const location = rawVehicle.cityState || rawVehicle.infoTexts.find((text: string) => 
+        text && (text.includes('/') && text.match(/\s+\/\s+[A-Z]{2}$/))
       ) || '';
       
       const { state, city } = this.parseLocation(location);
@@ -635,14 +650,38 @@ export class SodreSantoroRealScraper extends BaseScraper {
   }
 
   /**
-   * Extrai estado e cidade
+   * Extrai estado e cidade do formato "CIDADE / ESTADO"
+   * Exemplos: "GUARULHOS / SP", "MONTE MOR / SP", "CURITIBA II / PR"
    */
   private parseLocation(location: string): { state: string; city: string } {
-    const stateMatch = location.match(/\b([A-Z]{2})\b/);
-    const state = stateMatch ? stateMatch[1] : 'SP';
+    if (!location || !location.trim()) {
+      return { state: 'SP', city: 'São Paulo' };
+    }
+
+    // Formato esperado: "CIDADE / ESTADO" ou "CIDADE/ESTADO"
+    // Aceita estados em maiúscula ou minúscula (ex: "SP" ou "sp")
+    const match = location.trim().match(/^(.+?)\s*\/\s*([A-Za-z]{2})$/i);
+    
+    if (match) {
+      const city = match[1].trim();
+      const state = match[2].trim().toUpperCase(); // Normalizar estado para maiúsculas
+      
+      // Normalizar nome da cidade (capitalizar)
+      const normalizedCity = city
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      
+      return { state, city: normalizedCity };
+    }
+
+    // Fallback: tentar extrair estado de qualquer formato (aceita maiúscula ou minúscula)
+    const stateMatch = location.match(/\b([A-Za-z]{2})\b/);
+    const state = stateMatch ? stateMatch[1].toUpperCase() : 'SP';
 
     const city = location
-      .replace(/\b[A-Z]{2}\b/, '')
+      .replace(/\b[A-Za-z]{2}\b/, '')
       .replace(/[-,/]/g, '')
       .trim() || 'São Paulo';
 
