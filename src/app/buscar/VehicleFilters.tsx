@@ -68,7 +68,12 @@ interface VehicleFiltersProps {
   };
 }
 
-const VEHICLE_TYPES = ['carro', 'moto', 'caminhao', 'van', 'outros'];
+// Valores exibidos no filtro (minúsculas) que serão mapeados para os valores do banco
+const VEHICLE_TYPES = [
+  { value: 'carro', label: 'Carros' },
+  { value: 'moto', label: 'Motos' },
+  { value: 'caminhao', label: 'Caminhões e Ônibus' },
+];
 const AUCTION_TYPES = ['online', 'presencial', 'hibrido'];
 
 export function VehicleFilters({ filterOptions, currentFilters }: VehicleFiltersProps) {
@@ -412,17 +417,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     <Label>Tipo de Veículo</Label>
                     <div className="space-y-2 mt-2">
                       {VEHICLE_TYPES.map(type => (
-                        <div key={type} className="flex items-center space-x-2">
+                        <div key={type.value} className="flex items-center space-x-2">
                           <Checkbox
-                            id={`vehicle-${type}`}
-                            checked={(filters.vehicleType || []).includes(type)}
-                            onCheckedChange={() => toggleArrayFilter('vehicleType', type)}
+                            id={`vehicle-${type.value}`}
+                            checked={(filters.vehicleType || []).includes(type.value)}
+                            onCheckedChange={() => toggleArrayFilter('vehicleType', type.value)}
                           />
                           <label
-                            htmlFor={`vehicle-${type}`}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize cursor-pointer"
+                            htmlFor={`vehicle-${type.value}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                           >
-                            {type}
+                            {type.label}
                           </label>
                         </div>
                       ))}

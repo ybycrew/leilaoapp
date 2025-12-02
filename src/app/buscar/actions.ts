@@ -60,12 +60,19 @@ export interface Vehicle {
 function normalizeVehicleTypeForFilter(vehicleType: string): string {
   const normalized = vehicleType.toLowerCase().trim();
   const mapping: Record<string, string> = {
-    'carro': 'Carro',
-    'moto': 'Moto',
-    'caminhao': 'Caminhão',
-    'caminhão': 'Caminhão',
-    'van': 'Van',
-    'outros': 'Ônibus',
+    // Valores do filtro (minúsculas) → Valores no banco (exatos)
+    'carro': 'Carros',
+    'carros': 'Carros',
+    'moto': 'Motos',
+    'motos': 'Motos',
+    'caminhao': 'Caminhões e Ônibus',
+    'caminhão': 'Caminhões e Ônibus',
+    'caminhoes': 'Caminhões e Ônibus',
+    'caminhões': 'Caminhões e Ônibus',
+    'onibus': 'Caminhões e Ônibus',
+    'ônibus': 'Caminhões e Ônibus',
+    'van': 'Carros', // Vans são classificadas como Carros
+    'outros': 'Caminhões e Ônibus',
   };
   return mapping[normalized] || vehicleType;
 }
