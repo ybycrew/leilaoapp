@@ -134,13 +134,26 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     }
   }, [currentFilters, hasUserInteracted]);
 
-  // Quando o tipo de veículo muda, filtrar marcas
+  // Quando o tipo de veículo muda, filtrar marcas e limpar seleções inválidas
   useEffect(() => {
     const selectedVehicleTypes = filters.vehicleType || [];
+    
+    // Limpar modelos quando tipo mudar (eles serão recalculados quando marca mudar)
+    if (filters.model && filters.model.length > 0) {
+      updateFilter('model', undefined);
+    }
+
+    // Buscar marcas baseado nos tipos selecionados
     if (selectedVehicleTypes.length === 1) {
       // Se apenas um tipo selecionado, buscar marcas filtradas por tipo
       getBrandsByVehicleType(selectedVehicleTypes[0])
         .then(brands => {
+          // Filtrar marcas selecionadas que não estão mais disponíveis
+          const validBrands = (filters.brand || []).filter(brand => brands.includes(brand));
+          if (validBrands.length !== (filters.brand || []).length) {
+            updateFilter('brand', validBrands.length > 0 ? validBrands : undefined);
+          }
+
           if (isBrandOpen) {
             // Evitar re-render da lista enquanto o dropdown está aberto
             setPendingBrandList(brands);
@@ -156,8 +169,38 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
             setFilteredBrands(filterOptions.brands);
           }
         });
+    } else if (selectedVehicleTypes.length > 1) {
+      // Se múltiplos tipos selecionados, buscar marcas de todos os tipos e unir
+      Promise.all(
+        selectedVehicleTypes.map(type => getBrandsByVehicleType(type))
+      ).then(brandArrays => {
+        const allBrands = new Set<string>();
+        brandArrays.forEach(brands => {
+          brands.forEach(brand => allBrands.add(brand));
+        });
+        const uniqueBrands = Array.from(allBrands).sort();
+
+        // Filtrar marcas selecionadas que não estão mais disponíveis
+        const validBrands = (filters.brand || []).filter(brand => uniqueBrands.includes(brand));
+        if (validBrands.length !== (filters.brand || []).length) {
+          updateFilter('brand', validBrands.length > 0 ? validBrands : undefined);
+        }
+        
+        if (isBrandOpen) {
+          setPendingBrandList(uniqueBrands);
+        } else {
+          setFilteredBrands(uniqueBrands);
+        }
+      }).catch(error => {
+        console.error('Erro ao buscar marcas por tipos:', error);
+        if (isBrandOpen) {
+          setPendingBrandList(filterOptions.brands);
+        } else {
+          setFilteredBrands(filterOptions.brands);
+        }
+      });
     } else {
-      // Se nenhum ou múltiplos tipos, mostrar todas as marcas
+      // Se nenhum tipo selecionado, mostrar todas as marcas
       if (isBrandOpen) {
         setPendingBrandList(filterOptions.brands);
       } else {
@@ -179,24 +222,60 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   useEffect(() => {
     const selectedBrands = filters.brand || [];
     const selectedVehicleTypes = filters.vehicleType || [];
-    const vehicleType = selectedVehicleTypes.length === 1 ? selectedVehicleTypes[0] : null;
 
     if (selectedBrands.length > 0) {
-      // Buscar modelos para todas as marcas selecionadas, filtrando por tipo se aplicável
-      Promise.all(
-        selectedBrands.map(brand => getModelsByBrand(brand, vehicleType))
-      ).then(modelArrays => {
-        const allModels = new Set<string>();
-        modelArrays.forEach(models => {
-          if (Array.isArray(models)) {
-            models.forEach(model => allModels.add(model));
-          }
+      // Se apenas um tipo selecionado, buscar modelos filtrados por tipo
+      if (selectedVehicleTypes.length === 1) {
+        const vehicleType = selectedVehicleTypes[0];
+        Promise.all(
+          selectedBrands.map(brand => getModelsByBrand(brand, vehicleType))
+        ).then(modelArrays => {
+          const allModels = new Set<string>();
+          modelArrays.forEach(models => {
+            if (Array.isArray(models)) {
+              models.forEach(model => allModels.add(model));
+            }
+          });
+          setAvailableModels(Array.from(allModels).sort());
+        }).catch(error => {
+          console.error('Erro ao buscar modelos:', error);
+          setAvailableModels([]);
         });
-        setAvailableModels(Array.from(allModels).sort());
-      }).catch(error => {
-        console.error('Erro ao buscar modelos:', error);
-        setAvailableModels([]);
-      });
+      } else if (selectedVehicleTypes.length > 1) {
+        // Se múltiplos tipos selecionados, buscar modelos de todos os tipos e unir
+        Promise.all(
+          selectedBrands.flatMap(brand =>
+            selectedVehicleTypes.map(vehicleType => getModelsByBrand(brand, vehicleType))
+          )
+        ).then(modelArrays => {
+          const allModels = new Set<string>();
+          modelArrays.forEach(models => {
+            if (Array.isArray(models)) {
+              models.forEach(model => allModels.add(model));
+            }
+          });
+          setAvailableModels(Array.from(allModels).sort());
+        }).catch(error => {
+          console.error('Erro ao buscar modelos:', error);
+          setAvailableModels([]);
+        });
+      } else {
+        // Se nenhum tipo selecionado, buscar modelos sem filtro de tipo
+        Promise.all(
+          selectedBrands.map(brand => getModelsByBrand(brand, null))
+        ).then(modelArrays => {
+          const allModels = new Set<string>();
+          modelArrays.forEach(models => {
+            if (Array.isArray(models)) {
+              models.forEach(model => allModels.add(model));
+            }
+          });
+          setAvailableModels(Array.from(allModels).sort());
+        }).catch(error => {
+          console.error('Erro ao buscar modelos:', error);
+          setAvailableModels([]);
+        });
+      }
     } else {
       setAvailableModels([]);
       setSelectedModels([]);

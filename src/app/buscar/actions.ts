@@ -581,34 +581,45 @@ function mapVehicleTypeToFipeSlug(vehicleType: string | null | undefined): strin
 }
 
 /**
- * Busca marcas FIPE filtradas por tipo de veículo
+ * Normaliza tipo de veículo do filtro para o valor do banco
+ */
+function normalizeVehicleTypeForDatabase(vehicleType: string): string {
+  const normalized = vehicleType.toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    'carro': 'Carros',
+    'carros': 'Carros',
+    'moto': 'Motos',
+    'motos': 'Motos',
+    'caminhao': 'Caminhões e Ônibus',
+    'caminhão': 'Caminhões e Ônibus',
+    'caminhoes': 'Caminhões e Ônibus',
+    'caminhões': 'Caminhões e Ônibus',
+    'onibus': 'Caminhões e Ônibus',
+    'ônibus': 'Caminhões e Ônibus',
+  };
+  return mapping[normalized] || vehicleType;
+}
+
+/**
+ * Busca marcas reais do banco de veículos filtradas por tipo de veículo
  */
 export async function getBrandsByVehicleType(vehicleType?: string | null) {
   const supabase = await createClient();
 
   try {
-    let brandsQuery = supabase
-      .from('fipe_brands')
-      .select('name_upper')
-      .order('name_upper');
+    let query = supabase
+      .from('vehicles_with_auctioneer')
+      .select('brand')
+      .not('brand', 'is', null)
+      .gte('auction_date', new Date().toISOString()); // Apenas leilões futuros
 
-    // Se vehicleType fornecido, filtrar por vehicle_type_id
+    // Se vehicleType fornecido, filtrar por vehicle_type
     if (vehicleType) {
-      const fipeSlug = mapVehicleTypeToFipeSlug(vehicleType);
-      if (fipeSlug) {
-        const { data: vehicleTypeData, error: vehicleTypeError } = await supabase
-          .from('fipe_vehicle_types')
-          .select('id')
-          .eq('slug', fipeSlug)
-          .single();
-
-        if (!vehicleTypeError && vehicleTypeData) {
-          brandsQuery = brandsQuery.eq('vehicle_type_id', vehicleTypeData.id);
-        }
-      }
+      const normalizedType = normalizeVehicleTypeForDatabase(vehicleType);
+      query = query.eq('vehicle_type', normalizedType);
     }
 
-    const { data: brandsData, error: brandsError } = await brandsQuery;
+    const { data: brandsData, error: brandsError } = await query;
 
     if (brandsError) {
       console.error('[getBrandsByVehicleType] Erro ao buscar marcas:', brandsError);
@@ -617,8 +628,8 @@ export async function getBrandsByVehicleType(vehicleType?: string | null) {
 
     const brandSet = new Set<string>();
     brandsData?.forEach((row: any) => {
-      if (row?.name_upper) {
-        brandSet.add(row.name_upper);
+      if (row?.brand && row.brand.trim() !== '') {
+        brandSet.add(row.brand);
       }
     });
 
@@ -633,7 +644,32 @@ export async function getModelsByBrand(brand: string, vehicleType?: string | nul
   const supabase = await createClient();
 
   try {
-    // Se vehicleType fornecido, buscar vehicle_type_id correspondente
+    // Se vehicleType fornecido, buscar modelos reais do banco de veículos
+    if (vehicleType) {
+      const normalizedType = normalizeVehicleTypeForDatabase(vehicleType);
+      
+      let query = supabase
+        .from('vehicles_with_auctioneer')
+        .select('model')
+        .eq('brand', brand)
+        .eq('vehicle_type', normalizedType)
+        .not('model', 'is', null)
+        .gte('auction_date', new Date().toISOString()); // Apenas leilões futuros
+
+      const { data: modelsData, error: modelsError } = await query;
+
+      if (!modelsError && modelsData && modelsData.length > 0) {
+        const modelSet = new Set<string>();
+        modelsData.forEach((row: any) => {
+          if (row?.model && row.model.trim() !== '') {
+            modelSet.add(row.model);
+          }
+        });
+        return Array.from(modelSet).sort();
+      }
+    }
+
+    // Fallback: buscar da FIPE se não encontrar no banco ou se não houver tipo selecionado
     let vehicleTypeId: string | null = null;
     if (vehicleType) {
       const fipeSlug = mapVehicleTypeToFipeSlug(vehicleType);
