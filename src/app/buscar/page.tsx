@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import { Search, MapPin, Calendar, Fuel, Gauge, TrendingDown } from "lucide-react";
 import Image from 'next/image';
 import Link from 'next/link';
@@ -36,6 +37,7 @@ interface SearchPageProps {
     auctioneer?: string | string[];
     licensePlateEnd?: string;
     orderBy?: string;
+    page?: string;
   }>;
 }
 
@@ -79,7 +81,10 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     licensePlateEnd: params.licensePlateEnd,
   };
 
-  const { vehicles, total, error } = await searchVehicles({
+  const currentPage = params.page ? parseInt(params.page) : 1;
+  const pageSize = 20; // Itens por página
+
+  const { vehicles, total, error, pagination } = await searchVehicles({
     q: params.q,
     state: params.state,
     city: params.city,
@@ -102,7 +107,8 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     auctioneer: normalizeArrayParam(params.auctioneer),
     licensePlateEnd: params.licensePlateEnd,
     orderBy: (params.orderBy as any) || 'deal_score',
-    limit: 50,
+    page: currentPage,
+    limit: pageSize,
   });
 
   const stats = await getVehicleStats();
@@ -161,8 +167,19 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">
-                  Mostrando <strong>{total} veículos</strong>
-                  {params.q && ` para "${params.q}"`}
+                  {pagination ? (
+                    <>
+                      Mostrando <strong>{((currentPage - 1) * pageSize) + 1}</strong> a{' '}
+                      <strong>{Math.min(currentPage * pageSize, total)}</strong> de{' '}
+                      <strong>{total}</strong> veículos
+                      {params.q && ` para "${params.q}"`}
+                    </>
+                  ) : (
+                    <>
+                      Mostrando <strong>{total} veículos</strong>
+                      {params.q && ` para "${params.q}"`}
+                    </>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {stats.totalVehicles} veículos no total • {stats.totalBrands} marcas
@@ -263,6 +280,16 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
                   </Card>
                 ))}
               </div>
+            )}
+
+            {/* Componente de Paginação */}
+            {pagination && pagination.totalPages > 1 && (
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                baseUrl="/buscar"
+                searchParams={params}
+              />
             )}
           </div>
         </div>

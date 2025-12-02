@@ -29,6 +29,7 @@ export interface SearchFilters {
   orderBy?: 'deal_score' | 'price_asc' | 'price_desc' | 'date_asc' | 'date_desc';
   limit?: number;
   offset?: number;
+  page?: number;
 }
 
 export interface Vehicle {
@@ -187,16 +188,20 @@ export async function searchVehicles(filters: SearchFilters = {}) {
     }
 
     // Paginação
-    const limit = filters.limit || 50;
-    const offset = filters.offset || 0;
+    const limit = filters.limit || 20;
+    const page = filters.page || 1;
+    const offset = filters.offset !== undefined ? filters.offset : (page - 1) * limit;
     query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
     if (error) {
       console.error('Erro ao buscar veículos:', error);
-      return { vehicles: [], total: 0, error: error.message };
+      return { vehicles: [], total: 0, error: error.message, pagination: null };
     }
+
+    const totalCount = count || 0;
+    const totalPages = Math.ceil(totalCount / limit);
 
     const vehicles = (data ?? []).map((item: any) => {
       const imagens: string[] =
@@ -251,15 +256,24 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     return { 
       vehicles: vehicles as Vehicle[], 
-      total: count || 0,
-      error: null 
+      total: totalCount,
+      error: null,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      }
     };
   } catch (error: any) {
     console.error('Erro na busca:', error);
     return { 
       vehicles: [], 
       total: 0, 
-      error: error.message || 'Erro ao buscar veículos' 
+      error: error.message || 'Erro ao buscar veículos',
+      pagination: null
     };
   }
 }
