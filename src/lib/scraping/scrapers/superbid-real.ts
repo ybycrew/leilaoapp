@@ -505,6 +505,27 @@ export class SuperbidRealScraper extends BaseScraper {
               auctionType = 'Presencial';
             }
             
+            // Extrair cidade/estado - formato "Cidade - ESTADO"
+            // Seletor: p.sc-f06abd4f-12 (classe pode variar, mas sempre tem sc-f06abd4f-12)
+            let cityState = '';
+            const locationElements = card.querySelectorAll('p[class*="sc-f06abd4f-12"]');
+            for (const el of Array.from(locationElements)) {
+              const text = el.textContent?.trim() || '';
+              // Padrão: "Cidade - ESTADO" (ex: "Itapuí - SP", "Duque de Caxias - RJ")
+              if (text && /[A-ZÁÉÍÓÚÇ][a-záéíóúç]+(?:\s+[A-ZÁÉÍÓÚÇ][a-záéíóúç]+)*\s*-\s*[A-Z]{2}$/.test(text)) {
+                cityState = text;
+                break;
+              }
+            }
+            
+            // Fallback: buscar no texto completo do card
+            if (!cityState) {
+              const locationMatch = fullText.match(/([A-ZÁÉÍÓÚÇ][a-záéíóúç]+(?:\s+[A-ZÁÉÍÓÚÇ][a-záéíóúç]+)*)\s*-\s*([A-Z]{2})/);
+              if (locationMatch) {
+                cityState = locationMatch[0].trim();
+              }
+            }
+            
             vehicles.push({
               title,
               detailUrl,
@@ -513,6 +534,7 @@ export class SuperbidRealScraper extends BaseScraper {
               auctionDate,
               mileage,
               auctionType,
+              cityState, // Cidade/Estado no formato "Cidade - ESTADO"
               fullText: fullText.substring(0, 500) // debug
             });
           } catch (error) {
@@ -573,6 +595,9 @@ export class SuperbidRealScraper extends BaseScraper {
       // Usar tipo da categoria diretamente (SEM classificação ou normalização)
       const finalVehicleType = internalType;
 
+      // Extrair cidade/estado do formato "Cidade - ESTADO"
+      const { state, city } = this.parseLocation(rawVehicle.cityState || '');
+
       const vehicle: VehicleData = {
         external_id: externalId,
         title: cleanTitle,
@@ -583,8 +608,8 @@ export class SuperbidRealScraper extends BaseScraper {
         vehicle_type: finalVehicleType,
         color: color || undefined,
         mileage: rawVehicle.mileage || undefined,
-        state: 'SP',
-        city: 'São Paulo',
+        state,
+        city,
         current_bid: currentBid,
         minimum_bid: undefined,
         auction_date: auctionDate, // Aceitar mesmo se for undefined ou data passada
@@ -1020,5 +1045,50 @@ export class SuperbidRealScraper extends BaseScraper {
     const duplicateCount = currentTitles.filter(title => seenTitles.has(title)).length;
     const duplicatePercentage = duplicateCount / currentTitles.length;
     return duplicatePercentage > 0.8;
+  }
+
+  /**
+   * Extrai estado e cidade do formato "Cidade - ESTADO"
+   * Exemplos: "Itapuí - SP", "Duque de Caxias - RJ", "Sengés - PR"
+   */
+  private parseLocation(location: string): { state: string; city: string } {
+    if (!location || !location.trim()) {
+      return { state: 'SP', city: 'São Paulo' };
+    }
+
+    // Formato esperado: "Cidade - ESTADO" ou "Cidade-ESTADO"
+    // Exemplos: "Itapuí - SP", "Duque de Caxias - RJ"
+    const match = location.trim().match(/^(.+?)\s*-\s*([A-Z]{2})$/);
+    
+    if (match) {
+      const city = match[1].trim();
+      const state = match[2].trim();
+      
+      // Normalizar nome da cidade (capitalizar)
+      const normalizedCity = city
+        .toLowerCase()
+        .split(' ')
+        .map(word => {
+          // Preservar conectores em minúsculas
+          if (['de', 'da', 'do', 'dos', 'das'].includes(word)) {
+            return word;
+          }
+          return word.charAt(0).toUpperCase() + word.slice(1);
+        })
+        .join(' ');
+      
+      return { state, city: normalizedCity };
+    }
+
+    // Fallback: tentar extrair estado de qualquer formato
+    const stateMatch = location.match(/\b([A-Z]{2})\b/);
+    const state = stateMatch ? stateMatch[1] : 'SP';
+
+    const city = location
+      .replace(/\b[A-Z]{2}\b/, '')
+      .replace(/[-,/]/g, '')
+      .trim() || 'São Paulo';
+
+    return { state, city };
   }
 }
