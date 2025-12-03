@@ -27,11 +27,7 @@ import {
   X,
   Filter
 } from "lucide-react";
-import { getModelsByBrand, getBrandsByVehicleType } from './actions';
-
 interface FilterOptions {
-  brands: string[];
-  models: string[];
   states: string[];
   citiesByState: Record<string, string[]>;
   auctioneers: string[];
@@ -52,8 +48,6 @@ interface VehicleFiltersProps {
     minYear?: string;
     maxYear?: string;
     vehicleType?: string[];
-    brand?: string[];
-    model?: string[];
     fuelType?: string[];
     transmission?: string[];
     color?: string[];
@@ -84,14 +78,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   // Estado dos filtros - garantir que não seja undefined
   const [filters, setFilters] = useState(currentFilters || {});
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [filteredBrands, setFilteredBrands] = useState<string[]>(filterOptions.brands);
-  
-  // Controlar abertura do Select de marcas para não fechar ao atualizar a lista
-  const [isBrandOpen, setIsBrandOpen] = useState(false);
-  // Buffer para aplicar atualizações de marcas somente quando o select estiver fechado
-  const [pendingBrandList, setPendingBrandList] = useState<string[] | null>(null);
   
   // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
@@ -122,7 +108,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   useEffect(() => {
     if (currentFilters && !hasUserInteracted) {
       setFilters(currentFilters);
-      setSelectedModels(currentFilters.model || []);
       setLocalNumericValues({
         minYear: currentFilters.minYear || '',
         maxYear: currentFilters.maxYear || '',
@@ -133,154 +118,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       });
     }
   }, [currentFilters, hasUserInteracted]);
-
-  // Quando o tipo de veículo muda, filtrar marcas e limpar seleções inválidas
-  useEffect(() => {
-    const selectedVehicleTypes = filters.vehicleType || [];
-    
-    // Limpar modelos quando tipo mudar (eles serão recalculados quando marca mudar)
-    if (filters.model && filters.model.length > 0) {
-      updateFilter('model', undefined);
-    }
-
-    // Buscar marcas baseado nos tipos selecionados
-    if (selectedVehicleTypes.length === 1) {
-      // Se apenas um tipo selecionado, buscar marcas filtradas por tipo
-      getBrandsByVehicleType(selectedVehicleTypes[0])
-        .then(brands => {
-          // Filtrar marcas selecionadas que não estão mais disponíveis
-          const validBrands = (filters.brand || []).filter(brand => brands.includes(brand));
-          if (validBrands.length !== (filters.brand || []).length) {
-            updateFilter('brand', validBrands.length > 0 ? validBrands : undefined);
-          }
-
-          if (isBrandOpen) {
-            // Evitar re-render da lista enquanto o dropdown está aberto
-            setPendingBrandList(brands);
-          } else {
-            setFilteredBrands(brands);
-          }
-        })
-        .catch(error => {
-          console.error('Erro ao buscar marcas por tipo:', error);
-          if (isBrandOpen) {
-            setPendingBrandList(filterOptions.brands);
-          } else {
-            setFilteredBrands(filterOptions.brands);
-          }
-        });
-    } else if (selectedVehicleTypes.length > 1) {
-      // Se múltiplos tipos selecionados, buscar marcas de todos os tipos e unir
-      Promise.all(
-        selectedVehicleTypes.map(type => getBrandsByVehicleType(type))
-      ).then(brandArrays => {
-        const allBrands = new Set<string>();
-        brandArrays.forEach(brands => {
-          brands.forEach(brand => allBrands.add(brand));
-        });
-        const uniqueBrands = Array.from(allBrands).sort();
-
-        // Filtrar marcas selecionadas que não estão mais disponíveis
-        const validBrands = (filters.brand || []).filter(brand => uniqueBrands.includes(brand));
-        if (validBrands.length !== (filters.brand || []).length) {
-          updateFilter('brand', validBrands.length > 0 ? validBrands : undefined);
-        }
-        
-        if (isBrandOpen) {
-          setPendingBrandList(uniqueBrands);
-        } else {
-          setFilteredBrands(uniqueBrands);
-        }
-      }).catch(error => {
-        console.error('Erro ao buscar marcas por tipos:', error);
-        if (isBrandOpen) {
-          setPendingBrandList(filterOptions.brands);
-        } else {
-          setFilteredBrands(filterOptions.brands);
-        }
-      });
-    } else {
-      // Se nenhum tipo selecionado, mostrar todas as marcas
-      if (isBrandOpen) {
-        setPendingBrandList(filterOptions.brands);
-      } else {
-        setFilteredBrands(filterOptions.brands);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.vehicleType, filterOptions.brands]);
-
-  // Quando o select fechar, aplicar a lista pendente (se existir)
-  useEffect(() => {
-    if (!isBrandOpen && pendingBrandList) {
-      setFilteredBrands(pendingBrandList);
-      setPendingBrandList(null);
-    }
-  }, [isBrandOpen, pendingBrandList]);
-
-  // Quando a marca muda, buscar modelos (considerando tipo de veículo)
-  useEffect(() => {
-    const selectedBrands = filters.brand || [];
-    const selectedVehicleTypes = filters.vehicleType || [];
-
-    if (selectedBrands.length > 0) {
-      // Se apenas um tipo selecionado, buscar modelos filtrados por tipo
-      if (selectedVehicleTypes.length === 1) {
-        const vehicleType = selectedVehicleTypes[0];
-        Promise.all(
-          selectedBrands.map(brand => getModelsByBrand(brand, vehicleType))
-        ).then(modelArrays => {
-          const allModels = new Set<string>();
-          modelArrays.forEach(models => {
-            if (Array.isArray(models)) {
-              models.forEach(model => allModels.add(model));
-            }
-          });
-          setAvailableModels(Array.from(allModels).sort());
-        }).catch(error => {
-          console.error('Erro ao buscar modelos:', error);
-          setAvailableModels([]);
-        });
-      } else if (selectedVehicleTypes.length > 1) {
-        // Se múltiplos tipos selecionados, buscar modelos de todos os tipos e unir
-        Promise.all(
-          selectedBrands.flatMap(brand =>
-            selectedVehicleTypes.map(vehicleType => getModelsByBrand(brand, vehicleType))
-          )
-        ).then(modelArrays => {
-          const allModels = new Set<string>();
-          modelArrays.forEach(models => {
-            if (Array.isArray(models)) {
-              models.forEach(model => allModels.add(model));
-            }
-          });
-          setAvailableModels(Array.from(allModels).sort());
-        }).catch(error => {
-          console.error('Erro ao buscar modelos:', error);
-          setAvailableModels([]);
-        });
-      } else {
-        // Se nenhum tipo selecionado, buscar modelos sem filtro de tipo
-        Promise.all(
-          selectedBrands.map(brand => getModelsByBrand(brand, null))
-        ).then(modelArrays => {
-          const allModels = new Set<string>();
-          modelArrays.forEach(models => {
-            if (Array.isArray(models)) {
-              models.forEach(model => allModels.add(model));
-            }
-          });
-          setAvailableModels(Array.from(allModels).sort());
-        }).catch(error => {
-          console.error('Erro ao buscar modelos:', error);
-          setAvailableModels([]);
-        });
-      }
-    } else {
-      setAvailableModels([]);
-      setSelectedModels([]);
-    }
-  }, [filters.brand, filters.vehicleType]);
 
   const updateFilter = (key: string, value: any) => {
     setHasUserInteracted(true);
@@ -317,12 +154,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       
       if (filters.vehicleType && filters.vehicleType.length > 0) {
         filters.vehicleType.forEach(vt => params.append('vehicleType', vt));
-      }
-      if (filters.brand && filters.brand.length > 0) {
-        filters.brand.forEach(b => params.append('brand', b));
-      }
-      if (filters.model && filters.model.length > 0) {
-        filters.model.forEach(m => params.append('model', m));
       }
       if (filters.fuelType && filters.fuelType.length > 0) {
         filters.fuelType.forEach(f => params.append('fuelType', f));
@@ -363,8 +194,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       minYear: undefined,
       maxYear: undefined,
       vehicleType: undefined,
-      brand: undefined,
-      model: undefined,
       fuelType: undefined,
       transmission: undefined,
       color: undefined,
@@ -513,97 +342,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </div>
                   </div>
 
-                  <div>
-                    <Label htmlFor="brand">Marca</Label>
-                    <Select
-                      open={isBrandOpen}
-                      onOpenChange={setIsBrandOpen}
-                      value=""
-                      onValueChange={(value) => {
-                        if (value && !(filters.brand || []).includes(value)) {
-                          updateFilter('brand', [...(filters.brand || []), value]);
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="brand">
-                        <SelectValue placeholder="Adicionar marca" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredBrands.length > 0 ? (
-                          filteredBrands
-                            .filter(brand => !(filters.brand || []).includes(brand))
-                            .map(brand => (
-                              <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                            ))
-                        ) : (
-                          <SelectItem value="empty" disabled>
-                            {filters.vehicleType && filters.vehicleType.length > 0 
-                              ? "Nenhuma marca disponível para este tipo" 
-                              : "Nenhuma marca disponível"}
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {(filters.brand || []).length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {filters.brand?.map(brand => (
-                          <Badge key={brand} variant="secondary" className="flex items-center gap-1">
-                            {brand}
-                            <X
-                              className="h-3 w-3 cursor-pointer"
-                              onClick={() => {
-                                updateFilter('brand', filters.brand?.filter(b => b !== brand));
-                              }}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label htmlFor="model">Modelo</Label>
-                    <Select
-                      value=""
-                      onValueChange={(value) => {
-                        if (value && !(filters.model || []).includes(value)) {
-                          updateFilter('model', [...(filters.model || []), value]);
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="model">
-                        <SelectValue placeholder={availableModels.length > 0 ? "Adicionar modelo" : "Selecione uma marca primeiro"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableModels.length > 0 ? (
-                          availableModels.map(model => (
-                            <SelectItem key={model} value={model}>{model}</SelectItem>
-                          ))
-                        ) : filterOptions.models && filterOptions.models.length > 0 ? (
-                          filterOptions.models.slice(0, 100).map(model => (
-                            <SelectItem key={model} value={model}>{model}</SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="loading" disabled>Nenhum modelo disponível</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {(filters.model || []).length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {filters.model?.map(model => (
-                          <Badge key={model} variant="secondary" className="flex items-center gap-1">
-                            {model}
-                            <X
-                              className="h-3 w-3 cursor-pointer"
-                              onClick={() => {
-                                updateFilter('model', filters.model?.filter(m => m !== model));
-                              }}
-                            />
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>

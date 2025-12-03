@@ -13,8 +13,6 @@ export interface SearchFilters {
   minYear?: number;
   maxYear?: number;
   vehicleType?: string[];
-  brand?: string[];
-  model?: string[];
   fuelType?: string[];
   transmission?: string[];
   color?: string[];
@@ -91,7 +89,10 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     // Aplicar filtros - usando colunas em inglês da view
     if (filters.q) {
-      query = query.or(`title.ilike.%${filters.q}%,model.ilike.%${filters.q}%,brand.ilike.%${filters.q}%`);
+      // Busca mais assertiva: busca em título, marca, modelo e descrição
+      // Remove acentos e torna case-insensitive para melhor matching
+      const searchTerm = filters.q.trim();
+      query = query.or(`title.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,model.ilike.%${searchTerm}%`);
     }
 
     if (normalizedState) {
@@ -104,14 +105,6 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     // Excluir leilões com data já passada: considerar apenas futuros
     query = query.gte('auction_date', new Date().toISOString());
-
-    if (filters.brand && filters.brand.length > 0) {
-      query = query.in('brand', filters.brand);
-    }
-
-    if (filters.model && filters.model.length > 0) {
-      query = query.in('model', filters.model);
-    }
 
     if (filters.vehicleType && filters.vehicleType.length > 0) {
       const normalizedTypes = filters.vehicleType.map(normalizeVehicleTypeForFilter);
@@ -154,6 +147,22 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       query = query.lte('mileage', filters.maxMileage);
     }
 
+    if (filters.minDealScore) {
+      query = query.gte('deal_score', filters.minDealScore);
+    }
+
+    if (filters.minFipeDiscount) {
+      query = query.gte('fipe_discount_percentage', filters.minFipeDiscount);
+    }
+
+    if (filters.auctioneer && filters.auctioneer.length > 0) {
+      query = query.in('auctioneer_name', filters.auctioneer);
+    }
+
+    if (filters.licensePlateEnd) {
+      query = query.ilike('license_plate', `%${filters.licensePlateEnd}`);
+    }
+
     if (filters.auctionType && filters.auctionType.length > 0) {
       query = query.in('auction_type', filters.auctionType);
     }
@@ -162,125 +171,98 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       query = query.eq('has_financing', filters.hasFinancing);
     }
 
-    if (filters.licensePlateEnd) {
-      query = query.ilike('license_plate', `%${filters.licensePlateEnd}`);
-    }
-
-    if (filters.minDealScore) {
-      query = query.gte('deal_score', filters.minDealScore);
-    }
-
-    if (filters.auctioneer && filters.auctioneer.length > 0) {
-      query = query.in('auctioneer_name', filters.auctioneer);
-    }
-
     // Ordenação
-    switch (filters.orderBy) {
-      case 'price_asc':
-        query = query.order('current_bid', { ascending: true });
-        break;
-      case 'price_desc':
-        query = query.order('current_bid', { ascending: false });
-        break;
-      case 'date_asc':
-        query = query.order('auction_date', { ascending: true });
-        break;
-      case 'date_desc':
-        query = query.order('auction_date', { ascending: false });
-        break;
-      case 'deal_score':
-      default:
-        query = query.order('deal_score', { ascending: false, nullsFirst: false });
-        break;
+    if (filters.orderBy) {
+      switch (filters.orderBy) {
+        case 'deal_score':
+          query = query.order('deal_score', { ascending: false, nullsLast: true });
+          break;
+        case 'price_asc':
+          query = query.order('current_bid', { ascending: true, nullsLast: true });
+          break;
+        case 'price_desc':
+          query = query.order('current_bid', { ascending: false, nullsLast: true });
+          break;
+        case 'date_asc':
+          query = query.order('auction_date', { ascending: true, nullsLast: true });
+          break;
+        case 'date_desc':
+          query = query.order('auction_date', { ascending: false, nullsLast: true });
+          break;
+        default:
+          query = query.order('deal_score', { ascending: false, nullsLast: true });
+      }
+    } else {
+      query = query.order('deal_score', { ascending: false, nullsLast: true });
     }
 
     // Paginação
     const limit = filters.limit || 20;
-    const page = filters.page || 1;
-    const offset = filters.offset !== undefined ? filters.offset : (page - 1) * limit;
+    const offset = ((filters.page || 1) - 1) * limit;
     query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('Erro ao buscar veículos:', error);
-      return { vehicles: [], total: 0, error: error.message, pagination: null };
+      console.error('[searchVehicles] Erro na query:', error);
+      return {
+        vehicles: [],
+        total: 0,
+        error: error.message,
+        pagination: {
+          page: filters.page || 1,
+          limit: limit,
+          total: 0,
+          totalPages: 0,
+        },
+      };
     }
 
-    const totalCount = count || 0;
-    const totalPages = Math.ceil(totalCount / limit);
+    const vehicles = (data || []).map((row: any) => ({
+      id: row.id,
+      auctioneer_name: row.auctioneer_name || '',
+      auctioneer_logo: row.auctioneer_logo,
+      title: row.title || '',
+      brand: row.brand || '',
+      model: row.model || '',
+      year_model: row.year_model,
+      vehicle_type: row.vehicle_type,
+      mileage: row.mileage,
+      state: row.state || '',
+      city: row.city || '',
+      current_bid: row.current_bid,
+      fipe_price: row.fipe_price,
+      fipe_discount_percentage: row.fipe_discount_percentage,
+      auction_date: row.auction_date,
+      has_financing: row.has_financing || false,
+      deal_score: row.deal_score,
+      original_url: row.original_url || '',
+      thumbnail_url: row.thumbnail_url,
+    }));
 
-    const vehicles = (data ?? []).map((item: any) => {
-      const imagens: string[] =
-        item.imagens && Array.isArray(item.imagens) && item.imagens.length > 0
-          ? item.imagens
-          : item.images && Array.isArray(item.images) && item.images.length > 0
-          ? item.images
-          : item.thumbnail_url
-          ? [item.thumbnail_url]
-          : [];
-
-      if (!item.imagens || item.imagens.length === 0) {
-        item.imagens = imagens;
-      }
-
-      if (!item.titulo && item.title) {
-        item.titulo = item.title;
-      }
-      if (!item.marca && item.brand) {
-        item.marca = item.brand;
-      }
-      if (!item.modelo && item.model) {
-        item.modelo = item.model;
-      }
-      if (item.km === undefined && item.mileage !== undefined) {
-        item.km = item.mileage;
-      }
-      if (!item.combustivel && item.fuel_type) {
-        item.combustivel = item.fuel_type;
-      }
-      if (!item.cambio && item.transmission) {
-        item.cambio = item.transmission;
-      }
-      if (!item.estado && item.state) {
-        item.estado = item.state;
-      }
-      if (!item.cidade && item.city) {
-        item.cidade = item.city;
-      }
-      if (!item.preco_atual && item.current_bid !== undefined) {
-        item.preco_atual = item.current_bid;
-      }
-      if (!item.preco_inicial && item.minimum_bid !== undefined) {
-        item.preco_inicial = item.minimum_bid;
-      }
-      if (!item.data_leilao && item.auction_date) {
-        item.data_leilao = item.auction_date;
-      }
-
-      return item;
-    });
-
-    return { 
-      vehicles: vehicles as Vehicle[], 
-      total: totalCount,
+    return {
+      vehicles: vehicles as Vehicle[],
+      total: count || 0,
       error: null,
       pagination: {
-        page,
-        limit,
-        total: totalCount,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-      }
+        page: filters.page || 1,
+        limit: limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
+      },
     };
   } catch (error: any) {
-    console.error('Erro na busca:', error);
-    return { 
-      vehicles: [], 
-      total: 0, 
+    console.error('[searchVehicles] Erro geral:', error);
+    return {
+      vehicles: [],
+      total: 0,
       error: error.message || 'Erro ao buscar veículos',
-      pagination: null
+      pagination: {
+        page: filters.page || 1,
+        limit: filters.limit || 20,
+        total: 0,
+        totalPages: 0,
+      },
     };
   }
 }
@@ -289,24 +271,86 @@ export async function getVehicleStats() {
   const supabase = await createClient();
 
   try {
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from('vehicles_with_auctioneer')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .gte('auction_date', new Date().toISOString());
 
-    const { data: brands } = await supabase
+    if (error) {
+      console.error('[getVehicleStats] Erro:', error);
+      return {
+        totalVehicles: 0,
+        totalBrands: 0,
+      };
+    }
+
+    // Buscar número de marcas distintas
+    const { data: brandsData, error: brandsError } = await supabase
       .from('vehicles_with_auctioneer')
       .select('brand')
-      .not('brand', 'is', null);
+      .not('brand', 'is', null)
+      .gte('auction_date', new Date().toISOString());
 
-    const uniqueBrands = new Set(brands?.map(v => v.brand));
+    let totalBrands = 0;
+    if (!brandsError && brandsData) {
+      const brandSet = new Set<string>();
+      brandsData.forEach((row: any) => {
+        if (row?.brand && row.brand.trim() !== '') {
+          brandSet.add(row.brand);
+        }
+      });
+      totalBrands = brandSet.size;
+    }
 
     return {
       totalVehicles: count || 0,
-      totalBrands: uniqueBrands.size,
+      totalBrands,
     };
-  } catch (error) {
-    return { totalVehicles: 0, totalBrands: 0 };
+  } catch (error: any) {
+    console.error('[getVehicleStats] Erro geral:', error);
+    return {
+      totalVehicles: 0,
+      totalBrands: 0,
+    };
   }
+}
+
+function normalizeVehicleTypeForDatabase(vehicleType: string): string {
+  const normalized = vehicleType.toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    'carro': 'Carros',
+    'carros': 'Carros',
+    'moto': 'Motos',
+    'motos': 'Motos',
+    'caminhao': 'Caminhões e Ônibus',
+    'caminhão': 'Caminhões e Ônibus',
+    'caminhoes': 'Caminhões e Ônibus',
+    'caminhões': 'Caminhões e Ônibus',
+    'onibus': 'Caminhões e Ônibus',
+    'ônibus': 'Caminhões e Ônibus',
+    'van': 'Carros',
+    'outros': 'Caminhões e Ônibus',
+  };
+  return mapping[normalized] || vehicleType;
+}
+
+function mapVehicleTypeToFipeSlug(vehicleType: string): string | null {
+  const normalized = vehicleType.toLowerCase().trim();
+  const mapping: Record<string, string> = {
+    'carro': 'carros',
+    'carros': 'carros',
+    'moto': 'motos',
+    'motos': 'motos',
+    'caminhao': 'caminhoes',
+    'caminhão': 'caminhoes',
+    'caminhoes': 'caminhoes',
+    'caminhões': 'caminhoes',
+    'onibus': 'caminhoes',
+    'ônibus': 'caminhoes',
+    'van': 'carros',
+    'outros': 'caminhoes',
+  };
+  return mapping[normalized] || null;
 }
 
 export async function getFilterOptions() {
@@ -319,45 +363,6 @@ export async function getFilterOptions() {
       .select('*', { count: 'exact', head: true });
     
     console.log(`[getFilterOptions] Total de veículos na view: ${totalCount}`);
-
-    // Buscar marcas a partir das tabelas de referência FIPE
-    const { data: brandsData, error: brandsError } = await supabase
-      .from('fipe_brands')
-      .select('name_upper')
-      .order('name_upper');
-
-    let brands: string[] = [];
-    if (brandsError) {
-      console.error('[getFilterOptions] Erro ao buscar marcas FIPE:', brandsError);
-    } else if (brandsData) {
-      const brandSet = new Set<string>();
-      brandsData.forEach((row: any) => {
-        if (row?.name_upper) {
-          brandSet.add(row.name_upper);
-        }
-      });
-      brands = Array.from(brandSet);
-    }
-
-    // Buscar um subconjunto inicial de modelos base FIPE (lista completa por marca é carregada sob demanda)
-    const { data: modelsSnapshot, error: modelsError } = await supabase
-      .from('fipe_models')
-      .select('base_name_upper')
-      .order('base_name_upper')
-      .limit(200);
-
-    let models: string[] = [];
-    if (modelsError) {
-      console.error('[getFilterOptions] Erro ao buscar modelos FIPE:', modelsError);
-    } else if (modelsSnapshot) {
-      const modelSet = new Set<string>();
-      modelsSnapshot.forEach((row: any) => {
-        if (row?.base_name_upper) {
-          modelSet.add(row.base_name_upper);
-        }
-      });
-      models = Array.from(modelSet);
-    }
 
     // Buscar estados (coluna: state) - com validação e paginação em blocos para evitar truncamento
     const stateRanges: Array<[number, number]> = [
@@ -522,8 +527,6 @@ export async function getFilterOptions() {
     }
 
     console.log('Filter options loaded:', {
-      brands: brands.length,
-      models: models.length,
       states: states.length,
       vehicleTypes: vehicleTypes.length,
       fuels: fuels.length,
@@ -533,8 +536,6 @@ export async function getFilterOptions() {
     });
 
     return {
-      brands,
-      models,
       states,
       citiesByState,
       auctioneers,
@@ -546,8 +547,6 @@ export async function getFilterOptions() {
   } catch (error) {
     console.error('Erro geral ao buscar opções de filtro:', error);
     return {
-      brands: [],
-      models: [],
       states: [],
       citiesByState: {},
       auctioneers: [],
@@ -560,224 +559,85 @@ export async function getFilterOptions() {
 }
 
 /**
- * Mapeia tipo de veículo do sistema para slug do FIPE
+ * Busca sugestões de busca em tempo real para autocomplete
+ * Retorna marcas, modelos e títulos que correspondem ao termo de busca
  */
-function mapVehicleTypeToFipeSlug(vehicleType: string | null | undefined): string | null {
-  if (!vehicleType) return null;
-  const normalized = vehicleType.toLowerCase().trim();
-  
-  // Mapear tipos do sistema para slugs FIPE
-  if (normalized === 'carro' || normalized === 'car') {
-    return 'carros';
-  }
-  if (normalized === 'moto' || normalized === 'motorcycle') {
-    return 'motos';
-  }
-  if (normalized === 'caminhao' || normalized === 'caminhão' || normalized === 'truck') {
-    return 'caminhoes';
-  }
-  // Van e outros não têm correspondência direta na FIPE, retornar null
-  return null;
-}
-
-/**
- * Normaliza tipo de veículo do filtro para o valor do banco
- */
-function normalizeVehicleTypeForDatabase(vehicleType: string): string {
-  const normalized = vehicleType.toLowerCase().trim();
-  const mapping: Record<string, string> = {
-    'carro': 'Carros',
-    'carros': 'Carros',
-    'moto': 'Motos',
-    'motos': 'Motos',
-    'caminhao': 'Caminhões e Ônibus',
-    'caminhão': 'Caminhões e Ônibus',
-    'caminhoes': 'Caminhões e Ônibus',
-    'caminhões': 'Caminhões e Ônibus',
-    'onibus': 'Caminhões e Ônibus',
-    'ônibus': 'Caminhões e Ônibus',
-  };
-  return mapping[normalized] || vehicleType;
-}
-
-/**
- * Busca marcas reais do banco de veículos filtradas por tipo de veículo
- */
-export async function getBrandsByVehicleType(vehicleType?: string | null) {
+export async function getSearchSuggestions(query: string) {
   const supabase = await createClient();
 
+  if (!query || query.trim().length < 2) {
+    return {
+      brands: [],
+      models: [],
+      titles: [],
+    };
+  }
+
+  const searchTerm = query.trim();
+
   try {
-    let query = supabase
+    // Buscar apenas veículos futuros
+    const baseQuery = supabase
       .from('vehicles_with_auctioneer')
+      .gte('auction_date', new Date().toISOString());
+
+    // Buscar marcas distintas que correspondem
+    const { data: brandsData } = await baseQuery
       .select('brand')
       .not('brand', 'is', null)
-      .gte('auction_date', new Date().toISOString()); // Apenas leilões futuros
+      .ilike('brand', `%${searchTerm}%`)
+      .limit(10);
 
-    // Se vehicleType fornecido, filtrar por vehicle_type
-    if (vehicleType) {
-      const normalizedType = normalizeVehicleTypeForDatabase(vehicleType);
-      query = query.eq('vehicle_type', normalizedType);
-    }
+    const brands = Array.from(
+      new Set(
+        brandsData
+          ?.map((row: any) => row.brand)
+          .filter((brand): brand is string => Boolean(brand && brand.trim() !== '')) || []
+      )
+    ).sort();
 
-    const { data: brandsData, error: brandsError } = await query;
+    // Buscar modelos distintos que correspondem
+    const { data: modelsData } = await baseQuery
+      .select('model')
+      .not('model', 'is', null)
+      .ilike('model', `%${searchTerm}%`)
+      .limit(10);
 
-    if (brandsError) {
-      console.error('[getBrandsByVehicleType] Erro ao buscar marcas:', brandsError);
-      return [];
-    }
+    const models = Array.from(
+      new Set(
+        modelsData
+          ?.map((row: any) => row.model)
+          .filter((model): model is string => Boolean(model && model.trim() !== '')) || []
+      )
+    ).sort();
 
-    const brandSet = new Set<string>();
-    brandsData?.forEach((row: any) => {
-      if (row?.brand && row.brand.trim() !== '') {
-        brandSet.add(row.brand);
-      }
-    });
+    // Buscar títulos que correspondem (mais relevantes primeiro)
+    const { data: titlesData } = await baseQuery
+      .select('title')
+      .not('title', 'is', null)
+      .ilike('title', `%${searchTerm}%`)
+      .order('deal_score', { ascending: false, nullsLast: true })
+      .limit(8);
 
-    return Array.from(brandSet).sort();
+    const titles = Array.from(
+      new Set(
+        titlesData
+          ?.map((row: any) => row.title)
+          .filter((title): title is string => Boolean(title && title.trim() !== '')) || []
+      )
+    ).slice(0, 8);
+
+    return {
+      brands,
+      models,
+      titles,
+    };
   } catch (error) {
-    console.error('[getBrandsByVehicleType] Erro:', error);
-    return [];
-  }
-}
-
-export async function getModelsByBrand(brand: string, vehicleType?: string | null) {
-  const supabase = await createClient();
-
-  try {
-    // Se vehicleType fornecido, buscar modelos reais do banco de veículos
-    if (vehicleType) {
-      const normalizedType = normalizeVehicleTypeForDatabase(vehicleType);
-      
-      let query = supabase
-        .from('vehicles_with_auctioneer')
-        .select('model')
-        .eq('brand', brand)
-        .eq('vehicle_type', normalizedType)
-        .not('model', 'is', null)
-        .gte('auction_date', new Date().toISOString()); // Apenas leilões futuros
-
-      const { data: modelsData, error: modelsError } = await query;
-
-      if (!modelsError && modelsData && modelsData.length > 0) {
-        const modelSet = new Set<string>();
-        modelsData.forEach((row: any) => {
-          if (row?.model && row.model.trim() !== '') {
-            modelSet.add(row.model);
-          }
-        });
-        return Array.from(modelSet).sort();
-      }
-    }
-
-    // Fallback: buscar da FIPE se não encontrar no banco ou se não houver tipo selecionado
-    let vehicleTypeId: string | null = null;
-    if (vehicleType) {
-      const fipeSlug = mapVehicleTypeToFipeSlug(vehicleType);
-      if (fipeSlug) {
-        const { data: vehicleTypeData, error: vehicleTypeError } = await supabase
-          .from('fipe_vehicle_types')
-          .select('id')
-          .eq('slug', fipeSlug)
-          .single();
-
-        if (!vehicleTypeError && vehicleTypeData) {
-          vehicleTypeId = vehicleTypeData.id;
-        }
-      }
-    }
-
-    const brandIds = new Set<string>();
-    const searchKey = buildSearchKey(brand);
-    const brandUpper = toAsciiUpper(brand);
-
-    // Construir query base
-    let brandsQuery = supabase
-      .from('fipe_brands')
-      .select('id');
-
-    // Filtrar por vehicle_type_id se fornecido
-    if (vehicleTypeId) {
-      brandsQuery = brandsQuery.eq('vehicle_type_id', vehicleTypeId);
-    }
-
-    // Tentar busca exata por search_name
-    const { data: searchMatches, error: searchError } = await brandsQuery
-      .eq('search_name', searchKey);
-
-    if (searchError) {
-      console.warn('[getModelsByBrand] Erro ao buscar marca por search_name:', searchError);
-    } else {
-      searchMatches?.forEach((row) => brandIds.add(row.id));
-    }
-
-    // Se não encontrou, tentar por name_upper
-    if (brandIds.size === 0) {
-      let upperQuery = supabase
-        .from('fipe_brands')
-        .select('id');
-      
-      if (vehicleTypeId) {
-        upperQuery = upperQuery.eq('vehicle_type_id', vehicleTypeId);
-      }
-
-      const { data: upperMatches, error: upperError } = await upperQuery
-        .eq('name_upper', brandUpper);
-
-      if (upperError) {
-        console.warn('[getModelsByBrand] Erro ao buscar marca por name_upper:', upperError);
-      } else {
-        upperMatches?.forEach((row) => brandIds.add(row.id));
-      }
-    }
-
-    // Se ainda não encontrou, tentar busca fuzzy
-    if (brandIds.size === 0) {
-      let fuzzyQuery = supabase
-        .from('fipe_brands')
-        .select('id');
-      
-      if (vehicleTypeId) {
-        fuzzyQuery = fuzzyQuery.eq('vehicle_type_id', vehicleTypeId);
-      }
-
-      const { data: fuzzyMatches, error: fuzzyError } = await fuzzyQuery
-        .ilike('name_upper', `%${brandUpper}%`);
-
-      if (fuzzyError) {
-        console.warn('[getModelsByBrand] Erro ao buscar marca (fuzzy):', fuzzyError);
-      } else {
-        fuzzyMatches?.forEach((row) => brandIds.add(row.id));
-      }
-    }
-
-    if (brandIds.size === 0) {
-      return [];
-    }
-
-    const ids = Array.from(brandIds);
-
-    const { data: modelsData, error: modelError } = await supabase
-      .from('fipe_models')
-      .select('base_name_upper')
-      .in('brand_id', ids)
-      .order('base_name_upper')
-      .limit(5000);
-
-    if (modelError) {
-      console.error('[getModelsByBrand] Erro ao buscar modelos FIPE:', modelError);
-      return [];
-    }
-
-    const modelSet = new Set<string>();
-    modelsData?.forEach((row: any) => {
-      if (row?.base_name_upper) {
-        modelSet.add(row.base_name_upper);
-      }
-    });
-
-    return Array.from(modelSet).sort();
-  } catch (error) {
-    console.error('[getModelsByBrand] Erro:', error);
-    return [];
+    console.error('[getSearchSuggestions] Erro:', error);
+    return {
+      brands: [],
+      models: [],
+      titles: [],
+    };
   }
 }

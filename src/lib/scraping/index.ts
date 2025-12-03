@@ -4,8 +4,8 @@ import { SodreSantoroFastScraper } from './scrapers/sodre-santoro-fast';
 import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
 import { VehicleData } from './base-scraper';
-import { normalizeVehicleBrandModel } from '../vehicle-normalization';
 // Removido: normalizeVehicleTypeForDB, validateVehicleTypeByModel - não normalizamos mais tipo de veículo
+// Removido: normalizeVehicleBrandModel - não normalizamos mais marca/modelo
 import { getVehicleTableInfo, hasVehicleColumn } from './vehicle-table-info';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -436,41 +436,10 @@ async function processVehicle(
   
   console.log(`[${auctioneerName}] Tipo de veículo (sem normalização): ${vehicleType}`);
 
-  // 7. Normalizar marca e modelo (mas não o tipo)
-  let normalizedBrand = vehicleData.brand || null;
-  let normalizedModel = vehicleData.model || null;
-  let normalizedVariant: string | null = null;
-  
-  // Determinar tipo FIPE para normalização de marca/modelo
-  let vehicleTypeForFipe: 'carros' | 'motos' | 'caminhoes' = 'carros';
-  if (vehicleType.toLowerCase().includes('moto')) {
-    vehicleTypeForFipe = 'motos';
-  } else if (vehicleType.toLowerCase().includes('caminh') || vehicleType.toLowerCase().includes('ônibus')) {
-    vehicleTypeForFipe = 'caminhoes';
-  }
-  
-  try {
-    const normalizationResult = await normalizeVehicleBrandModel(
-      normalizedBrand || vehicleData.brand,
-      normalizedModel || vehicleData.model,
-      vehicleTypeForFipe
-    );
-    
-    normalizedBrand = normalizationResult.brand || normalizedBrand;
-    normalizedModel = normalizationResult.model || normalizedModel;
-    normalizedVariant = normalizationResult.variant ?? null;
-    
-    if (normalizationResult.wasSeparated || normalizationResult.wasNormalized) {
-      console.log(`[${auctioneerName}] Marca/Modelo normalizado:`, {
-        original: { brand: vehicleData.brand, model: vehicleData.model },
-        normalized: { brand: normalizedBrand, model: normalizedModel }
-      });
-    }
-  } catch (error) {
-    console.warn(`[${auctioneerName}] Erro ao normalizar marca/modelo, usando valores originais:`, error);
-    normalizedBrand = vehicleData.brand || null;
-    normalizedModel = vehicleData.model || null;
-  }
+  // 7. Usar marca e modelo originais diretamente (sem normalização)
+  const normalizedBrand = vehicleData.brand || null;
+  const normalizedModel = vehicleData.model || null;
+  const normalizedVariant: string | null = null;
 
   // 9. Preparar dados para salvar com suporte a múltiplos esquemas
   const vehicleTableInfo = await getVehicleTableInfo(supabase);

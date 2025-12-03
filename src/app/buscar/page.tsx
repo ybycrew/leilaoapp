@@ -1,12 +1,12 @@
 ﻿import { searchVehicles, getVehicleStats, getFilterOptions } from './actions';
 import { SortSelect } from './SortSelect';
 import { VehicleFilters } from './VehicleFilters';
+import { SearchAutocomplete } from './SearchAutocomplete';
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/ui/pagination";
-import { Search, MapPin, Calendar, Fuel, Gauge, TrendingDown } from "lucide-react";
+import { MapPin, Calendar, Fuel, Gauge, TrendingDown } from "lucide-react";
 import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
@@ -23,8 +23,6 @@ interface SearchPageProps {
     minYear?: string;
     maxYear?: string;
     vehicleType?: string | string[];
-    brand?: string | string[];
-    model?: string | string[];
     fuelType?: string | string[];
     transmission?: string | string[];
     color?: string | string[];
@@ -66,8 +64,6 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     minYear: params.minYear,
     maxYear: params.maxYear,
     vehicleType: normalizeArrayParam(params.vehicleType),
-    brand: normalizeArrayParam(params.brand),
-    model: normalizeArrayParam(params.model),
     fuelType: normalizeArrayParam(params.fuelType),
     transmission: normalizeArrayParam(params.transmission),
     color: normalizeArrayParam(params.color),
@@ -93,8 +89,6 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     minYear: params.minYear ? parseInt(params.minYear) : undefined,
     maxYear: params.maxYear ? parseInt(params.maxYear) : undefined,
     vehicleType: normalizeArrayParam(params.vehicleType),
-    brand: normalizeArrayParam(params.brand),
-    model: normalizeArrayParam(params.model),
     fuelType: normalizeArrayParam(params.fuelType),
     transmission: normalizeArrayParam(params.transmission),
     color: normalizeArrayParam(params.color),
@@ -116,10 +110,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
   
   // Log detalhado para debug
   console.log('[BuscarPage] Filter options recebidos:', {
-    brandsCount: filterOptions.brands.length,
-    modelsCount: filterOptions.models.length,
     statesCount: filterOptions.states.length,
-    brands: filterOptions.brands.slice(0, 5),
     states: filterOptions.states.slice(0, 5),
   });
 
@@ -131,17 +122,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
             <Link href="/">
               <h1 className="text-xl font-bold cursor-pointer hover:text-primary">Ybybid</h1>
             </Link>
-            <form action="/buscar" method="GET" className="flex-1 max-w-2xl">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
-                <Input 
-                  name="q"
-                  defaultValue={params.q}
-                  placeholder="Buscar veículos..." 
-                  className="pl-10"
-                />
-              </div>
-            </form>
+            <SearchAutocomplete defaultValue={params.q || ''} />
           </div>
         </div>
       </header>
