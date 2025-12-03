@@ -175,25 +175,25 @@ export async function searchVehicles(filters: SearchFilters = {}) {
     if (filters.orderBy) {
       switch (filters.orderBy) {
         case 'deal_score':
-          query = query.order('deal_score', { ascending: false, nullsLast: true });
+          query = query.order('deal_score', { ascending: false, nullsFirst: false });
           break;
         case 'price_asc':
-          query = query.order('current_bid', { ascending: true, nullsLast: true });
+          query = query.order('current_bid', { ascending: true, nullsFirst: false });
           break;
         case 'price_desc':
-          query = query.order('current_bid', { ascending: false, nullsLast: true });
+          query = query.order('current_bid', { ascending: false, nullsFirst: false });
           break;
         case 'date_asc':
-          query = query.order('auction_date', { ascending: true, nullsLast: true });
+          query = query.order('auction_date', { ascending: true, nullsFirst: false });
           break;
         case 'date_desc':
-          query = query.order('auction_date', { ascending: false, nullsLast: true });
+          query = query.order('auction_date', { ascending: false, nullsFirst: false });
           break;
         default:
-          query = query.order('deal_score', { ascending: false, nullsLast: true });
+          query = query.order('deal_score', { ascending: false, nullsFirst: false });
       }
     } else {
-      query = query.order('deal_score', { ascending: false, nullsLast: true });
+      query = query.order('deal_score', { ascending: false, nullsFirst: false });
     }
 
     // Paginação
@@ -625,7 +625,7 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
       .select('title')
       .not('title', 'is', null)
       .ilike('title', `%${searchTerm}%`)
-      .order('deal_score', { ascending: false, nullsLast: true })
+      .order('deal_score', { ascending: false, nullsFirst: false })
       .limit(8);
 
     const titles: string[] = Array.from(
