@@ -89,54 +89,6 @@ export function SearchAutocomplete() {
 
   const totalItems = suggestions.titles.length;
 
-  // Navegação por teclado
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (!isOpen || totalItems === 0) {
-        if (e.key === 'Enter' && query.trim()) {
-          addSearchTerm(query.trim());
-        }
-        return;
-      }
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
-          break;
-        case 'Enter':
-          e.preventDefault();
-          if (selectedIndex >= 0 && suggestions.titles[selectedIndex]) {
-            handleSelectSuggestion(suggestions.titles[selectedIndex]);
-          } else if (query.trim()) {
-            addSearchTerm(query.trim());
-          }
-          break;
-        case 'Escape':
-          e.preventDefault();
-          setIsOpen(false);
-          setSelectedIndex(-1);
-          inputRef.current?.blur();
-          break;
-      }
-    },
-    [isOpen, totalItems, selectedIndex, query, suggestions.titles, addSearchTerm]
-  );
-
-  // Selecionar sugestão
-  const handleSelectSuggestion = useCallback(
-    (value: string) => {
-      addSearchTerm(value);
-      setIsOpen(false);
-      setSelectedIndex(-1);
-    },
-    [addSearchTerm]
-  );
-
   // Adicionar termo de busca
   const addSearchTerm = useCallback(
     (searchQuery: string) => {
@@ -191,6 +143,54 @@ export function SearchAutocomplete() {
     router.push(`/buscar?${params.toString()}`);
     inputRef.current?.focus();
   }, [router, searchParams]);
+
+  // Selecionar sugestão
+  const handleSelectSuggestion = useCallback(
+    (value: string) => {
+      addSearchTerm(value);
+      setIsOpen(false);
+      setSelectedIndex(-1);
+    },
+    [addSearchTerm]
+  );
+
+  // Navegação por teclado
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!isOpen || totalItems === 0) {
+        if (e.key === 'Enter' && query.trim()) {
+          addSearchTerm(query.trim());
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setSelectedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (selectedIndex >= 0 && suggestions.titles[selectedIndex]) {
+            handleSelectSuggestion(suggestions.titles[selectedIndex]);
+          } else if (query.trim()) {
+            addSearchTerm(query.trim());
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setIsOpen(false);
+          setSelectedIndex(-1);
+          inputRef.current?.blur();
+          break;
+      }
+    },
+    [isOpen, totalItems, selectedIndex, query, suggestions.titles, addSearchTerm, handleSelectSuggestion]
+  );
 
   return (
     <div className="flex-1 max-w-2xl space-y-2">
