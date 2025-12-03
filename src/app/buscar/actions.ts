@@ -585,15 +585,14 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
   const searchTerm = query.trim();
 
   try {
-    // Buscar apenas veículos futuros
-    const baseQuery = supabase
-      .from('vehicles_with_auctioneer')
-      .gte('auction_date', new Date().toISOString());
+    const futureDate = new Date().toISOString();
 
     // Buscar marcas distintas que correspondem
-    const { data: brandsData } = await baseQuery
+    const { data: brandsData } = await supabase
+      .from('vehicles_with_auctioneer')
       .select('brand')
       .not('brand', 'is', null)
+      .gte('auction_date', futureDate)
       .ilike('brand', `%${searchTerm}%`)
       .limit(10);
 
@@ -606,9 +605,11 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
     ).sort();
 
     // Buscar modelos distintos que correspondem
-    const { data: modelsData } = await baseQuery
+    const { data: modelsData } = await supabase
+      .from('vehicles_with_auctioneer')
       .select('model')
       .not('model', 'is', null)
+      .gte('auction_date', futureDate)
       .ilike('model', `%${searchTerm}%`)
       .limit(10);
 
@@ -621,9 +622,11 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
     ).sort();
 
     // Buscar títulos que correspondem (mais relevantes primeiro)
-    const { data: titlesData } = await baseQuery
+    const { data: titlesData } = await supabase
+      .from('vehicles_with_auctioneer')
       .select('title')
       .not('title', 'is', null)
+      .gte('auction_date', futureDate)
       .ilike('title', `%${searchTerm}%`)
       .order('deal_score', { ascending: false, nullsFirst: false })
       .limit(8);
