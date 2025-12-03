@@ -13,17 +13,8 @@ export interface SearchFilters {
   minYear?: number;
   maxYear?: number;
   vehicleType?: string[];
-  fuelType?: string[];
-  transmission?: string[];
-  color?: string[];
-  auctionType?: string[];
   hasFinancing?: boolean;
-  minMileage?: number;
-  maxMileage?: number;
-  minDealScore?: number;
-  minFipeDiscount?: number;
   auctioneer?: string[];
-  licensePlateEnd?: string;
   orderBy?: 'deal_score' | 'price_asc' | 'price_desc' | 'date_asc' | 'date_desc';
   limit?: number;
   offset?: number;
@@ -126,44 +117,8 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       query = query.lte('current_bid', filters.maxPrice);
     }
 
-    if (filters.fuelType && filters.fuelType.length > 0) {
-      query = query.in('fuel_type', filters.fuelType);
-    }
-
-    if (filters.transmission && filters.transmission.length > 0) {
-      query = query.in('transmission', filters.transmission);
-    }
-
-    if (filters.color && filters.color.length > 0) {
-      query = query.in('color', filters.color);
-    }
-
-    if (filters.minMileage) {
-      query = query.gte('mileage', filters.minMileage);
-    }
-
-    if (filters.maxMileage) {
-      query = query.lte('mileage', filters.maxMileage);
-    }
-
-    if (filters.minDealScore) {
-      query = query.gte('deal_score', filters.minDealScore);
-    }
-
-    if (filters.minFipeDiscount) {
-      query = query.gte('fipe_discount_percentage', filters.minFipeDiscount);
-    }
-
     if (filters.auctioneer && filters.auctioneer.length > 0) {
       query = query.in('auctioneer_name', filters.auctioneer);
-    }
-
-    if (filters.licensePlateEnd) {
-      query = query.ilike('license_plate', `%${filters.licensePlateEnd}`);
-    }
-
-    if (filters.auctionType && filters.auctionType.length > 0) {
-      query = query.in('auction_type', filters.auctionType);
     }
 
     if (filters.hasFinancing !== undefined) {
@@ -445,62 +400,6 @@ export async function getFilterOptions() {
       console.warn('[getFilterOptions] Erro ao buscar leiloeiros:', err);
     }
 
-    // Buscar combustíveis (coluna: fuel_type)
-    let fuels: string[] = [];
-    try {
-      const { data: fuelData, error: fuelError } = await supabase
-        .from('vehicles_with_auctioneer')
-        .select('fuel_type')
-        .not('fuel_type', 'is', null);
-
-      if (!fuelError && fuelData) {
-        fuels = Array.from(
-          new Set(
-            fuelData
-              ?.map(v => (v as any).fuel_type)
-              .filter((fuel): fuel is string => Boolean(fuel && fuel.trim() !== '')) || []
-          )
-        ).sort();
-      }
-    } catch (err) {
-      console.warn('[getFilterOptions] Erro ao buscar combustíveis:', err);
-    }
-
-    // Buscar transmissões (coluna: transmission)
-    const { data: transmissionData, error: transmissionError } = await supabase
-      .from('vehicles_with_auctioneer')
-      .select('transmission')
-      .not('transmission', 'is', null);
-
-    if (transmissionError) {
-      console.error('[getFilterOptions] Erro ao buscar transmissões:', transmissionError);
-    }
-
-    const transmissions = Array.from(
-      new Set(
-        transmissionData
-          ?.map(v => (v as any).transmission)
-          .filter((transmission): transmission is string => Boolean(transmission && transmission.trim() !== '')) || []
-      )
-    ).sort();
-
-    // Buscar cores (coluna: color)
-    const { data: colorsData, error: colorsError } = await supabase
-      .from('vehicles_with_auctioneer')
-      .select('color')
-      .not('color', 'is', null);
-
-    if (colorsError) {
-      console.error('[getFilterOptions] Erro ao buscar cores:', colorsError);
-    }
-
-    const colors = Array.from(
-      new Set(
-        colorsData
-          ?.map(v => (v as any).color)
-          .filter((color): color is string => Boolean(color && color.trim() !== '')) || []
-      )
-    ).sort();
 
     // Buscar tipos de veículo (coluna: vehicle_type)
     let vehicleTypes: string[] = [];
@@ -526,9 +425,6 @@ export async function getFilterOptions() {
     console.log('Filter options loaded:', {
       states: states.length,
       vehicleTypes: vehicleTypes.length,
-      fuels: fuels.length,
-      transmissions: transmissions.length,
-      colors: colors.length,
       auctioneers: auctioneers.length,
     });
 
@@ -536,9 +432,6 @@ export async function getFilterOptions() {
       states,
       citiesByState,
       auctioneers,
-      fuels,
-      transmissions,
-      colors,
       vehicleTypes,
     };
   } catch (error) {

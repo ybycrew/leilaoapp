@@ -23,17 +23,8 @@ interface SearchPageProps {
     minYear?: string;
     maxYear?: string;
     vehicleType?: string | string[];
-    fuelType?: string | string[];
-    transmission?: string | string[];
-    color?: string | string[];
-    auctionType?: string | string[];
     hasFinancing?: string;
-    minMileage?: string;
-    maxMileage?: string;
-    minDealScore?: string;
-    minFipeDiscount?: string;
     auctioneer?: string | string[];
-    licensePlateEnd?: string;
     orderBy?: string;
     page?: string;
   }>;
@@ -64,17 +55,8 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     minYear: params.minYear,
     maxYear: params.maxYear,
     vehicleType: normalizeArrayParam(params.vehicleType),
-    fuelType: normalizeArrayParam(params.fuelType),
-    transmission: normalizeArrayParam(params.transmission),
-    color: normalizeArrayParam(params.color),
-    auctionType: normalizeArrayParam(params.auctionType),
     hasFinancing: params.hasFinancing === 'true' ? true : params.hasFinancing === 'false' ? false : undefined,
-    minMileage: params.minMileage,
-    maxMileage: params.maxMileage,
-    minDealScore: params.minDealScore,
-    minFipeDiscount: params.minFipeDiscount,
     auctioneer: normalizeArrayParam(params.auctioneer),
-    licensePlateEnd: params.licensePlateEnd,
   };
 
   const currentPage = params.page ? parseInt(params.page) : 1;
@@ -89,17 +71,8 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     minYear: params.minYear ? parseInt(params.minYear) : undefined,
     maxYear: params.maxYear ? parseInt(params.maxYear) : undefined,
     vehicleType: normalizeArrayParam(params.vehicleType),
-    fuelType: normalizeArrayParam(params.fuelType),
-    transmission: normalizeArrayParam(params.transmission),
-    color: normalizeArrayParam(params.color),
-    auctionType: normalizeArrayParam(params.auctionType),
     hasFinancing: params.hasFinancing === 'true' ? true : params.hasFinancing === 'false' ? false : undefined,
-    minMileage: params.minMileage ? parseInt(params.minMileage) : undefined,
-    maxMileage: params.maxMileage ? parseInt(params.maxMileage) : undefined,
-    minDealScore: params.minDealScore ? parseInt(params.minDealScore) : undefined,
-    minFipeDiscount: params.minFipeDiscount ? parseFloat(params.minFipeDiscount) : undefined,
     auctioneer: normalizeArrayParam(params.auctioneer),
-    licensePlateEnd: params.licensePlateEnd,
     orderBy: (params.orderBy as any) || 'deal_score',
     page: currentPage,
     limit: pageSize,

@@ -10,7 +10,17 @@ import { cn } from '@/lib/utils';
 export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState(defaultValue);
+  // Sincronizar com a URL
+  const urlQuery = searchParams.get('q') || '';
+  const [query, setQuery] = useState(urlQuery || defaultValue);
+  
+  // Atualizar query quando a URL mudar
+  useEffect(() => {
+    const currentQuery = searchParams.get('q') || '';
+    if (currentQuery !== query) {
+      setQuery(currentQuery);
+    }
+  }, [searchParams, query]);
   const [suggestions, setSuggestions] = useState<SearchSuggestions>({
     titles: [],
   });

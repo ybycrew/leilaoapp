@@ -15,13 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { 
   MapPin, 
   Car, 
-  Fuel, 
-  Settings, 
-  Palette, 
   Gavel,
   TrendingUp,
   X,
@@ -31,9 +27,6 @@ interface FilterOptions {
   states: string[];
   citiesByState: Record<string, string[]>;
   auctioneers: string[];
-  fuels: string[];
-  transmissions: string[];
-  colors: string[];
   vehicleTypes?: string[];
 }
 
@@ -48,17 +41,8 @@ interface VehicleFiltersProps {
     minYear?: string;
     maxYear?: string;
     vehicleType?: string[];
-    fuelType?: string[];
-    transmission?: string[];
-    color?: string[];
-    auctionType?: string[];
     hasFinancing?: boolean;
-    minMileage?: string;
-    maxMileage?: string;
-    minDealScore?: string;
-    minFipeDiscount?: string;
     auctioneer?: string[];
-    licensePlateEnd?: string;
   };
 }
 
@@ -88,8 +72,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     maxYear: currentFilters?.maxYear || '',
     minPrice: currentFilters?.minPrice || '',
     maxPrice: currentFilters?.maxPrice || '',
-    maxMileage: currentFilters?.maxMileage || '',
-    minFipeDiscount: currentFilters?.minFipeDiscount || '',
   });
 
   // Manter foco ativo e caret após re-render
@@ -113,8 +95,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         maxYear: currentFilters.maxYear || '',
         minPrice: currentFilters.minPrice || '',
         maxPrice: currentFilters.maxPrice || '',
-        maxMileage: currentFilters.maxMileage || '',
-        minFipeDiscount: currentFilters.minFipeDiscount || '',
       });
     }
   }, [currentFilters, hasUserInteracted]);
@@ -137,35 +117,23 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   const applyFilters = () => {
     startTransition(() => {
+      // Pegar q da URL atual (não do estado local) para manter sincronização
+      const currentQ = searchParams.get('q');
       const params = new URLSearchParams();
       
-      if (filters.q) params.set('q', filters.q);
+      // Incluir q apenas se existir e não estiver vazio
+      if (currentQ && currentQ.trim()) {
+        params.set('q', currentQ.trim());
+      }
       if (filters.state) params.set('state', filters.state);
       if (filters.city) params.set('city', filters.city);
       if (filters.minPrice) params.set('minPrice', filters.minPrice);
       if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
       if (filters.minYear) params.set('minYear', filters.minYear);
       if (filters.maxYear) params.set('maxYear', filters.maxYear);
-      if (filters.minMileage) params.set('minMileage', filters.minMileage);
-      if (filters.maxMileage) params.set('maxMileage', filters.maxMileage);
-      if (filters.minDealScore) params.set('minDealScore', filters.minDealScore);
-      if (filters.minFipeDiscount) params.set('minFipeDiscount', filters.minFipeDiscount);
-      if (filters.licensePlateEnd) params.set('licensePlateEnd', filters.licensePlateEnd);
       
       if (filters.vehicleType && filters.vehicleType.length > 0) {
         filters.vehicleType.forEach(vt => params.append('vehicleType', vt));
-      }
-      if (filters.fuelType && filters.fuelType.length > 0) {
-        filters.fuelType.forEach(f => params.append('fuelType', f));
-      }
-      if (filters.transmission && filters.transmission.length > 0) {
-        filters.transmission.forEach(t => params.append('transmission', t));
-      }
-      if (filters.color && filters.color.length > 0) {
-        filters.color.forEach(c => params.append('color', c));
-      }
-      if (filters.auctionType && filters.auctionType.length > 0) {
-        filters.auctionType.forEach(a => params.append('auctionType', a));
       }
       if (filters.auctioneer && filters.auctioneer.length > 0) {
         filters.auctioneer.forEach(a => params.append('auctioneer', a));
@@ -194,17 +162,8 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       minYear: undefined,
       maxYear: undefined,
       vehicleType: undefined,
-      fuelType: undefined,
-      transmission: undefined,
-      color: undefined,
-      auctionType: undefined,
       hasFinancing: undefined,
-      minMileage: undefined,
-      maxMileage: undefined,
-      minDealScore: undefined,
-      minFipeDiscount: undefined,
       auctioneer: undefined,
-      licensePlateEnd: undefined,
     });
     router.push('/buscar');
   };
@@ -227,7 +186,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   return (
     <>
       {/* Botão mobile para abrir filtros */}
-      <div className="md:hidden mb-4">
+      <div className="md:hidden mb-4 sticky top-[73px] z-30 bg-background pb-2">
         <Button
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
@@ -239,27 +198,46 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         </Button>
       </div>
 
+      {/* Overlay mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Sidebar de filtros */}
       <div className={`
-        ${isOpen ? 'block' : 'hidden'} md:block
-        w-full md:w-80 space-y-4 mb-6
+        ${isOpen ? 'fixed inset-y-0 left-0 z-50 overflow-y-auto bg-background p-4' : 'hidden'} md:block
+        w-full md:w-80 md:relative md:z-auto md:bg-transparent md:p-0 space-y-4 mb-6
       `}>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Filtros</CardTitle>
-              {activeFiltersCount > 0 && (
+              <div className="flex items-center gap-2">
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-8 text-xs"
+                    type="button"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Limpar
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={clearFilters}
-                  className="h-8 text-xs"
+                  onClick={() => setIsOpen(false)}
+                  className="h-8 w-8 p-0 md:hidden"
                   type="button"
                 >
-                  <X className="h-3 w-3 mr-1" />
-                  Limpar
+                  <X className="h-4 w-4" />
                 </Button>
-              )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -396,83 +374,9 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                 </div>
             </FilterSection>
 
-              {/* Especificações - FASE 1 */}
-              <FilterSection title="Especificações" icon={Settings}>
-                <div className="space-y-3">
-                  <div>
-                    <Label>Combustível</Label>
-                    <div className="space-y-2 mt-2">
-                      {filterOptions.fuels && filterOptions.fuels.length > 0 ? (
-                        filterOptions.fuels.slice(0, 10).map(fuel => (
-                          <div key={fuel} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`fuel-${fuel}`}
-                              checked={(filters.fuelType || []).includes(fuel)}
-                              onCheckedChange={() => toggleArrayFilter('fuelType', fuel)}
-                            />
-                            <label
-                              htmlFor={`fuel-${fuel}`}
-                              className="text-sm font-medium leading-none cursor-pointer"
-                            >
-                              {fuel}
-                            </label>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Nenhum combustível disponível</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Câmbio</Label>
-                    <div className="space-y-2 mt-2">
-                      {filterOptions.transmissions && filterOptions.transmissions.length > 0 ? filterOptions.transmissions.slice(0, 5).map(transmission => (
-                        <div key={transmission} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`transmission-${transmission}`}
-                            checked={(filters.transmission || []).includes(transmission)}
-                            onCheckedChange={() => toggleArrayFilter('transmission', transmission)}
-                          />
-                          <label
-                            htmlFor={`transmission-${transmission}`}
-                            className="text-sm font-medium leading-none cursor-pointer"
-                          >
-                            {transmission}
-                          </label>
-                        </div>
-                      )) : (
-                        <p className="text-sm text-muted-foreground">Nenhum câmbio disponível</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </FilterSection>
-
-              {/* Leilão - FASE 1 */}
+              {/* Leilão */}
               <FilterSection title="Leilão" icon={Gavel}>
                 <div className="space-y-3">
-                  <div>
-                    <Label>Tipo de Leilão</Label>
-                    <div className="space-y-2 mt-2">
-                      {AUCTION_TYPES.map(type => (
-                        <div key={type} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`auction-${type}`}
-                            checked={(filters.auctionType || []).includes(type)}
-                            onCheckedChange={() => toggleArrayFilter('auctionType', type)}
-                          />
-                          <label
-                            htmlFor={`auction-${type}`}
-                            className="text-sm font-medium leading-none cursor-pointer capitalize"
-                          >
-                            {type}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="financing"
@@ -487,7 +391,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     </label>
                   </div>
 
-                  {/* FASE 3: Leiloeiro */}
+                  {/* Leiloeiro */}
                   <div>
                     <Label htmlFor="auctioneer">Leiloeiro</Label>
                     <Select
@@ -584,137 +488,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
               </div>
             </FilterSection>
 
-            {/* Quilometragem */}
-            <FilterSection title="Quilometragem" icon={Car}>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="maxMileage">KM Máximo</Label>
-                  <Input
-                    id="maxMileage"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="100.000"
-                    value={localNumericValues.maxMileage}
-                    onChange={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const value = e.target.value.replace(/\D/g, '');
-                      setLocalNumericValues(prev => ({ ...prev, maxMileage: value }));
-                    }}
-                    onFocus={() => setFocusedInputId('maxMileage')}
-                    onBlur={() => {
-                      updateFilter('maxMileage', localNumericValues.maxMileage || undefined);
-                      setFocusedInputId(null);
-                    }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-            </FilterSection>
-
-            {/* Oportunidade */}
-            <FilterSection title="Oportunidade" icon={TrendingUp}>
-              <div className="space-y-4">
-                  <div>
-                    <Label>Deal Score Mínimo: {filters.minDealScore || 0}</Label>
-                    <Slider
-                      value={[parseInt(filters.minDealScore || '0')]}
-                      onValueChange={([value]) => updateFilter('minDealScore', value.toString())}
-                      max={100}
-                      step={5}
-                      className="mt-2"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>0</span>
-                      <span>50</span>
-                      <span>70</span>
-                      <span>100</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="minFipeDiscount">Desconto FIPE Mínimo (%)</Label>
-                    <Input
-                      id="minFipeDiscount"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      placeholder="20"
-                      value={localNumericValues.minFipeDiscount}
-                      onChange={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const value = e.target.value.replace(/\D/g, '');
-                        setLocalNumericValues(prev => ({ ...prev, minFipeDiscount: value }));
-                      }}
-                      onFocus={() => setFocusedInputId('minFipeDiscount')}
-                      onBlur={() => {
-                        updateFilter('minFipeDiscount', localNumericValues.minFipeDiscount || undefined);
-                        setFocusedInputId(null);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); } }}
-                      autoComplete="off"
-                    />
-                  </div>
-                </div>
-            </FilterSection>
-
-            {/* FASE 3: Cor */}
-            <FilterSection title="Cor" icon={Palette}>
-              <div>
-                <Select
-                  value=""
-                  onValueChange={(value) => {
-                    if (value && !(filters.color || []).includes(value)) {
-                      updateFilter('color', [...(filters.color || []), value]);
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Adicionar cor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filterOptions.colors && filterOptions.colors.length > 0 ? (
-                      filterOptions.colors.slice(0, 20).map(color => (
-                        <SelectItem key={color} value={color}>{color}</SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="loading" disabled>Nenhuma cor disponível</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                {(filters.color || []).length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {filters.color?.map(color => (
-                      <Badge key={color} variant="secondary" className="flex items-center gap-1">
-                        {color}
-                        <X
-                          className="h-3 w-3 cursor-pointer"
-                          onClick={() => {
-                            updateFilter('color', filters.color?.filter(c => c !== color));
-                          }}
-                        />
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </FilterSection>
-
-            {/* FASE 3: Placa Final */}
-            <div>
-              <Label htmlFor="licensePlateEnd">Placa Final</Label>
-              <Input
-                id="licensePlateEnd"
-                type="text"
-                placeholder="Ex: 0"
-                maxLength={1}
-                value={filters.licensePlateEnd || ''}
-                onChange={(e) => updateFilter('licensePlateEnd', e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
 
             {/* Botões */}
             <div className="flex gap-2 pt-4">
