@@ -39,12 +39,45 @@ export abstract class BaseScraper {
     this.auctioneerName = auctioneerName;
   }
 
+  /**
+   * Detecta o caminho do Chrome/Chromium automaticamente
+   */
+  protected async detectChromePath(): Promise<string | null> {
+    const fs = await import('fs/promises');
+    const possiblePaths = [
+      process.env.CHROME_PATH,
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/snap/bin/chromium',
+      '/opt/google/chrome/chrome',
+    ].filter(Boolean) as string[];
+    
+    for (const path of possiblePaths) {
+      try {
+        await fs.access(path);
+        return path;
+      } catch {
+        // Continuar procurando
+      }
+    }
+    
+    return null;
+  }
+
   protected async initBrowser(): Promise<void> {
     console.log(`[${this.auctioneerName}] Inicializando navegador...`);
     
     const isVercel = process.env.VERCEL === '1';
     const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
-    const isVPS = process.env.NODE_ENV === 'production' && !isVercel && !isGitHubActions;
+    const isLinux = process.platform === 'linux';
+    
+    // Detectar VPS: Linux + não é Vercel/GitHub Actions (VPS geralmente é Linux)
+    // Se CHROME_PATH está configurado, é definitivamente VPS/CI
+    const hasChromePath = !!(process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH);
+    const isVPS = (isLinux && !isVercel && !isGitHubActions) || hasChromePath || process.env.VPS === '1';
     const isCI = isVercel || isGitHubActions || isVPS;
     
     console.log(`[${this.auctioneerName}] Ambiente: ${isVercel ? 'Vercel (serverless)' : isGitHubActions ? 'GitHub Actions' : isVPS ? 'VPS (producao)' : 'Desenvolvimento local'}`);
@@ -54,6 +87,20 @@ export abstract class BaseScraper {
     if (isCI) {
       if (isVPS) {
         console.log(`[${this.auctioneerName}] Usando configuracao para VPS...`);
+        
+        // Detectar Chrome automaticamente
+        const chromePath = await this.detectChromePath();
+        
+        if (!chromePath) {
+          throw new Error(
+            `Chrome/Chromium não encontrado no VPS. ` +
+            `Configure CHROME_PATH ou PUPPETEER_EXECUTABLE_PATH, ` +
+            `ou instale Chrome/Chromium no sistema.`
+          );
+        }
+        
+        console.log(`[${this.auctioneerName}] Chrome encontrado em: ${chromePath}`);
+        
         launchOptions = {
           args: [
             '--no-sandbox',
@@ -71,7 +118,7 @@ export abstract class BaseScraper {
             '--disable-plugins',
             '--disable-blink-features=AutomationControlled',
           ],
-          executablePath: process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+          executablePath: chromePath,
           headless: 'new',
           ignoreHTTPSErrors: true,
           timeout: 30000,
@@ -104,17 +151,88 @@ export abstract class BaseScraper {
       }
     } else {
       console.log(`[${this.auctioneerName}] Usando configuracao para desenvolvimento local...`);
-      launchOptions = {
-        headless: 'new',
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--single-process',
-        ],
-      };
+      
+      // Verificar se CHROME_PATH está configurado (pode ser VPS mesmo sem NODE_ENV=production)
+      const chromePath = process.env.CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH;
+      
+      if (chromePath) {
+        console.log(`[${this.auctioneerName}] CHROME_PATH detectado, usando configuração VPS-compatível`);
+        launchOptions = {
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--disable-gpu',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-blink-features=AutomationControlled',
+          ],
+          executablePath: chromePath,
+          headless: 'new',
+          ignoreHTTPSErrors: true,
+          timeout: 30000,
+        };
+      } else {
+        // Desenvolvimento local real - tentar detectar Chrome automaticamente
+        console.log(`[${this.auctioneerName}] Tentando detectar Chrome para desenvolvimento local...`);
+        const detectedChrome = await this.detectChromePath();
+        
+        if (detectedChrome) {
+          console.log(`[${this.auctioneerName}] Chrome detectado: ${detectedChrome}`);
+          launchOptions = {
+            headless: 'new',
+            executablePath: detectedChrome,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-web-security',
+              '--single-process',
+            ],
+          };
+        } else {
+          // Se não encontrou Chrome, usar configuração básica
+          // Nota: puppeteer-core requer executablePath, então isso pode falhar
+          // mas vamos tentar para manter compatibilidade com desenvolvimento local
+          launchOptions = {
+            headless: 'new',
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-web-security',
+              '--single-process',
+            ],
+          };
+        }
+      }
+    }
+    
+    // Garantir que puppeteer-core sempre tenha executablePath quando necessário
+    // Se ainda não tiver e estiver em ambiente que precisa, dar erro claro
+    if (!launchOptions.executablePath) {
+      const detectedPath = await this.detectChromePath();
+      
+      if (detectedPath) {
+        launchOptions.executablePath = detectedPath;
+        console.log(`[${this.auctioneerName}] Chrome detectado automaticamente em: ${detectedPath}`);
+      } else if (isVPS || isCI) {
+        // Em VPS/CI, é obrigatório ter Chrome configurado
+        throw new Error(
+          `puppeteer-core requer executablePath no VPS/CI. ` +
+          `Configure CHROME_PATH ou PUPPETEER_EXECUTABLE_PATH, ` +
+          `ou instale Chrome/Chromium no sistema.`
+        );
+      }
     }
     
     try {
