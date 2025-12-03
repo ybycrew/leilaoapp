@@ -12,14 +12,11 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(defaultValue);
   const [suggestions, setSuggestions] = useState<SearchSuggestions>({
-    brands: [],
-    models: [],
     titles: [],
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [highlightedItem, setHighlightedItem] = useState<{ type: string; index: number } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -29,7 +26,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
   // Buscar sugestões com debounce
   const fetchSuggestions = useCallback(async (searchQuery: string) => {
     if (!searchQuery || searchQuery.trim().length < 2) {
-      setSuggestions({ brands: [], models: [], titles: [] });
+      setSuggestions({ titles: [] });
       setIsLoading(false);
       return;
     }
@@ -41,7 +38,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
       setIsOpen(true);
     } catch (error) {
       console.error('Erro ao buscar sugestões:', error);
-      setSuggestions({ brands: [], models: [], titles: [] });
+      setSuggestions({ titles: [] });
     } finally {
       setIsLoading(false);
     }
@@ -58,7 +55,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
         fetchSuggestions(query);
       }, 300);
     } else {
-      setSuggestions({ brands: [], models: [], titles: [] });
+      setSuggestions({ titles: [] });
       setIsOpen(false);
     }
 
@@ -85,8 +82,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calcular total de itens para navegação por teclado
-  const totalItems = suggestions.brands.length + suggestions.models.length + suggestions.titles.length;
+  const totalItems = suggestions.titles.length;
 
   // Navegação por teclado
   const handleKeyDown = useCallback(
@@ -101,27 +97,16 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex((prev) => {
-            const newIndex = prev < totalItems - 1 ? prev + 1 : 0;
-            updateHighlight(newIndex);
-            return newIndex;
-          });
+          setSelectedIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setSelectedIndex((prev) => {
-            const newIndex = prev > 0 ? prev - 1 : totalItems - 1;
-            updateHighlight(newIndex);
-            return newIndex;
-          });
+          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
           break;
         case 'Enter':
           e.preventDefault();
-          if (selectedIndex >= 0) {
-            const item = getItemByIndex(selectedIndex);
-            if (item) {
-              handleSelectSuggestion(item.value, item.type);
-            }
+          if (selectedIndex >= 0 && suggestions.titles[selectedIndex]) {
+            handleSelectSuggestion(suggestions.titles[selectedIndex]);
           } else if (query.trim()) {
             handleSearch(query.trim());
           }
@@ -134,58 +119,12 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
           break;
       }
     },
-    [isOpen, totalItems, selectedIndex, query]
-  );
-
-  // Atualizar highlight baseado no índice
-  const updateHighlight = useCallback((index: number) => {
-    let currentIndex = 0;
-
-    if (index < suggestions.brands.length) {
-      setHighlightedItem({ type: 'brand', index });
-      return;
-    }
-    currentIndex += suggestions.brands.length;
-
-    if (index < currentIndex + suggestions.models.length) {
-      setHighlightedItem({ type: 'model', index: index - currentIndex });
-      return;
-    }
-    currentIndex += suggestions.models.length;
-
-    if (index < currentIndex + suggestions.titles.length) {
-      setHighlightedItem({ type: 'title', index: index - currentIndex });
-      return;
-    }
-  }, [suggestions]);
-
-  // Obter item por índice
-  const getItemByIndex = useCallback(
-    (index: number): { value: string; type: string } | null => {
-      let currentIndex = 0;
-
-      if (index < suggestions.brands.length) {
-        return { value: suggestions.brands[index], type: 'brand' };
-      }
-      currentIndex += suggestions.brands.length;
-
-      if (index < currentIndex + suggestions.models.length) {
-        return { value: suggestions.models[index - currentIndex], type: 'model' };
-      }
-      currentIndex += suggestions.models.length;
-
-      if (index < currentIndex + suggestions.titles.length) {
-        return { value: suggestions.titles[index - currentIndex], type: 'title' };
-      }
-
-      return null;
-    },
-    [suggestions]
+    [isOpen, totalItems, selectedIndex, query, suggestions.titles]
   );
 
   // Selecionar sugestão
   const handleSelectSuggestion = useCallback(
-    (value: string, type: string) => {
+    (value: string) => {
       setQuery(value);
       setIsOpen(false);
       setSelectedIndex(-1);
@@ -220,47 +159,6 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
     inputRef.current?.focus();
   }, [router, searchParams]);
 
-  // Renderizar item de sugestão
-  const renderSuggestionItem = (
-    value: string,
-    type: 'brand' | 'model' | 'title',
-    index: number,
-    listIndex: number
-  ) => {
-    const isHighlighted =
-      highlightedItem?.type === type && highlightedItem.index === index;
-
-    const getIcon = () => {
-      switch (type) {
-        case 'brand':
-          return '🏷️';
-        case 'model':
-          return '🚗';
-        case 'title':
-          return '📄';
-      }
-    };
-
-    return (
-      <button
-        key={`${type}-${index}`}
-        type="button"
-        className={cn(
-          'w-full text-left px-4 py-2 hover:bg-muted/50 transition-colors flex items-center gap-2 text-sm',
-          isHighlighted && 'bg-muted'
-        )}
-        onMouseEnter={() => {
-          setSelectedIndex(listIndex);
-          setHighlightedItem({ type, index });
-        }}
-        onClick={() => handleSelectSuggestion(value, type)}
-      >
-        <span>{getIcon()}</span>
-        <span className="flex-1 truncate">{value}</span>
-      </button>
-    );
-  };
-
   return (
     <div ref={containerRef} className="relative flex-1 max-w-2xl">
       <div className="relative">
@@ -271,7 +169,6 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
           onChange={(e) => {
             setQuery(e.target.value);
             setSelectedIndex(-1);
-            setHighlightedItem(null);
           }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
@@ -279,7 +176,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
               setIsOpen(true);
             }
           }}
-          placeholder="Buscar por marca, modelo, título..."
+          placeholder="Buscar veículos por título..."
           className="pl-10 pr-10"
         />
         {query && (
@@ -305,51 +202,23 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
             </div>
           ) : (
             <>
-              {suggestions.brands.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
-                    Marcas
-                  </div>
-                  {suggestions.brands.map((brand, index) =>
-                    renderSuggestionItem(
-                      brand,
-                      'brand',
-                      index,
-                      index
-                    )
-                  )}
-                </div>
-              )}
-
-              {suggestions.models.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
-                    Modelos
-                  </div>
-                  {suggestions.models.map((model, index) =>
-                    renderSuggestionItem(
-                      model,
-                      'model',
-                      index,
-                      suggestions.brands.length + index
-                    )
-                  )}
-                </div>
-              )}
-
               {suggestions.titles.length > 0 && (
                 <div>
-                  <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase border-b border-border">
-                    Veículos
-                  </div>
-                  {suggestions.titles.map((title, index) =>
-                    renderSuggestionItem(
-                      title,
-                      'title',
-                      index,
-                      suggestions.brands.length + suggestions.models.length + index
-                    )
-                  )}
+                  {suggestions.titles.map((title, index) => (
+                    <button
+                      key={`title-${index}`}
+                      type="button"
+                      className={cn(
+                        'w-full text-left px-4 py-2 hover:bg-muted/50 transition-colors flex items-center gap-2 text-sm',
+                        selectedIndex === index && 'bg-muted'
+                      )}
+                      onMouseEnter={() => setSelectedIndex(index)}
+                      onClick={() => handleSelectSuggestion(title)}
+                    >
+                      <span>🚗</span>
+                      <span className="flex-1 truncate">{title}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </>
@@ -359,4 +228,3 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
     </div>
   );
 }
-

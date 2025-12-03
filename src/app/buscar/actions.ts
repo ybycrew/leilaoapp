@@ -89,10 +89,9 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     // Aplicar filtros - usando colunas em inglês da view
     if (filters.q) {
-      // Busca mais assertiva: busca em título, marca, modelo e descrição
-      // Remove acentos e torna case-insensitive para melhor matching
+      // Busca apenas no título dos veículos (conforme solicitado)
       const searchTerm = filters.q.trim();
-      query = query.or(`title.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,model.ilike.%${searchTerm}%`);
+      query = query.ilike('title', `%${searchTerm}%`);
     }
 
     if (normalizedState) {
@@ -562,22 +561,18 @@ export async function getFilterOptions() {
  * Interface para sugestões de busca
  */
 export interface SearchSuggestions {
-  brands: string[];
-  models: string[];
   titles: string[];
 }
 
 /**
  * Busca sugestões de busca em tempo real para autocomplete
- * Retorna marcas, modelos e títulos que correspondem ao termo de busca
+ * Retorna apenas títulos de veículos que correspondem ao termo de busca
  */
 export async function getSearchSuggestions(query: string): Promise<SearchSuggestions> {
   const supabase = await createClient();
 
   if (!query || query.trim().length < 2) {
     return {
-      brands: [],
-      models: [],
       titles: [],
     };
   }
@@ -587,40 +582,6 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
   try {
     const futureDate = new Date().toISOString();
 
-    // Buscar marcas distintas que correspondem
-    const { data: brandsData } = await supabase
-      .from('vehicles_with_auctioneer')
-      .select('brand')
-      .not('brand', 'is', null)
-      .gte('auction_date', futureDate)
-      .ilike('brand', `%${searchTerm}%`)
-      .limit(10);
-
-    const brands: string[] = Array.from(
-      new Set(
-        (brandsData || [])
-          .map((row: any) => row?.brand)
-          .filter((brand: any): brand is string => typeof brand === 'string' && brand.trim() !== '')
-      )
-    ).sort();
-
-    // Buscar modelos distintos que correspondem
-    const { data: modelsData } = await supabase
-      .from('vehicles_with_auctioneer')
-      .select('model')
-      .not('model', 'is', null)
-      .gte('auction_date', futureDate)
-      .ilike('model', `%${searchTerm}%`)
-      .limit(10);
-
-    const models: string[] = Array.from(
-      new Set(
-        (modelsData || [])
-          .map((row: any) => row?.model)
-          .filter((model: any): model is string => typeof model === 'string' && model.trim() !== '')
-      )
-    ).sort();
-
     // Buscar títulos que correspondem (mais relevantes primeiro)
     const { data: titlesData } = await supabase
       .from('vehicles_with_auctioneer')
@@ -629,7 +590,7 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
       .gte('auction_date', futureDate)
       .ilike('title', `%${searchTerm}%`)
       .order('deal_score', { ascending: false, nullsFirst: false })
-      .limit(8);
+      .limit(10);
 
     const titles: string[] = Array.from(
       new Set(
@@ -637,18 +598,14 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
           .map((row: any) => row?.title)
           .filter((title: any): title is string => typeof title === 'string' && title.trim() !== '')
       )
-    ).slice(0, 8);
+    ).slice(0, 10);
 
     return {
-      brands,
-      models,
       titles,
     };
   } catch (error) {
     console.error('[getSearchSuggestions] Erro:', error);
     return {
-      brands: [],
-      models: [],
       titles: [],
     };
   }
