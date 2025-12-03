@@ -102,8 +102,8 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       query = query.eq('city', filters.city);
     }
 
-    // Excluir leilões com data já passada: considerar apenas futuros
-    query = query.gte('auction_date', new Date().toISOString());
+    // Nota: Filtro de data de leilão é feito no scrape, não aqui nos filtros
+    // Os filtros devem buscar exatamente o que está na planilha
 
     if (filters.vehicleType && filters.vehicleType.length > 0) {
       const normalizedTypes = filters.vehicleType.map(normalizeVehicleTypeForFilter);
@@ -272,8 +272,7 @@ export async function getVehicleStats() {
   try {
     const { count, error } = await supabase
       .from('vehicles_with_auctioneer')
-      .select('*', { count: 'exact', head: true })
-      .gte('auction_date', new Date().toISOString());
+      .select('*', { count: 'exact', head: true });
 
     if (error) {
       console.error('[getVehicleStats] Erro:', error);
@@ -287,8 +286,7 @@ export async function getVehicleStats() {
     const { data: brandsData, error: brandsError } = await supabase
       .from('vehicles_with_auctioneer')
       .select('brand')
-      .not('brand', 'is', null)
-      .gte('auction_date', new Date().toISOString());
+      .not('brand', 'is', null);
 
     let totalBrands = 0;
     if (!brandsError && brandsData) {
@@ -580,14 +578,11 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
   const searchTerm = query.trim();
 
   try {
-    const futureDate = new Date().toISOString();
-
     // Buscar títulos que correspondem (mais relevantes primeiro)
     const { data: titlesData } = await supabase
       .from('vehicles_with_auctioneer')
       .select('title')
       .not('title', 'is', null)
-      .gte('auction_date', futureDate)
       .ilike('title', `%${searchTerm}%`)
       .order('deal_score', { ascending: false, nullsFirst: false })
       .limit(10);
