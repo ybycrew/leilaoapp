@@ -4,14 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Search, X, Loader2 } from 'lucide-react';
-import { getSearchSuggestions } from './actions';
+import { getSearchSuggestions, type SearchSuggestions } from './actions';
 import { cn } from '@/lib/utils';
-
-interface SearchSuggestions {
-  brands: string[];
-  models: string[];
-  titles: string[];
-}
 
 export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: string }) {
   const router = useRouter();

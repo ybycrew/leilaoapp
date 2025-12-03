@@ -559,10 +559,19 @@ export async function getFilterOptions() {
 }
 
 /**
+ * Interface para sugestões de busca
+ */
+export interface SearchSuggestions {
+  brands: string[];
+  models: string[];
+  titles: string[];
+}
+
+/**
  * Busca sugestões de busca em tempo real para autocomplete
  * Retorna marcas, modelos e títulos que correspondem ao termo de busca
  */
-export async function getSearchSuggestions(query: string) {
+export async function getSearchSuggestions(query: string): Promise<SearchSuggestions> {
   const supabase = await createClient();
 
   if (!query || query.trim().length < 2) {
@@ -588,11 +597,11 @@ export async function getSearchSuggestions(query: string) {
       .ilike('brand', `%${searchTerm}%`)
       .limit(10);
 
-    const brands = Array.from(
+    const brands: string[] = Array.from(
       new Set(
-        brandsData
-          ?.map((row: any) => row.brand)
-          .filter((brand): brand is string => Boolean(brand && brand.trim() !== '')) || []
+        (brandsData || [])
+          .map((row: any) => row?.brand)
+          .filter((brand: any): brand is string => typeof brand === 'string' && brand.trim() !== '')
       )
     ).sort();
 
@@ -603,11 +612,11 @@ export async function getSearchSuggestions(query: string) {
       .ilike('model', `%${searchTerm}%`)
       .limit(10);
 
-    const models = Array.from(
+    const models: string[] = Array.from(
       new Set(
-        modelsData
-          ?.map((row: any) => row.model)
-          .filter((model): model is string => Boolean(model && model.trim() !== '')) || []
+        (modelsData || [])
+          .map((row: any) => row?.model)
+          .filter((model: any): model is string => typeof model === 'string' && model.trim() !== '')
       )
     ).sort();
 
@@ -619,11 +628,11 @@ export async function getSearchSuggestions(query: string) {
       .order('deal_score', { ascending: false, nullsLast: true })
       .limit(8);
 
-    const titles = Array.from(
+    const titles: string[] = Array.from(
       new Set(
-        titlesData
-          ?.map((row: any) => row.title)
-          .filter((title): title is string => Boolean(title && title.trim() !== '')) || []
+        (titlesData || [])
+          .map((row: any) => row?.title)
+          .filter((title: any): title is string => typeof title === 'string' && title.trim() !== '')
       )
     ).slice(0, 8);
 
