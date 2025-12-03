@@ -1,7 +1,6 @@
 ﻿import { searchVehicles, getVehicleStats, getFilterOptions } from './actions';
 import { SortSelect } from './SortSelect';
 import { VehicleFilters } from './VehicleFilters';
-import { SearchAutocomplete } from './SearchAutocomplete';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,7 +97,6 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
             <Link href="/">
               <h1 className="text-xl font-bold cursor-pointer hover:text-primary">Ybybid</h1>
             </Link>
-            <SearchAutocomplete />
           </div>
         </div>
       </header>

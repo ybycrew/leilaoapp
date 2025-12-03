@@ -21,7 +21,8 @@ import {
   Gavel,
   TrendingUp,
   X,
-  Filter
+  Filter,
+  Search
 } from "lucide-react";
 interface FilterOptions {
   states: string[];
@@ -63,6 +64,15 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   // Estado dos filtros - garantir que não seja undefined
   const [filters, setFilters] = useState(currentFilters || {});
   
+  // Estado local para termos de busca (não busca automaticamente)
+  const currentQTerms = Array.isArray(currentFilters?.q) 
+    ? currentFilters.q 
+    : currentFilters?.q 
+      ? [currentFilters.q] 
+      : [];
+  const [searchTerms, setSearchTerms] = useState<string[]>(currentQTerms);
+  const [searchQuery, setSearchQuery] = useState('');
+  
   // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   
@@ -96,6 +106,13 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         minPrice: currentFilters.minPrice || '',
         maxPrice: currentFilters.maxPrice || '',
       });
+      // Sincronizar termos de busca
+      const qTerms = Array.isArray(currentFilters.q) 
+        ? currentFilters.q 
+        : currentFilters.q 
+          ? [currentFilters.q] 
+          : [];
+      setSearchTerms(qTerms);
     }
   }, [currentFilters, hasUserInteracted]);
 
@@ -115,14 +132,35 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     });
   };
 
+  // Adicionar termo de busca ao estado local
+  const addSearchTerm = (term: string) => {
+    const trimmedTerm = term.trim();
+    if (!trimmedTerm) return;
+    
+    setHasUserInteracted(true);
+    // Evitar duplicatas (case-insensitive)
+    const termExists = searchTerms.some(
+      t => t.toLowerCase() === trimmedTerm.toLowerCase()
+    );
+    
+    if (!termExists) {
+      setSearchTerms(prev => [...prev, trimmedTerm]);
+      setSearchQuery(''); // Limpar campo após adicionar
+    }
+  };
+
+  // Remover termo de busca do estado local
+  const removeSearchTerm = (termToRemove: string) => {
+    setHasUserInteracted(true);
+    setSearchTerms(prev => prev.filter(term => term !== termToRemove));
+  };
+
   const applyFilters = () => {
     startTransition(() => {
-      // Pegar todos os termos q da URL atual (não do estado local) para manter sincronização
-      const currentQTerms = searchParams.getAll('q').filter(term => term.trim().length > 0);
       const params = new URLSearchParams();
       
-      // Incluir todos os termos q
-      currentQTerms.forEach(term => params.append('q', term));
+      // Incluir todos os termos de busca do estado local
+      searchTerms.forEach(term => params.append('q', term));
       if (filters.state) params.set('state', filters.state);
       if (filters.city) params.set('city', filters.city);
       if (filters.minPrice) params.set('minPrice', filters.minPrice);
@@ -163,13 +201,14 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       hasFinancing: undefined,
       auctioneer: undefined,
     });
+    setSearchTerms([]); // Limpar termos de busca
     router.push('/buscar');
   };
 
   const activeFiltersCount = Object.values(filters).filter(v => {
     if (Array.isArray(v)) return v.length > 0;
     return v !== undefined && v !== '';
-  }).length;
+  }).length + (searchTerms.length > 0 ? 1 : 0); // Adicionar 1 se houver termos de busca
 
   const FilterSection = ({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) => (
     <div className="space-y-3">
@@ -239,6 +278,49 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Busca por texto */}
+            <FilterSection title="Busca por Título" icon={Search}>
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && searchQuery.trim()) {
+                        e.preventDefault();
+                        addSearchTerm(searchQuery.trim());
+                      }
+                    }}
+                    placeholder="Buscar veículos..."
+                    className="pl-9"
+                  />
+                </div>
+                {/* Chips dos termos de busca */}
+                {searchTerms.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {searchTerms.map((term, index) => (
+                      <Badge
+                        key={`${term}-${index}`}
+                        variant="secondary"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium"
+                      >
+                        <span className="truncate max-w-[120px]">{term}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeSearchTerm(term)}
+                          className="hover:bg-muted/80 rounded-full p-0.5 transition-colors flex-shrink-0"
+                          aria-label={`Remover busca: ${term}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </FilterSection>
+
             {/* Localização */}
             <FilterSection title="Localização" icon={MapPin}>
               <div className="space-y-3">
@@ -416,14 +498,18 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     {(filters.auctioneer || []).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {filters.auctioneer?.map(auctioneer => (
-                          <Badge key={auctioneer} variant="secondary" className="flex items-center gap-1">
-                            {auctioneer}
-                            <X
-                              className="h-3 w-3 cursor-pointer"
+                          <Badge key={auctioneer} variant="secondary" className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium">
+                            <span className="truncate max-w-[150px]">{auctioneer}</span>
+                            <button
+                              type="button"
                               onClick={() => {
                                 updateFilter('auctioneer', filters.auctioneer?.filter(a => a !== auctioneer));
                               }}
-                            />
+                              className="hover:bg-muted/80 rounded-full p-0.5 transition-colors flex-shrink-0"
+                              aria-label={`Remover leiloeiro: ${auctioneer}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           </Badge>
                         ))}
                       </div>
