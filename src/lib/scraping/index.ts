@@ -37,6 +37,98 @@ export interface ScrapingResult {
 }
 
 /**
+ * Executa scrapers em paralelo (todos simultaneamente)
+ */
+async function runScrapersInParallel(scrapers: any[]): Promise<ScrapingResult[]> {
+  console.log(`[PARALELO] Executando ${scrapers.length} scrapers simultaneamente...`);
+  
+  const results = await Promise.all(
+    scrapers.map(async (scraper) => {
+      try {
+        return await runScraper(scraper);
+      } catch (error: any) {
+        console.error(`[${scraper.auctioneerName}] Erro fatal no modo paralelo:`, error);
+        return {
+          auctioneer: scraper.auctioneerName || 'Desconhecido',
+          success: false,
+          vehiclesScraped: 0,
+          vehiclesCreated: 0,
+          vehiclesUpdated: 0,
+          errors: [error.message || 'Erro desconhecido'],
+          executionTimeMs: 0,
+        };
+      }
+    })
+  );
+
+  return results;
+}
+
+/**
+ * Executa scrapers em chunks paralelos (limite de concorrência)
+ */
+async function runScrapersInChunks(scrapers: any[], maxConcurrent: number): Promise<ScrapingResult[]> {
+  console.log(`[PARALELO LIMITADO] Executando ${scrapers.length} scrapers em chunks de ${maxConcurrent} simultâneos...`);
+  
+  const results: ScrapingResult[] = [];
+
+  // Dividir scrapers em chunks
+  for (let i = 0; i < scrapers.length; i += maxConcurrent) {
+    const chunk = scrapers.slice(i, i + maxConcurrent);
+    console.log(`[PARALELO LIMITADO] Processando chunk ${Math.floor(i / maxConcurrent) + 1}/${Math.ceil(scrapers.length / maxConcurrent)} (${chunk.length} scrapers)...`);
+    
+    const chunkResults = await Promise.all(
+      chunk.map(async (scraper) => {
+        try {
+          return await runScraper(scraper);
+        } catch (error: any) {
+          console.error(`[${scraper.auctioneerName}] Erro fatal no modo paralelo limitado:`, error);
+          return {
+            auctioneer: scraper.auctioneerName || 'Desconhecido',
+            success: false,
+            vehiclesScraped: 0,
+            vehiclesCreated: 0,
+            vehiclesUpdated: 0,
+            errors: [error.message || 'Erro desconhecido'],
+            executionTimeMs: 0,
+          };
+        }
+      })
+    );
+
+    results.push(...chunkResults);
+
+    // Pequeno delay entre chunks (opcional, menor que delay sequencial)
+    if (i + maxConcurrent < scrapers.length) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Executa scrapers sequencialmente (modo padrão atual)
+ */
+async function runScrapersSequentially(scrapers: any[]): Promise<ScrapingResult[]> {
+  console.log(`[SEQUENCIAL] Executando ${scrapers.length} scrapers um por vez...`);
+  
+  const results: ScrapingResult[] = [];
+
+  for (const scraper of scrapers) {
+    const result = await runScraper(scraper);
+    results.push(result);
+    
+    // Delay entre leiloeiros
+    if (scrapers.indexOf(scraper) < scrapers.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+
+  return results;
+}
+
+/**
  * Executa o scraping de todos os leiloeiros
  */
 export async function runAllScrapers(): Promise<ScrapingResult[]> {
@@ -44,7 +136,9 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
   console.log('Iniciando scraping de todos os leiloeiros');
   console.log('====================================');
 
-  const results: ScrapingResult[] = [];
+  // Ler configuração de modo de execução
+  const scrapingMode = (process.env.SCRAPING_MODE || 'sequential').toLowerCase().trim();
+  const maxConcurrent = parseInt(process.env.MAX_CONCURRENT_SCRAPERS || '3', 10);
 
   // Lista de scrapers disponíveis
   const allScrapers = [
@@ -80,12 +174,23 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
     console.log('Filtrando scrapers pelos AUCTIONEERS:', wanted, '=> selecionados:', scrapers.map((s: any) => s.auctioneerName));
   }
 
-  for (const scraper of scrapers) {
-    const result = await runScraper(scraper);
-    results.push(result);
-    
-    // Delay entre leiloeiros
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+  // Escolher modo de execução baseado na configuração
+  let results: ScrapingResult[] = [];
+
+  if (scrapingMode === 'parallel') {
+    console.log(`📊 Modo: PARALELO (todos simultaneamente)`);
+    console.log(`📊 Scrapers selecionados: ${scrapers.length}`);
+    results = await runScrapersInParallel(scrapers);
+  } else if (scrapingMode === 'parallel-limited') {
+    console.log(`📊 Modo: PARALELO LIMITADO (máximo ${maxConcurrent} simultâneos)`);
+    console.log(`📊 Scrapers selecionados: ${scrapers.length}`);
+    results = await runScrapersInChunks(scrapers, maxConcurrent);
+  } else {
+    // Modo sequencial (padrão)
+    console.log(`📊 Modo: SEQUENCIAL (um por vez - padrão)`);
+    console.log(`📊 Scrapers selecionados: ${scrapers.length}`);
+    console.log(`💡 Dica: Use SCRAPING_MODE=parallel para execução mais rápida`);
+    results = await runScrapersSequentially(scrapers);
   }
 
   console.log('====================================');
