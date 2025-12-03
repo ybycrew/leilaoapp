@@ -15,7 +15,7 @@ import { Suspense } from 'react';
 
 interface SearchPageProps {
   searchParams: Promise<{
-    q?: string;
+    q?: string | string[];
     state?: string;
     city?: string;
     minPrice?: string;
@@ -46,8 +46,11 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     return [param];
   };
 
+  // Normalizar q como array
+  const qArray = normalizeArrayParam(params.q);
+  
   const normalizedFilters = {
-    q: params.q,
+    q: qArray,
     state: params.state,
     city: params.city,
     minPrice: params.minPrice,
@@ -63,7 +66,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
   const pageSize = 20; // Itens por página
 
   const { vehicles, total, error, pagination } = await searchVehicles({
-    q: params.q,
+    q: qArray,
     state: params.state,
     city: params.city,
     minPrice: params.minPrice ? parseFloat(params.minPrice) : undefined,
@@ -95,7 +98,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
             <Link href="/">
               <h1 className="text-xl font-bold cursor-pointer hover:text-primary">Ybybid</h1>
             </Link>
-            <SearchAutocomplete defaultValue={params.q || ''} />
+            <SearchAutocomplete />
           </div>
         </div>
       </header>
@@ -126,12 +129,16 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
                       Mostrando <strong>{((currentPage - 1) * pageSize) + 1}</strong> a{' '}
                       <strong>{Math.min(currentPage * pageSize, total)}</strong> de{' '}
                       <strong>{total}</strong> veículos
-                      {params.q && ` para "${params.q}"`}
+                      {qArray && qArray.length > 0 && (
+                        ` para "${qArray.join('", "')}"`
+                      )}
                     </>
                   ) : (
                     <>
                       Mostrando <strong>{total} veículos</strong>
-                      {params.q && ` para "${params.q}"`}
+                      {qArray && qArray.length > 0 && (
+                        ` para "${qArray.join('", "')}"`
+                      )}
                     </>
                   )}
                 </p>

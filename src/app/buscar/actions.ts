@@ -5,7 +5,7 @@ import { buildSearchKey, toAsciiUpper } from '@/lib/fipe-normalization';
 import { filterValidStates, filterValidCities, isValidBrazilianState, isValidCity } from '@/lib/utils';
 
 export interface SearchFilters {
-  q?: string;
+  q?: string | string[];
   state?: string;
   city?: string;
   minPrice?: number;
@@ -80,9 +80,25 @@ export async function searchVehicles(filters: SearchFilters = {}) {
 
     // Aplicar filtros - usando colunas em inglês da view
     if (filters.q) {
-      // Busca apenas no título dos veículos (conforme solicitado)
-      const searchTerm = filters.q.trim();
-      query = query.ilike('title', `%${searchTerm}%`);
+      // Suportar múltiplos termos de busca (array)
+      const searchTerms = Array.isArray(filters.q) ? filters.q : [filters.q];
+      const trimmedTerms = searchTerms
+        .map(term => (typeof term === 'string' ? term.trim() : ''))
+        .filter(term => term.length > 0);
+      
+      if (trimmedTerms.length > 0) {
+        // Se houver múltiplos termos, usar OR para buscar qualquer um deles
+        if (trimmedTerms.length === 1) {
+          query = query.ilike('title', `%${trimmedTerms[0]}%`);
+        } else {
+          // Construir string OR para múltiplos termos
+          // Formato: title.ilike.%termo1%,title.ilike.%termo2%
+          const orConditions = trimmedTerms
+            .map((term) => `title.ilike.%${term}%`)
+            .join(',');
+          query = query.or(orConditions);
+        }
+      }
     }
 
     if (normalizedState) {

@@ -6,21 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Search, X, Loader2 } from 'lucide-react';
 import { getSearchSuggestions, type SearchSuggestions } from './actions';
 import { cn } from '@/lib/utils';
+import { SearchChips } from './SearchChips';
 
-export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: string }) {
+export function SearchAutocomplete() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Sincronizar com a URL
-  const urlQuery = searchParams.get('q') || '';
-  const [query, setQuery] = useState(urlQuery || defaultValue);
   
-  // Atualizar query quando a URL mudar
-  useEffect(() => {
-    const currentQuery = searchParams.get('q') || '';
-    if (currentQuery !== query) {
-      setQuery(currentQuery);
-    }
-  }, [searchParams, query]);
+  // Pegar termos de busca atuais da URL (pode ser array)
+  const currentSearchTerms = searchParams.getAll('q').filter(term => term.trim().length > 0);
+  
+  const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SearchSuggestions>({
     titles: [],
   });
@@ -99,7 +94,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (!isOpen || totalItems === 0) {
         if (e.key === 'Enter' && query.trim()) {
-          handleSearch(query.trim());
+          addSearchTerm(query.trim());
         }
         return;
       }
@@ -118,7 +113,7 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
           if (selectedIndex >= 0 && suggestions.titles[selectedIndex]) {
             handleSelectSuggestion(suggestions.titles[selectedIndex]);
           } else if (query.trim()) {
-            handleSearch(query.trim());
+            addSearchTerm(query.trim());
           }
           break;
         case 'Escape':
@@ -129,36 +124,64 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
           break;
       }
     },
-    [isOpen, totalItems, selectedIndex, query, suggestions.titles]
+    [isOpen, totalItems, selectedIndex, query, suggestions.titles, addSearchTerm]
   );
 
   // Selecionar sugestão
   const handleSelectSuggestion = useCallback(
     (value: string) => {
-      setQuery(value);
+      addSearchTerm(value);
       setIsOpen(false);
       setSelectedIndex(-1);
-      handleSearch(value);
     },
-    []
+    [addSearchTerm]
   );
 
-  // Realizar busca
-  const handleSearch = useCallback(
+  // Adicionar termo de busca
+  const addSearchTerm = useCallback(
     (searchQuery: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (searchQuery.trim()) {
-        params.set('q', searchQuery.trim());
-      } else {
-        params.delete('q');
+      const trimmedTerm = searchQuery.trim();
+      if (!trimmedTerm) return;
+      
+      const currentTerms = searchParams.getAll('q').filter(term => term.trim().length > 0);
+      // Evitar duplicatas (case-insensitive)
+      const termExists = currentTerms.some(
+        term => term.toLowerCase() === trimmedTerm.toLowerCase()
+      );
+      
+      if (!termExists) {
+        const params = new URLSearchParams(searchParams.toString());
+        // Adicionar novo termo
+        params.append('q', trimmedTerm);
+        params.delete('page'); // Reset para primeira página
+        router.push(`/buscar?${params.toString()}`);
       }
-      params.delete('page'); // Reset para primeira página
+      
+      // Limpar campo de busca após adicionar
+      setQuery('');
+    },
+    [router, searchParams]
+  );
+
+  // Remover termo de busca
+  const removeSearchTerm = useCallback(
+    (termToRemove: string) => {
+      const currentTerms = searchParams.getAll('q').filter(term => term.trim().length > 0);
+      const newTerms = currentTerms.filter(term => term !== termToRemove);
+      
+      const params = new URLSearchParams(searchParams.toString());
+      // Remover todos os q
+      params.delete('q');
+      // Adicionar os restantes
+      newTerms.forEach(term => params.append('q', term));
+      params.delete('page');
+      
       router.push(`/buscar?${params.toString()}`);
     },
     [router, searchParams]
   );
 
-  // Limpar busca
+  // Limpar busca (remover todos os termos)
   const handleClear = useCallback(() => {
     setQuery('');
     setIsOpen(false);
@@ -170,8 +193,16 @@ export function SearchAutocomplete({ defaultValue = '' }: { defaultValue?: strin
   }, [router, searchParams]);
 
   return (
-    <div ref={containerRef} className="relative flex-1 max-w-2xl">
-      <div className="relative">
+    <div className="flex-1 max-w-2xl space-y-2">
+      {/* Chips dos termos de busca */}
+      {currentSearchTerms.length > 0 && (
+        <SearchChips
+          searchTerms={currentSearchTerms}
+          onRemove={removeSearchTerm}
+        />
+      )}
+      
+      <div ref={containerRef} className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5 z-10" />
         <Input
           ref={inputRef}

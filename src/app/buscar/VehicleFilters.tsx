@@ -117,14 +117,12 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   const applyFilters = () => {
     startTransition(() => {
-      // Pegar q da URL atual (não do estado local) para manter sincronização
-      const currentQ = searchParams.get('q');
+      // Pegar todos os termos q da URL atual (não do estado local) para manter sincronização
+      const currentQTerms = searchParams.getAll('q').filter(term => term.trim().length > 0);
       const params = new URLSearchParams();
       
-      // Incluir q apenas se existir e não estiver vazio
-      if (currentQ && currentQ.trim()) {
-        params.set('q', currentQ.trim());
-      }
+      // Incluir todos os termos q
+      currentQTerms.forEach(term => params.append('q', term));
       if (filters.state) params.set('state', filters.state);
       if (filters.city) params.set('city', filters.city);
       if (filters.minPrice) params.set('minPrice', filters.minPrice);
