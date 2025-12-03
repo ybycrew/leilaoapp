@@ -33,7 +33,7 @@ interface FilterOptions {
 interface VehicleFiltersProps {
   filterOptions: FilterOptions;
   currentFilters: {
-    q?: string;
+    q?: string | string[];
     state?: string;
     city?: string;
     minPrice?: string;
