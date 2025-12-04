@@ -263,6 +263,24 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     setSearchTerms(prev => prev.filter(term => term !== termToRemove));
   }, []);
 
+  // Lista combinada: texto digitado primeiro, depois sugestões (sem duplicatas)
+  const combinedSuggestions = useMemo(() => {
+    const trimmedQuery = searchQuery.trim();
+    const hasQuery = trimmedQuery.length >= 2;
+    
+    if (!hasQuery) {
+      return suggestions.titles;
+    }
+    
+    // Filtrar sugestões para remover o texto digitado (case-insensitive) e evitar duplicatas
+    const filteredSuggestions = suggestions.titles.filter(
+      title => title.toLowerCase() !== trimmedQuery.toLowerCase()
+    );
+    
+    // Sempre colocar o texto digitado como primeira opção
+    return [trimmedQuery, ...filteredSuggestions];
+  }, [searchQuery, suggestions.titles]);
+
   // Navegação por teclado (memoizado)
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     const totalSuggestions = combinedSuggestions.length;
@@ -308,24 +326,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   }, []);
-
-  // Lista combinada: texto digitado primeiro, depois sugestões (sem duplicatas)
-  const combinedSuggestions = useMemo(() => {
-    const trimmedQuery = searchQuery.trim();
-    const hasQuery = trimmedQuery.length >= 2;
-    
-    if (!hasQuery) {
-      return suggestions.titles;
-    }
-    
-    // Filtrar sugestões para remover o texto digitado (case-insensitive) e evitar duplicatas
-    const filteredSuggestions = suggestions.titles.filter(
-      title => title.toLowerCase() !== trimmedQuery.toLowerCase()
-    );
-    
-    // Sempre colocar o texto digitado como primeira opção
-    return [trimmedQuery, ...filteredSuggestions];
-  }, [searchQuery, suggestions.titles]);
 
   const applyFilters = () => {
     startTransition(() => {
