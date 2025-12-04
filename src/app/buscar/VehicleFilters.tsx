@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,8 +22,11 @@ import {
   TrendingUp,
   X,
   Filter,
-  Search
+  Search,
+  Loader2
 } from "lucide-react";
+import { getSearchSuggestions, type SearchSuggestions } from './actions';
+import { cn } from '@/lib/utils';
 interface FilterOptions {
   states: string[];
   citiesByState: Record<string, string[]>;
@@ -73,6 +76,17 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [searchTerms, setSearchTerms] = useState<string[]>(currentQTerms);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Estados para autocomplete
+  const [suggestions, setSuggestions] = useState<SearchSuggestions>({ titles: [] });
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  
+  // Refs para controle de foco e dropdown
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsContainerRef = useRef<HTMLDivElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Flag para evitar que sincronizações vindas do servidor sobrescrevam interações do usuário
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   
@@ -98,7 +112,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   // Sincronizar com currentFilters quando mudarem
   useEffect(() => {
-    if (currentFilters && !hasUserInteracted) {
+    if (currentFilters && !hasUserInteracted && searchQuery === '') {
       setFilters(currentFilters);
       setLocalNumericValues({
         minYear: currentFilters.minYear || '',
@@ -106,7 +120,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         minPrice: currentFilters.minPrice || '',
         maxPrice: currentFilters.maxPrice || '',
       });
-      // Sincronizar termos de busca
+      // Sincronizar termos de busca apenas se não estiver digitando
       const qTerms = Array.isArray(currentFilters.q) 
         ? currentFilters.q 
         : currentFilters.q 
@@ -114,7 +128,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
           : [];
       setSearchTerms(qTerms);
     }
-  }, [currentFilters, hasUserInteracted]);
+  }, [currentFilters, hasUserInteracted, searchQuery]);
 
   const updateFilter = (key: string, value: any) => {
     setHasUserInteracted(true);
@@ -132,6 +146,115 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     });
   };
 
+  // Buscar sugestões com debounce
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (!query || query.trim().length < 2) {
+      setSuggestions({ titles: [] });
+      setIsLoadingSuggestions(false);
+      setIsSuggestionsOpen(false);
+      return;
+    }
+
+    setIsLoadingSuggestions(true);
+    try {
+      const results = await getSearchSuggestions(query);
+      setSuggestions(results);
+      setIsSuggestionsOpen(true);
+      setSelectedSuggestionIndex(-1);
+    } catch (error) {
+      console.error('Erro ao buscar sugestões:', error);
+      setSuggestions({ titles: [] });
+      setIsSuggestionsOpen(false);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, []);
+
+  // Debounce da busca de sugestões
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    if (searchQuery.trim().length >= 2) {
+      debounceTimerRef.current = setTimeout(() => {
+        fetchSuggestions(searchQuery);
+      }, 300);
+    } else {
+      setSuggestions({ titles: [] });
+      setIsSuggestionsOpen(false);
+    }
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [searchQuery, fetchSuggestions]);
+
+  // Fechar sugestões ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      
+      // Não fechar se estiver clicando no input ou no container de sugestões
+      if (
+        searchInputRef.current?.contains(target) ||
+        suggestionsContainerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      
+      setIsSuggestionsOpen(false);
+      setSelectedSuggestionIndex(-1);
+    };
+
+    // Usar 'click' ao invés de 'mousedown' para evitar conflitos
+    document.addEventListener('click', handleClickOutside, true);
+    return () => document.removeEventListener('click', handleClickOutside, true);
+  }, []);
+
+  // Navegação por teclado
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const totalSuggestions = suggestions.titles.length;
+
+    if (!isSuggestionsOpen || totalSuggestions === 0) {
+      if (e.key === 'Enter' && searchQuery.trim()) {
+        e.preventDefault();
+        addSearchTerm(searchQuery.trim());
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) => 
+          prev < totalSuggestions - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex((prev) => 
+          prev > 0 ? prev - 1 : totalSuggestions - 1
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0 && suggestions.titles[selectedSuggestionIndex]) {
+          addSearchTerm(suggestions.titles[selectedSuggestionIndex]);
+        } else if (searchQuery.trim()) {
+          addSearchTerm(searchQuery.trim());
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setIsSuggestionsOpen(false);
+        setSelectedSuggestionIndex(-1);
+        break;
+    }
+  };
+
   // Adicionar termo de busca ao estado local
   const addSearchTerm = (term: string) => {
     const trimmedTerm = term.trim();
@@ -146,6 +269,11 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     if (!termExists) {
       setSearchTerms(prev => [...prev, trimmedTerm]);
       setSearchQuery(''); // Limpar campo após adicionar
+      setSuggestions({ titles: [] });
+      setIsSuggestionsOpen(false);
+      setSelectedSuggestionIndex(-1);
+      // Manter foco no campo após adicionar
+      setTimeout(() => searchInputRef.current?.focus(), 0);
     }
   };
 
@@ -281,20 +409,44 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
             {/* Busca por texto */}
             <FilterSection title="Busca por Título" icon={Search}>
               <div className="space-y-3">
-                <div className="relative">
+                <div className="relative" ref={suggestionsContainerRef}>
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
+                  {isLoadingSuggestions && (
+                    <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground z-10" />
+                  )}
                   <Input
+                    ref={searchInputRef}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && searchQuery.trim()) {
-                        e.preventDefault();
-                        addSearchTerm(searchQuery.trim());
+                    onKeyDown={handleSearchKeyDown}
+                    onFocus={() => {
+                      if (suggestions.titles.length > 0) {
+                        setIsSuggestionsOpen(true);
                       }
                     }}
                     placeholder="Buscar veículos..."
-                    className="pl-9"
+                    className="pl-9 pr-9"
+                    autoComplete="off"
                   />
+                  
+                  {/* Dropdown de sugestões */}
+                  {isSuggestionsOpen && suggestions.titles.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {suggestions.titles.map((title, index) => (
+                        <button
+                          key={`${title}-${index}`}
+                          type="button"
+                          onClick={() => addSearchTerm(title)}
+                          className={cn(
+                            "w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors",
+                            selectedSuggestionIndex === index && "bg-muted"
+                          )}
+                        >
+                          {title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {/* Chips dos termos de busca */}
                 {searchTerms.length > 0 && (
