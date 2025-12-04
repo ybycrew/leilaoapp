@@ -18,6 +18,7 @@ export function SearchAutocomplete() {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SearchSuggestions>({
     titles: [],
+    total: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -31,7 +32,7 @@ export function SearchAutocomplete() {
   // Buscar sugestões com debounce
   const fetchSuggestions = useCallback(async (searchQuery: string) => {
     if (!searchQuery || searchQuery.trim().length < 2) {
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
       setIsLoading(false);
       return;
     }
@@ -43,7 +44,7 @@ export function SearchAutocomplete() {
       setIsOpen(true);
     } catch (error) {
       console.error('Erro ao buscar sugestões:', error);
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +61,7 @@ export function SearchAutocomplete() {
         fetchSuggestions(query);
       }, 300);
     } else {
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
       setIsOpen(false);
     }
 
