@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition, useRef, useCallback } from 'react';
+import { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -188,6 +188,11 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     }
 
     if (searchQuery.trim().length >= 2) {
+      // Mostrar dropdown imediatamente quando usuário digita (com texto digitado como primeira opção)
+      setIsSuggestionsOpen(true);
+      setSelectedSuggestionIndex(-1);
+      
+      // Buscar sugestões com debounce
       debounceTimerRef.current = setTimeout(() => {
         fetchSuggestions(searchQuery);
       }, 300);
@@ -260,7 +265,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
 
   // Navegação por teclado (memoizado)
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    const totalSuggestions = suggestions.titles.length;
+    const totalSuggestions = combinedSuggestions.length;
 
     if (!isSuggestionsOpen || totalSuggestions === 0) {
       if (e.key === 'Enter' && searchQuery.trim()) {
@@ -285,8 +290,8 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         break;
       case 'Enter':
         e.preventDefault();
-        if (selectedSuggestionIndex >= 0 && suggestions.titles[selectedSuggestionIndex]) {
-          addSearchTerm(suggestions.titles[selectedSuggestionIndex]);
+        if (selectedSuggestionIndex >= 0 && combinedSuggestions[selectedSuggestionIndex]) {
+          addSearchTerm(combinedSuggestions[selectedSuggestionIndex]);
         } else if (searchQuery.trim()) {
           addSearchTerm(searchQuery.trim());
         }
@@ -297,12 +302,30 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         setSelectedSuggestionIndex(-1);
         break;
     }
-  }, [isSuggestionsOpen, suggestions.titles, searchQuery, selectedSuggestionIndex, addSearchTerm]);
+  }, [isSuggestionsOpen, combinedSuggestions, searchQuery, selectedSuggestionIndex, addSearchTerm]);
 
   // Handler memoizado para onChange do input
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   }, []);
+
+  // Lista combinada: texto digitado primeiro, depois sugestões (sem duplicatas)
+  const combinedSuggestions = useMemo(() => {
+    const trimmedQuery = searchQuery.trim();
+    const hasQuery = trimmedQuery.length >= 2;
+    
+    if (!hasQuery) {
+      return suggestions.titles;
+    }
+    
+    // Filtrar sugestões para remover o texto digitado (case-insensitive) e evitar duplicatas
+    const filteredSuggestions = suggestions.titles.filter(
+      title => title.toLowerCase() !== trimmedQuery.toLowerCase()
+    );
+    
+    // Sempre colocar o texto digitado como primeira opção
+    return [trimmedQuery, ...filteredSuggestions];
+  }, [searchQuery, suggestions.titles]);
 
   const applyFilters = () => {
     startTransition(() => {
@@ -431,7 +454,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                     onChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
                     onFocus={() => {
-                      if (suggestions.titles.length > 0) {
+                      if (searchQuery.trim().length >= 2 || suggestions.titles.length > 0) {
                         setIsSuggestionsOpen(true);
                       }
                     }}
@@ -441,21 +464,25 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   />
                   
                   {/* Dropdown de sugestões */}
-                  {isSuggestionsOpen && suggestions.titles.length > 0 && (
+                  {isSuggestionsOpen && combinedSuggestions.length > 0 && (
                     <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
-                      {suggestions.titles.map((title, index) => (
-                        <button
-                          key={`${title}-${index}`}
-                          type="button"
-                          onClick={() => addSearchTerm(title)}
-                          className={cn(
-                            "w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors",
-                            selectedSuggestionIndex === index && "bg-muted"
-                          )}
-                        >
-                          {title}
-                        </button>
-                      ))}
+                      {combinedSuggestions.map((title, index) => {
+                        const isQuery = index === 0 && searchQuery.trim().toLowerCase() === title.toLowerCase();
+                        return (
+                          <button
+                            key={`${title}-${index}`}
+                            type="button"
+                            onClick={() => addSearchTerm(title)}
+                            className={cn(
+                              "w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors",
+                              selectedSuggestionIndex === index && "bg-muted",
+                              isQuery && "font-semibold"
+                            )}
+                          >
+                            {title}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
