@@ -469,6 +469,7 @@ export async function getFilterOptions() {
  */
 export interface SearchSuggestions {
   titles: string[];
+  total: number;
 }
 
 /**
@@ -481,13 +482,23 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
   if (!query || query.trim().length < 2) {
     return {
       titles: [],
+      total: 0,
     };
   }
 
   const searchTerm = query.trim();
 
   try {
-    // Buscar títulos que correspondem (mais relevantes primeiro)
+    // Buscar total de resultados primeiro
+    const { count: totalCount } = await supabase
+      .from('vehicles_with_auctioneer')
+      .select('*', { count: 'exact', head: true })
+      .not('title', 'is', null)
+      .ilike('title', `%${searchTerm}%`);
+
+    const total = totalCount || 0;
+
+    // Buscar títulos que correspondem (mais relevantes primeiro) - limitado a 10 para o dropdown
     const { data: titlesData } = await supabase
       .from('vehicles_with_auctioneer')
       .select('title')
@@ -506,11 +517,13 @@ export async function getSearchSuggestions(query: string): Promise<SearchSuggest
 
     return {
       titles,
+      total,
     };
   } catch (error) {
     console.error('[getSearchSuggestions] Erro:', error);
     return {
       titles: [],
+      total: 0,
     };
   }
 }

@@ -88,7 +88,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   const [searchQuery, setSearchQuery] = useState('');
   
   // Estados para autocomplete
-  const [suggestions, setSuggestions] = useState<SearchSuggestions>({ titles: [] });
+  const [suggestions, setSuggestions] = useState<SearchSuggestions>({ titles: [], total: 0 });
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
@@ -160,7 +160,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
   // Buscar sugestões com debounce
   const fetchSuggestions = useCallback(async (query: string) => {
     if (!query || query.trim().length < 2) {
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
       setIsLoadingSuggestions(false);
       setIsSuggestionsOpen(false);
       return;
@@ -174,7 +174,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
       setSelectedSuggestionIndex(-1);
     } catch (error) {
       console.error('Erro ao buscar sugestões:', error);
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
       setIsSuggestionsOpen(false);
     } finally {
       setIsLoadingSuggestions(false);
@@ -197,7 +197,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         fetchSuggestions(searchQuery);
       }, 300);
     } else {
-      setSuggestions({ titles: [] });
+      setSuggestions({ titles: [], total: 0 });
       setIsSuggestionsOpen(false);
     }
 
@@ -248,7 +248,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     });
     
     setSearchQuery(''); // Limpar campo após adicionar
-    setSuggestions({ titles: [] });
+    setSuggestions({ titles: [], total: 0 });
     setIsSuggestionsOpen(false);
     setSelectedSuggestionIndex(-1);
     // Manter foco no campo após adicionar (usando requestAnimationFrame para garantir que o DOM foi atualizado)
@@ -464,25 +464,60 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   />
                   
                   {/* Dropdown de sugestões */}
-                  {isSuggestionsOpen && combinedSuggestions.length > 0 && (
+                  {isSuggestionsOpen && searchQuery.trim().length >= 2 && (
                     <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg max-h-60 overflow-auto">
-                      {combinedSuggestions.map((title, index) => {
-                        const isQuery = index === 0 && searchQuery.trim().toLowerCase() === title.toLowerCase();
-                        return (
-                          <button
-                            key={`${title}-${index}`}
-                            type="button"
-                            onClick={() => addSearchTerm(title)}
-                            className={cn(
-                              "w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors",
-                              selectedSuggestionIndex === index && "bg-muted",
-                              isQuery && "font-semibold"
-                            )}
-                          >
-                            {title}
-                          </button>
-                        );
-                      })}
+                      {isLoadingSuggestions ? (
+                        <div className="px-4 py-2 text-sm text-muted-foreground">
+                          Carregando...
+                        </div>
+                      ) : combinedSuggestions.length > 0 ? (
+                        <>
+                          {combinedSuggestions.map((title, index) => {
+                            const isQuery = index === 0 && searchQuery.trim().toLowerCase() === title.toLowerCase();
+                            return (
+                              <button
+                                key={`${title}-${index}`}
+                                type="button"
+                                onClick={() => addSearchTerm(title)}
+                                className={cn(
+                                  "w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors",
+                                  selectedSuggestionIndex === index && "bg-muted",
+                                  isQuery && "font-semibold"
+                                )}
+                              >
+                                {title}
+                              </button>
+                            );
+                          })}
+                          {/* Mostrar total de resultados no final */}
+                          {/* O texto digitado pode estar no início, então contamos apenas as sugestões reais */}
+                          {(() => {
+                            const textQuery = searchQuery.trim();
+                            const hasTextQueryAsFirst = combinedSuggestions.length > 0 && 
+                              combinedSuggestions[0].toLowerCase() === textQuery.toLowerCase();
+                            const realSuggestionsCount = hasTextQueryAsFirst 
+                              ? combinedSuggestions.length - 1 
+                              : combinedSuggestions.length;
+                            const remainingResults = suggestions.total - realSuggestionsCount;
+                            
+                            return (
+                              <div className="px-4 py-2 text-sm text-muted-foreground border-t">
+                                {suggestions.total === 0 ? (
+                                  <>0 resultados</>
+                                ) : remainingResults > 0 ? (
+                                  <>Mais {remainingResults} resultado{remainingResults !== 1 ? 's' : ''}</>
+                                ) : (
+                                  <>{suggestions.total} resultado{suggestions.total !== 1 ? 's' : ''}</>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      ) : (
+                        <div className="px-4 py-2 text-sm text-muted-foreground">
+                          0 resultados
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
