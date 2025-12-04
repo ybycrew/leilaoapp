@@ -58,6 +58,17 @@ const VEHICLE_TYPES = [
 ];
 const AUCTION_TYPES = ['online', 'presencial', 'hibrido'];
 
+// FilterSection movido para fora para evitar recriação a cada render
+const FilterSection = ({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) => (
+  <div className="space-y-3">
+    <div className="flex items-center gap-2 text-sm font-semibold">
+      <Icon className="h-4 w-4" />
+      <span>{title}</span>
+    </div>
+    {children}
+  </div>
+);
+
 export function VehicleFilters({ filterOptions, currentFilters }: VehicleFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -214,8 +225,41 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     return () => document.removeEventListener('click', handleClickOutside, true);
   }, []);
 
-  // Navegação por teclado
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // Adicionar termo de busca ao estado local (memoizado)
+  const addSearchTerm = useCallback((term: string) => {
+    const trimmedTerm = term.trim();
+    if (!trimmedTerm) return;
+    
+    setHasUserInteracted(true);
+    setSearchTerms(prev => {
+      const termExists = prev.some(
+        t => t.toLowerCase() === trimmedTerm.toLowerCase()
+      );
+      
+      if (!termExists) {
+        return [...prev, trimmedTerm];
+      }
+      return prev;
+    });
+    
+    setSearchQuery(''); // Limpar campo após adicionar
+    setSuggestions({ titles: [] });
+    setIsSuggestionsOpen(false);
+    setSelectedSuggestionIndex(-1);
+    // Manter foco no campo após adicionar (usando requestAnimationFrame para garantir que o DOM foi atualizado)
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+  }, []);
+
+  // Remover termo de busca do estado local (memoizado)
+  const removeSearchTerm = useCallback((termToRemove: string) => {
+    setHasUserInteracted(true);
+    setSearchTerms(prev => prev.filter(term => term !== termToRemove));
+  }, []);
+
+  // Navegação por teclado (memoizado)
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     const totalSuggestions = suggestions.titles.length;
 
     if (!isSuggestionsOpen || totalSuggestions === 0) {
@@ -253,35 +297,12 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         setSelectedSuggestionIndex(-1);
         break;
     }
-  };
+  }, [isSuggestionsOpen, suggestions.titles, searchQuery, selectedSuggestionIndex, addSearchTerm]);
 
-  // Adicionar termo de busca ao estado local
-  const addSearchTerm = (term: string) => {
-    const trimmedTerm = term.trim();
-    if (!trimmedTerm) return;
-    
-    setHasUserInteracted(true);
-    // Evitar duplicatas (case-insensitive)
-    const termExists = searchTerms.some(
-      t => t.toLowerCase() === trimmedTerm.toLowerCase()
-    );
-    
-    if (!termExists) {
-      setSearchTerms(prev => [...prev, trimmedTerm]);
-      setSearchQuery(''); // Limpar campo após adicionar
-      setSuggestions({ titles: [] });
-      setIsSuggestionsOpen(false);
-      setSelectedSuggestionIndex(-1);
-      // Manter foco no campo após adicionar
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-    }
-  };
-
-  // Remover termo de busca do estado local
-  const removeSearchTerm = (termToRemove: string) => {
-    setHasUserInteracted(true);
-    setSearchTerms(prev => prev.filter(term => term !== termToRemove));
-  };
+  // Handler memoizado para onChange do input
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  }, []);
 
   const applyFilters = () => {
     startTransition(() => {
@@ -337,16 +358,6 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     if (Array.isArray(v)) return v.length > 0;
     return v !== undefined && v !== '';
   }).length + (searchTerms.length > 0 ? 1 : 0); // Adicionar 1 se houver termos de busca
-
-  const FilterSection = ({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) => (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4" />
-        <span>{title}</span>
-      </div>
-      {children}
-    </div>
-  );
 
   return (
     <>
@@ -417,7 +428,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                   <Input
                     ref={searchInputRef}
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={handleSearchChange}
                     onKeyDown={handleSearchKeyDown}
                     onFocus={() => {
                       if (suggestions.titles.length > 0) {
