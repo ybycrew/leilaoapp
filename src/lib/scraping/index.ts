@@ -3,6 +3,7 @@ import { SodreSantoroRealScraper } from './scrapers/sodre-santoro-real';
 import { SodreSantoroFastScraper } from './scrapers/sodre-santoro-fast';
 import { SodreSantoroBatchScraper } from './scrapers/sodre-santoro-batch';
 import { SuperbidRealScraper } from './scrapers/superbid-real';
+import { FreitasLeiloeiroScraper } from './scrapers/freitas-leiloeiro';
 import { VehicleData } from './base-scraper';
 // Removido: normalizeVehicleTypeForDB, validateVehicleTypeByModel - não normalizamos mais tipo de veículo
 // Removido: normalizeVehicleBrandModel - não normalizamos mais marca/modelo
@@ -144,6 +145,7 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
   const allScrapers = [
     new SodreSantoroRealScraper(),
     new SuperbidRealScraper(),
+    new FreitasLeiloeiroScraper(),
   ];
 
   // Filtrar por AUCTIONEERS se fornecido (slug(s) separados por vírgula)
@@ -169,6 +171,7 @@ export async function runAllScrapers(): Promise<ScrapingResult[]> {
       const aliases: string[] = [slugFromName];
       if (/sodr[eé]/i.test(name)) aliases.push('sodre-santoro', 'sodre-santoro-real');
       if (/superbid/i.test(name)) aliases.push('superbid');
+      if (/freitas/i.test(name)) aliases.push('freitas-leiloeiro', 'freitas');
       return aliases.some((alias) => wanted.includes(alias));
     });
     console.log('Filtrando scrapers pelos AUCTIONEERS:', wanted, '=> selecionados:', scrapers.map((s: any) => s.auctioneerName));
