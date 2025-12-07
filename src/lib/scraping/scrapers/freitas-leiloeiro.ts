@@ -179,6 +179,21 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
 
         // Verificar se há indicador de carregamento e aguardar desaparecer
         await this.waitForLoadingToComplete();
+
+        // Verificar se chegou ao final (mensagem de fim aparece) APÓS o scroll
+        const hasReachedEnd = await this.checkIfReachedEnd();
+        if (hasReachedEnd) {
+          console.log(`[${this.auctioneerName}] [${vehicleType}] Mensagem de fim detectada após scroll. Finalizando.`);
+          // Extrair veículos finais que podem ter sido carregados
+          const finalVehicles = await this.extractVehiclesFromPage(vehicleType);
+          for (const vehicle of finalVehicles) {
+            if (vehicle.external_id && !seenIds.has(vehicle.external_id)) {
+              seenIds.add(vehicle.external_id);
+              vehicles.push(vehicle);
+            }
+          }
+          break;
+        }
       }
 
       return vehicles;
@@ -186,6 +201,35 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
     } catch (error) {
       console.error(`[${this.auctioneerName}] Erro ao fazer scraping da categoria ${vehicleType}:`, error);
       return vehicles; // Retornar o que foi coletado até agora
+    }
+  }
+
+  /**
+   * Verifica se chegou ao final da lista (mensagem de fim aparece)
+   */
+  private async checkIfReachedEnd(): Promise<boolean> {
+    if (!this.page) return false;
+
+    try {
+      const hasEndMessage = await this.page.evaluate(() => {
+        // Verificar se existe o elemento que indica fim da lista
+        const endMessage = document.querySelector('.small.text-center.text-secondary');
+        return endMessage !== null && endMessage.textContent !== null;
+      });
+
+      if (hasEndMessage) {
+        const messageText = await this.page.evaluate(() => {
+          const endMessage = document.querySelector('.small.text-center.text-secondary');
+          return endMessage?.textContent?.trim() || '';
+        });
+        console.log(`[${this.auctioneerName}] Mensagem de fim detectada: "${messageText}"`);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      // Se houver erro, continuar normalmente
+      return false;
     }
   }
 
