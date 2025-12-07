@@ -303,19 +303,32 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
       const vehicles = await this.page.evaluate((type) => {
         const vehicleCards: any[] = [];
         
-        // Seletores identificados
-        const cardSelector = '.mt-3';
-        const cards = Array.from(document.querySelectorAll(cardSelector));
-
-        if (cards.length === 0) {
-          console.log('Nenhum card encontrado com seletor .mt-3');
+        // Buscar apenas cards de veículos (que contêm .cardLote-descVeic)
+        // Isso filtra elementos do formulário que também têm classe .mt-3
+        const container = document.querySelector('.col-md-9');
+        if (!container) {
+          console.log('Container .col-md-9 não encontrado');
           return [];
         }
+
+        // Encontrar todos os títulos de veículos e pegar seus cards pai
+        const titleElements = Array.from(container.querySelectorAll('.cardLote-descVeic'));
+        const cards = titleElements
+          .map(titleEl => titleEl.closest('.mt-3'))
+          .filter(Boolean) as HTMLElement[];
+
+        if (cards.length === 0) {
+          console.log('Nenhum card de veículo encontrado');
+          return [];
+        }
+
+        console.log(`Encontrados ${cards.length} cards de veículos`);
 
         cards.forEach((card, index) => {
           try {
             // Título do veículo (.cardLote-descVeic)
-            const titleElement = card.querySelector('.cardLote-descVeic');
+            const titleElement = card.querySelector('.cardLote-descVeic span') || 
+                                card.querySelector('.cardLote-descVeic');
             const title = titleElement?.textContent?.trim() || '';
 
             // Valor (.cardLote-vlr)
@@ -326,45 +339,34 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
             const dateElement = card.querySelector('.cardLote-data');
             const dateText = dateElement?.textContent?.trim() || '';
 
-            // Link para detalhes (procurar link dentro do card)
-            const linkElement = card.querySelector('a[href*="Leilao"], a[href*="lote"], a[href*="Leiloes"]') || 
-                               card.closest('a');
-            let link = '';
-            if (linkElement) {
-              link = linkElement.getAttribute('href') || '';
-            }
+            // Link para detalhes
+            const linkElement = card.querySelector('a[href*="LoteDetalhes"]');
+            const link = linkElement?.getAttribute('href') || '';
 
-            // Se não encontrou link, tentar construir a partir do card
-            if (!link && card instanceof HTMLElement) {
-              const onclick = card.getAttribute('onclick');
-              if (onclick) {
-                const match = onclick.match(/['"]([^'"]*Leilao[^'"]*)['"]/);
-                if (match) {
-                  link = match[1];
-                }
-              }
-            }
-
-            // Imagem (procurar img dentro do card)
+            // Imagem (geralmente não há no card da lista, só na página de detalhes)
             const imgElement = card.querySelector('img');
             const image = imgElement?.getAttribute('src') || 
                          imgElement?.getAttribute('data-src') || 
                          '';
 
-            // Extrair ID da URL ou usar índice
+            // Extrair ID da URL (leilaoId e loteNumero)
             let externalId = '';
             if (link) {
-              const idMatch = link.match(/[Ll]eilao[\/\-]?(\d+)/) || 
-                            link.match(/[Ll]ote[\/\-]?(\d+)/) ||
-                            link.match(/\/(\d+)/);
-              externalId = idMatch ? `freitas-${idMatch[1]}` : '';
+              // Formato: /Leiloes/LoteDetalhes?leilaoId=7552&loteNumero=1
+              const leilaoMatch = link.match(/leilaoId=(\d+)/);
+              const loteMatch = link.match(/loteNumero=(\d+)/);
+              if (leilaoMatch && loteMatch) {
+                externalId = `freitas-${leilaoMatch[1]}-${loteMatch[1]}`;
+              } else {
+                // Fallback: tentar outros padrões
+                const idMatch = link.match(/[Ll]eilao[\/\-]?(\d+)/) || 
+                              link.match(/[Ll]ote[\/\-]?(\d+)/);
+                externalId = idMatch ? `freitas-${idMatch[1]}` : '';
+              }
             }
             
             if (!externalId) {
-              // Tentar extrair de atributos data-*
-              externalId = card.getAttribute('data-id') || 
-                          card.getAttribute('data-lote-id') ||
-                          `freitas-${index}-${Date.now()}`;
+              externalId = `freitas-${index}-${Date.now()}`;
             }
 
             // Extrair informações adicionais do título
@@ -378,17 +380,23 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
 
             if (title) {
               // Tentar extrair marca/modelo do início
+              // Formato pode ser: "HONDA/CIVIC TOURING CVT" ou "I/GM CLASSIC LIFE"
               const parts = title.split(',');
               if (parts.length > 0) {
                 const firstPart = parts[0].trim();
-                // Formato: "I/GM CLASSIC LIFE" ou "FIAT/FIORINO FLEX"
-                const brandModelMatch = firstPart.match(/^[^\/]+\/(.+)/);
+                // Remover prefixo "I/" se existir
+                const cleanFirstPart = firstPart.replace(/^I\//, '');
+                // Formato: "GM CLASSIC LIFE" ou "HONDA/CIVIC TOURING CVT"
+                const brandModelMatch = cleanFirstPart.match(/^([^\/]+)\/(.+)/);
                 if (brandModelMatch) {
-                  const brandModel = brandModelMatch[1].trim();
-                  const brandModelParts = brandModel.split(' ');
-                  if (brandModelParts.length > 0) {
-                    brand = brandModelParts[0];
-                    model = brandModelParts.slice(1).join(' ');
+                  brand = brandModelMatch[1].trim();
+                  model = brandModelMatch[2].trim();
+                } else {
+                  // Se não tem barra, primeira palavra é marca
+                  const words = cleanFirstPart.split(' ');
+                  if (words.length > 0) {
+                    brand = words[0];
+                    model = words.slice(1).join(' ');
                   }
                 }
               }
