@@ -343,11 +343,33 @@ export class FreitasLeiloeiroScraper extends BaseScraper {
             const linkElement = card.querySelector('a[href*="LoteDetalhes"]');
             const link = linkElement?.getAttribute('href') || '';
 
-            // Imagem (geralmente n├úo h├í no card da lista, s├│ na p├ígina de detalhes)
-            const imgElement = card.querySelector('img');
-            const image = imgElement?.getAttribute('src') || 
-                         imgElement?.getAttribute('data-src') || 
-                         '';
+            // Imagem está no elemento irmão anterior ao card
+            // Estrutura: <div><a><img class="cardLote-img"></a></div> (irmão anterior)
+            //           <div class="mt-3"> (card com informações)
+            let image = '';
+            const cardParent = card.parentElement;
+            if (cardParent) {
+              const siblings = Array.from(cardParent.children);
+              const cardIndex = siblings.indexOf(card);
+              
+              // Procurar imagem no elemento irmão anterior
+              if (cardIndex > 0) {
+                const prevSibling = siblings[cardIndex - 1];
+                const imgElement = prevSibling.querySelector('img.cardLote-img') || 
+                                 prevSibling.querySelector('img');
+                image = imgElement?.getAttribute('src') || 
+                       imgElement?.getAttribute('data-src') || 
+                       '';
+              }
+            }
+            
+            // Fallback: procurar imagem dentro do próprio card (caso a estrutura mude)
+            if (!image) {
+              const imgElement = card.querySelector('img');
+              image = imgElement?.getAttribute('src') || 
+                     imgElement?.getAttribute('data-src') || 
+                     '';
+            }
 
             // Extrair ID da URL (leilaoId e loteNumero)
             let externalId = '';
