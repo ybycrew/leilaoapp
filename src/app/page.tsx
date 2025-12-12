@@ -731,11 +731,9 @@ export default function Home() {
           
           {/* Links Legais em nova linha */}
           <div className="border-t border-border pt-6 mb-6">
-            <div className="grid md:grid-cols-4 gap-4 text-sm text-foreground/70">
+            <div className="flex gap-6 text-sm text-foreground/70">
               <Link href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</Link>
               <Link href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</Link>
-              <Link href="/contato" className="hover:text-signal-orange transition-colors">Contato</Link>
-              <Link href="/ajuda" className="hover:text-signal-orange transition-colors">Central de Ajuda</Link>
             </div>
           </div>
           
