@@ -158,7 +158,7 @@ export default async function DashboardLayout({
             </div>
             <nav className="flex gap-6 text-sm text-muted-foreground">
               <Link href="/termos" className="hover:text-primary">Termos</Link>
-              <Link href="/privacidade" className="hover:text-primary">Privacidade</Link>
+              <Link href="/privacidade" className="hover:text-primary">Política de Privacidade</Link>
               <Link href="/contato" className="hover:text-primary">Contato</Link>
             </nav>
           </div>

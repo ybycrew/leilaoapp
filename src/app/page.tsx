@@ -696,7 +696,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-border py-12 bg-muted/50">
         <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
             <div>
               <Link href="/" className="flex items-center gap-2 mb-4">
                 <Image
@@ -727,14 +727,18 @@ export default function Home() {
                 <li><Link href="/ajuda" className="hover:text-signal-orange transition-colors">Central de Ajuda</Link></li>
               </ul>
             </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-foreground/70">
-                <li><Link href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</Link></li>
-                <li><Link href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</Link></li>
-              </ul>
+          </div>
+          
+          {/* Links Legais em nova linha */}
+          <div className="border-t border-border pt-6 mb-6">
+            <div className="grid md:grid-cols-4 gap-4 text-sm text-foreground/70">
+              <Link href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</Link>
+              <Link href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</Link>
+              <Link href="/contato" className="hover:text-signal-orange transition-colors">Contato</Link>
+              <Link href="/ajuda" className="hover:text-signal-orange transition-colors">Central de Ajuda</Link>
             </div>
           </div>
+          
           <div className="border-t border-border pt-8 text-center text-sm text-foreground/60">
             <p>© 2025 YBYBID. Todos os direitos reservados.</p>
           </div>
