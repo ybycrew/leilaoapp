@@ -72,24 +72,6 @@ export function SearchAutocomplete() {
     };
   }, [query, fetchSuggestions]);
 
-  // Fechar sugestões ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-        setSelectedIndex(-1);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const totalItems = suggestions.titles.length;
-
   // Adicionar termo de busca
   const addSearchTerm = useCallback(
     (searchQuery: string) => {
@@ -115,6 +97,31 @@ export function SearchAutocomplete() {
     },
     [router, searchParams]
   );
+
+  // Fechar sugestões ao clicar fora e adicionar termo automaticamente
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        // Se houver texto digitado (mínimo 2 caracteres), adicionar automaticamente
+        const trimmedQuery = query.trim();
+        if (trimmedQuery.length >= 2) {
+          addSearchTerm(trimmedQuery);
+        } else {
+          // Apenas fechar se não houver texto válido
+          setIsOpen(false);
+          setSelectedIndex(-1);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [query, addSearchTerm]);
+
+  const totalItems = suggestions.titles.length;
 
   // Remover termo de busca
   const removeSearchTerm = useCallback(
@@ -217,6 +224,20 @@ export function SearchAutocomplete() {
             if (query.trim().length >= 2 && totalItems > 0) {
               setIsOpen(true);
             }
+          }}
+          onBlur={(e) => {
+            // Usar setTimeout para permitir que cliques em sugestões funcionem primeiro
+            setTimeout(() => {
+              const trimmedQuery = query.trim();
+              // Verificar se o foco não foi para uma sugestão ou o próprio input
+              const activeElement = document.activeElement;
+              const isClickingSuggestion = containerRef.current?.contains(activeElement);
+              
+              // Se houver texto válido e não estiver clicando em uma sugestão, adicionar automaticamente
+              if (trimmedQuery.length >= 2 && !isClickingSuggestion && activeElement !== inputRef.current) {
+                addSearchTerm(trimmedQuery);
+              }
+            }, 200);
           }}
           placeholder="Buscar veículos por título..."
           className="pl-10 pr-10"

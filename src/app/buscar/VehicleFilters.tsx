@@ -181,6 +181,33 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     }
   }, []);
 
+  // Adicionar termo de busca ao estado local (memoizado)
+  const addSearchTerm = useCallback((term: string) => {
+    const trimmedTerm = term.trim();
+    if (!trimmedTerm) return;
+    
+    setHasUserInteracted(true);
+    setSearchTerms(prev => {
+      const termExists = prev.some(
+        t => t.toLowerCase() === trimmedTerm.toLowerCase()
+      );
+      
+      if (!termExists) {
+        return [...prev, trimmedTerm];
+      }
+      return prev;
+    });
+    
+    setSearchQuery(''); // Limpar campo após adicionar
+    setSuggestions({ titles: [], total: 0 });
+    setIsSuggestionsOpen(false);
+    setSelectedSuggestionIndex(-1);
+    // Manter foco no campo após adicionar (usando requestAnimationFrame para garantir que o DOM foi atualizado)
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+  }, []);
+
   // Debounce da busca de sugestões
   useEffect(() => {
     if (debounceTimerRef.current) {
@@ -208,7 +235,7 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
     };
   }, [searchQuery, fetchSuggestions]);
 
-  // Fechar sugestões ao clicar fora
+  // Fechar sugestões ao clicar fora e adicionar termo automaticamente
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -221,41 +248,21 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
         return;
       }
       
-      setIsSuggestionsOpen(false);
-      setSelectedSuggestionIndex(-1);
+      // Se houver texto digitado (mínimo 2 caracteres), adicionar automaticamente
+      const trimmedQuery = searchQuery.trim();
+      if (trimmedQuery.length >= 2) {
+        addSearchTerm(trimmedQuery);
+      } else {
+        // Apenas fechar se não houver texto válido
+        setIsSuggestionsOpen(false);
+        setSelectedSuggestionIndex(-1);
+      }
     };
 
     // Usar 'click' ao invés de 'mousedown' para evitar conflitos
     document.addEventListener('click', handleClickOutside, true);
     return () => document.removeEventListener('click', handleClickOutside, true);
-  }, []);
-
-  // Adicionar termo de busca ao estado local (memoizado)
-  const addSearchTerm = useCallback((term: string) => {
-    const trimmedTerm = term.trim();
-    if (!trimmedTerm) return;
-    
-    setHasUserInteracted(true);
-    setSearchTerms(prev => {
-      const termExists = prev.some(
-        t => t.toLowerCase() === trimmedTerm.toLowerCase()
-      );
-      
-      if (!termExists) {
-        return [...prev, trimmedTerm];
-      }
-      return prev;
-    });
-    
-    setSearchQuery(''); // Limpar campo após adicionar
-    setSuggestions({ titles: [], total: 0 });
-    setIsSuggestionsOpen(false);
-    setSelectedSuggestionIndex(-1);
-    // Manter foco no campo após adicionar (usando requestAnimationFrame para garantir que o DOM foi atualizado)
-    requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-  }, []);
+  }, [searchQuery, addSearchTerm]);
 
   // Remover termo de busca do estado local (memoizado)
   const removeSearchTerm = useCallback((termToRemove: string) => {
@@ -457,6 +464,20 @@ export function VehicleFilters({ filterOptions, currentFilters }: VehicleFilters
                       if (searchQuery.trim().length >= 2 || suggestions.titles.length > 0) {
                         setIsSuggestionsOpen(true);
                       }
+                    }}
+                    onBlur={(e) => {
+                      // Usar setTimeout para permitir que cliques em sugestões funcionem primeiro
+                      setTimeout(() => {
+                        const trimmedQuery = searchQuery.trim();
+                        // Verificar se o foco não foi para uma sugestão ou o próprio input
+                        const activeElement = document.activeElement;
+                        const isClickingSuggestion = suggestionsContainerRef.current?.contains(activeElement);
+                        
+                        // Se houver texto válido e não estiver clicando em uma sugestão, adicionar automaticamente
+                        if (trimmedQuery.length >= 2 && !isClickingSuggestion && activeElement !== searchInputRef.current) {
+                          addSearchTerm(trimmedQuery);
+                        }
+                      }, 200);
                     }}
                     placeholder="Buscar veículos..."
                     className="pl-9 pr-9"

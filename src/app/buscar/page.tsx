@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
+import { SearchLimitHandler } from '@/components/SearchLimitHandler';
+import { UserMenu } from '@/components/UserMenu';
 
 interface SearchPageProps {
   searchParams: Promise<{
@@ -64,7 +66,7 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
   const currentPage = params.page ? parseInt(params.page) : 1;
   const pageSize = 20; // Itens por página
 
-  const { vehicles, total, error, pagination } = await searchVehicles({
+  const searchResult = await searchVehicles({
     q: qArray,
     state: params.state,
     city: params.city,
@@ -80,6 +82,8 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
     limit: pageSize,
   });
 
+  const { vehicles, total, error, pagination, upgradeRequired } = searchResult;
+
   const stats = await getVehicleStats();
   const filterOptions = await getFilterOptions();
   
@@ -91,20 +95,30 @@ export default async function BuscarPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <SearchLimitHandler error={error} upgradeRequired={upgradeRequired} />
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-4">
             <Link href="/">
               <h1 className="text-xl font-bold cursor-pointer hover:text-primary">Ybybid</h1>
             </Link>
+            <div className="flex items-center">
+              <UserMenu />
+            </div>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {error && (
+        {error && error !== 'LIMIT_REACHED' && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
             Erro ao buscar veículos: {error}
+          </div>
+        )}
+        {error === 'LIMIT_REACHED' && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
+            <p className="font-medium">Limite de buscas atingido</p>
+            <p className="text-sm mt-1">Você utilizou todas as suas buscas gratuitas. Faça upgrade para continuar!</p>
           </div>
         )}
 
