@@ -47,6 +47,9 @@ export default function Home() {
             <Link href="/#planos" className="text-sm text-foreground hover:text-signal-orange transition-colors">
               Planos
             </Link>
+            <Link href="/privacidade" className="text-sm text-foreground hover:text-signal-orange transition-colors">
+              Política de Privacidade
+            </Link>
             <Link href="/entrar" className="text-sm text-foreground hover:text-signal-orange transition-colors">
               Entrar
             </Link>
@@ -732,8 +735,8 @@ export default function Home() {
           {/* Links Legais em nova linha */}
           <div className="border-t border-border pt-6 mb-6">
             <div className="flex gap-6 text-sm text-foreground/70">
-              <Link href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</Link>
-              <Link href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</Link>
+              <a href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</a>
+              <a href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</a>
             </div>
           </div>
           
