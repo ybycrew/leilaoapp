@@ -731,7 +731,7 @@ export default function Home() {
               <h4 className="font-semibold text-foreground mb-4">Legal</h4>
               <ul className="space-y-2 text-sm text-foreground/70">
                 <li><Link href="/termos" className="hover:text-signal-orange transition-colors">Termos de Uso</Link></li>
-                <li><Link href="/privacidade" className="hover:text-signal-orange transition-colors">Privacidade</Link></li>
+                <li><Link href="/privacidade" className="hover:text-signal-orange transition-colors">Política de Privacidade</Link></li>
               </ul>
             </div>
           </div>
