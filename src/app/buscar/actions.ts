@@ -70,6 +70,76 @@ export async function searchVehicles(filters: SearchFilters = {}) {
   const supabase = await createClient();
 
   try {
+    // Verificar autenticação do usuário
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return {
+        vehicles: [],
+        total: 0,
+        error: 'Você precisa estar autenticado para buscar veículos',
+        upgradeRequired: false,
+        pagination: {
+          page: filters.page || 1,
+          limit: filters.limit || 20,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    // Buscar informações do usuário (plano e buscas restantes)
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('plano, buscas_restantes')
+      .eq('id', user.id)
+      .single();
+
+    if (userError || !userData) {
+      console.error('Erro ao buscar dados do usuário:', userError);
+      return {
+        vehicles: [],
+        total: 0,
+        error: 'Erro ao verificar permissões',
+        upgradeRequired: false,
+        pagination: {
+          page: filters.page || 1,
+          limit: filters.limit || 20,
+          total: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    // Verificar limite de buscas para usuários gratuitos
+    if (userData.plano === 'gratuito') {
+      if (userData.buscas_restantes <= 0) {
+        return {
+          vehicles: [],
+          total: 0,
+          error: 'LIMIT_REACHED',
+          message: 'Você atingiu o limite de buscas gratuitas. Faça upgrade para continuar buscando.',
+          upgradeRequired: true,
+          pagination: {
+            page: filters.page || 1,
+            limit: filters.limit || 20,
+            total: 0,
+            totalPages: 0,
+          },
+        };
+      }
+
+      // Decrementar contador de buscas restantes
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ buscas_restantes: userData.buscas_restantes - 1 })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Erro ao decrementar buscas restantes:', updateError);
+        // Não bloquear a busca, apenas logar o erro
+      }
+    }
     // Normalizar estado para maiúscula (UF)
     const normalizedState = filters.state ? filters.state.trim().toUpperCase() : null;
 
@@ -179,6 +249,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
         vehicles: [],
         total: 0,
         error: error.message,
+        upgradeRequired: false,
         pagination: {
           page: filters.page || 1,
           limit: limit,
@@ -214,6 +285,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       vehicles: vehicles as Vehicle[],
       total: count || 0,
       error: null,
+      upgradeRequired: false,
       pagination: {
         page: filters.page || 1,
         limit: limit,
@@ -227,6 +299,7 @@ export async function searchVehicles(filters: SearchFilters = {}) {
       vehicles: [],
       total: 0,
       error: error.message || 'Erro ao buscar veículos',
+      upgradeRequired: false,
       pagination: {
         page: filters.page || 1,
         limit: filters.limit || 20,
