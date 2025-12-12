@@ -89,26 +89,40 @@ export async function searchVehicles(filters: SearchFilters = {}) {
     }
 
     // Buscar informações do usuário (plano e buscas restantes)
-    const { data: userData, error: userError } = await supabase
+    let { data: userData, error: userError } = await supabase
       .from('users')
       .select('plano, buscas_restantes')
       .eq('id', user.id)
       .single();
 
+    // Se o usuário não existir na tabela users, criar automaticamente usando upsert
     if (userError || !userData) {
-      console.error('Erro ao buscar dados do usuário:', userError);
-      return {
-        vehicles: [],
-        total: 0,
-        error: 'Erro ao verificar permissões',
-        upgradeRequired: false,
-        pagination: {
-          page: filters.page || 1,
-          limit: filters.limit || 20,
-          total: 0,
-          totalPages: 0,
-        },
-      };
+      console.warn('Usuário não encontrado na tabela users, criando automaticamente:', userError);
+      
+      // Usar upsert para criar ou atualizar (mais seguro que insert)
+      const { data: newUserData, error: upsertError } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email || '',
+          plano: 'gratuito',
+          buscas_restantes: 5,
+        }, {
+          onConflict: 'id'
+        })
+        .select('plano, buscas_restantes')
+        .single();
+
+      if (upsertError || !newUserData) {
+        console.error('Erro ao criar/atualizar usuário na tabela users:', upsertError);
+        // Usar valores padrão se não conseguir criar (fallback)
+        userData = {
+          plano: 'gratuito' as const,
+          buscas_restantes: 5,
+        };
+      } else {
+        userData = newUserData;
+      }
     }
 
     // Verificar limite de buscas para usuários gratuitos
